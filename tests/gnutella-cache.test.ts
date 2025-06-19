@@ -45,8 +45,8 @@ describe("GnutellaCache", () => {
     });
 
     test("should persist and load hosts", async () => {
-      cache.addHost("192.168.1.1", 6346);
-      cache.addHost("10.0.0.1", 6347);
+      cache.addPeer("192.168.1.1", 6346);
+      cache.addPeer("10.0.0.1", 6347);
       await cache.store();
 
       // Create new cache instance and load
@@ -77,9 +77,9 @@ describe("GnutellaCache", () => {
     });
   });
 
-  describe("addHost()", () => {
+  describe("addPeer()", () => {
     test("should add new hosts", () => {
-      cache.addHost("192.168.1.1", 6346);
+      cache.addPeer("192.168.1.1", 6346);
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(1);
       expect(hosts[0].ip).toBe("192.168.1.1");
@@ -89,10 +89,10 @@ describe("GnutellaCache", () => {
 
     test("should update existing host's lastSeen time", () => {
       const oldTime = Date.now() - 10000;
-      cache.addHost("192.168.1.1", 6346, oldTime);
+      cache.addPeer("192.168.1.1", 6346, oldTime);
 
       const newTime = Date.now();
-      cache.addHost("192.168.1.1", 6346, newTime);
+      cache.addPeer("192.168.1.1", 6346, newTime);
 
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(1);
@@ -100,9 +100,9 @@ describe("GnutellaCache", () => {
     });
 
     test("should handle multiple hosts", () => {
-      cache.addHost("192.168.1.1", 6346);
-      cache.addHost("192.168.1.2", 6346);
-      cache.addHost("192.168.1.1", 6347); // Different port
+      cache.addPeer("192.168.1.1", 6346);
+      cache.addPeer("192.168.1.2", 6346);
+      cache.addPeer("192.168.1.1", 6347); // Different port
 
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(3);
@@ -115,9 +115,9 @@ describe("GnutellaCache", () => {
       const oldTime = now - 2 * 60 * 60 * 1000; // 2 hours ago
       const recentTime = now - 30 * 60 * 1000; // 30 minutes ago
 
-      cache.addHost("192.168.1.1", 6346, oldTime);
-      cache.addHost("192.168.1.2", 6346, recentTime);
-      cache.addHost("192.168.1.3", 6346, now);
+      cache.addPeer("192.168.1.1", 6346, oldTime);
+      cache.addPeer("192.168.1.2", 6346, recentTime);
+      cache.addPeer("192.168.1.3", 6346, now);
 
       // Evict hosts older than 1 hour
       cache.evictHosts(60 * 60 * 1000);
@@ -133,8 +133,8 @@ describe("GnutellaCache", () => {
       const now = Date.now();
       const oldTime = now - 2 * 60 * 60 * 1000; // 2 hours ago
 
-      cache.addHost("192.168.1.1", 6346, oldTime);
-      cache.addHost("192.168.1.2", 6346, now);
+      cache.addPeer("192.168.1.1", 6346, oldTime);
+      cache.addPeer("192.168.1.2", 6346, now);
 
       cache.evictHosts(); // Use default
 

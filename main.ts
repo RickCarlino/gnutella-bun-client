@@ -85,8 +85,7 @@ async function main() {
 
           case "pong":
             console.log(`[${clientId}] Pong from ${msg.ipAddress}:${msg.port}`);
-            // Store discovered peer
-            cache.addHost(msg.ipAddress, msg.port);
+            cache.addPeer(msg.ipAddress, msg.port);
             break;
 
           case "query":

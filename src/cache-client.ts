@@ -230,7 +230,7 @@ export async function createGnutellaCache() {
     }
   }
 
-  function addHost(ip: string, port: number, seen = Date.now()): void {
+  function addPeer(ip: string, port: number, seen = Date.now()): void {
     const existingIndex = data.hosts.findIndex(
       (h) => h.ip === ip && h.port === port
     );
@@ -289,7 +289,7 @@ export async function createGnutellaCache() {
         const [ip, portStr] = peer.split(":");
         const port = parseInt(portStr, 10);
         if (!isNaN(port)) {
-          addHost(ip, port, now);
+          addPeer(ip, port, now);
         }
       }
 
@@ -321,7 +321,7 @@ export async function createGnutellaCache() {
           const [ip, portStr] = peer.split(":");
           const port = parseInt(portStr, 10);
           if (!isNaN(port)) {
-            addHost(ip, port, now);
+            addPeer(ip, port, now);
           }
         }
       }
@@ -336,7 +336,7 @@ export async function createGnutellaCache() {
           const ip = match[1];
           const port = parseInt(match[2], 10);
           if (!isNaN(port)) {
-            addHost(ip, port, now);
+            addPeer(ip, port, now);
           }
         }
       }
@@ -364,7 +364,7 @@ export async function createGnutellaCache() {
   return {
     load,
     store,
-    addHost,
+    addPeer,
     getHosts,
     evictHosts,
     addCache,

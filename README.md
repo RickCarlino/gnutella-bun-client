@@ -9,6 +9,8 @@ This repository contains a variety of tools related to [Gnutella 0.6](https://en
 
 ## Notes
 
+**Most Important:** It does not actually share files! My main interest is learning the protocol and becoming a network participant (bootstrap peers, reply to PING/QUERY messages, etc..). I don't have any actual interest in doing file sharing.
+
 It is pretty much impossible to peer with Gnutella users in 2025 without a client that supports "Query Routing Protocol" and "Compressed Connections".
 
 **If you just want to try it out:** Run GTK-Gnutella locally, uncheck compressed connections, enable LAN connections, run `bun main.ts` and manually add `127.0.0.1::6346`

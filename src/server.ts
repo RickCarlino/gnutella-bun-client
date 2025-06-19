@@ -78,7 +78,7 @@ const handleConnection = (state: GnutellaServerState, socket: net.Socket) => {
 
   socket.on("data", (chunk) => {
     console.log(`Received data from ${clientId}: ${chunk.length} bytes`);
-    console.log(chunk.toString("ascii"));
+    console.log(chunk.toString("ascii").slice(0, 8));
     buf = Buffer.concat([buf, chunk]);
     try {
       process();

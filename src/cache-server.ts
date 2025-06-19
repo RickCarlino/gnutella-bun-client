@@ -145,7 +145,7 @@ function validateAndAdd<T>({
   return "OK";
 }
 
-export function addHost(
+export function addPeer(
   ip: string,
   port: number,
   network: string,
@@ -299,7 +299,7 @@ function startServer() {
 
         updateResults.push(
           ip && !isNaN(port)
-            ? addHost(ip, port, network, params.get("cluster") || undefined)
+            ? addPeer(ip, port, network, params.get("cluster") || undefined)
             : "WARNING|Invalid IP format"
         );
       }
