@@ -1,12 +1,17 @@
 import { createGnutellaServer } from "./src/server";
 import { createHandshakeOk, createHandshakeError, createPong } from "./src/parser";
 import { localIp } from "./src/client";
-import { cachePut, createGnutellaCache } from "./src/cache-client";
+import { cachePut } from "./src/cache-client";
+import { getCache } from "./src/cache-client";
+import { createConnectionManager } from "./src/connection-manager";
 
 // Configuration
 const LOCAL_IP = await localIp();
 const LOCAL_PORT = 6346;
 const MAX_CONNECTIONS = 10;
+const TARGET_OUTBOUND_CONNECTIONS = 4;
+const CONNECTION_CHECK_INTERVAL = 10000; // 10 seconds
+const HANDSHAKE_TIMEOUT = 5000; // 5 seconds
 
 const HEADERS = {
   "User-Agent": "GnutellaBun/0.1",
@@ -20,8 +25,7 @@ async function main() {
   console.log(`Local IP: ${LOCAL_IP}`);
 
   // Initialize cache
-  const cache = await createGnutellaCache();
-  await cache.load();
+  const cache = await getCache();
   console.log("Cache loaded");
 
   // Bootstrap peer list
@@ -146,15 +150,44 @@ async function main() {
   console.log(`Pushed IP to ${successCount} caches`);
   await cache.store();
 
+  // Start connection manager for outbound connections
+  const connectionManager = createConnectionManager({
+    targetConnections: TARGET_OUTBOUND_CONNECTIONS,
+    checkInterval: CONNECTION_CHECK_INTERVAL,
+    handshakeTimeout: HANDSHAKE_TIMEOUT,
+    localIp: LOCAL_IP,
+    localPort: LOCAL_PORT,
+    headers: HEADERS,
+    onConnectionsChanged: (activeCount) => {
+      console.log(`[Outbound] Active connections: ${activeCount}/${TARGET_OUTBOUND_CONNECTIONS}`);
+    },
+  });
+
+  await connectionManager.start();
+  console.log("Connection manager started");
+
   // Status monitoring
   const statusInterval = setInterval(() => {
-    const clients = server.getClients();
-    console.log(`\nActive connections: ${clients.length}`);
-    clients.forEach((client) => {
+    const inboundClients = server.getClients();
+    const outboundConnections = connectionManager.getConnections();
+    
+    console.log(`\n=== Connection Status ===`);
+    console.log(`Inbound connections: ${inboundClients.length}`);
+    inboundClients.forEach((client) => {
       console.log(
-        `  ${client.handshake ? "✓" : "…"} ${client.id}${
+        `  [IN]  ${client.handshake ? "✓" : "…"} ${client.id}${
           client.version ? ` (v${client.version})` : ""
         }`
+      );
+    });
+    
+    console.log(`\nOutbound connections: ${outboundConnections.length}`);
+    outboundConnections.forEach((conn) => {
+      const duration = Math.floor(conn.duration / 1000);
+      console.log(
+        `  [OUT] ${conn.handshake ? "✓" : "…"} ${conn.address}${
+          conn.version ? ` (v${conn.version})` : ""
+        } (${duration}s)`
       );
     });
   }, 30000); // Every 30 seconds
@@ -190,7 +223,7 @@ async function main() {
     await cache.store();
     const hosts = cache.getHosts();
     console.log(`Active peers: ${hosts.length}`);
-  }, 2 * 60 * 60 * 1000); // Every 2 hours
+  }, 1.01 * 60 * 60 * 1000); // Every hour
 
   // Graceful shutdown
   process.on("SIGINT", async () => {
@@ -198,6 +231,7 @@ async function main() {
     clearInterval(statusInterval);
     clearInterval(cacheUpdateInterval);
     clearInterval(peerDiscoveryInterval);
+    connectionManager.stop();
     await server.stop();
     await cache.store();
     console.log("Goodbye!");

@@ -37,7 +37,31 @@ const messageSize = (m: GnutellaObject, buf: Buffer): number =>
 export const startConnection = (conf: ConnectionConf): Promise<net.Socket> =>
   new Promise((resolve, reject) => {
     const { ip, port, onMessage, onError, onClose } = conf;
-    const socket = net.createConnection({ host: ip, port }, () => {
+    const socket = net.createConnection({ 
+      host: ip, 
+      port,
+      timeout: 5000 // 5 second connection timeout
+    });
+    
+    // Handle connection errors before the socket is connected
+    const handleInitialError = (e: Error) => {
+      socket.destroy();
+      reject(e);
+    };
+    
+    const handleTimeout = () => {
+      socket.destroy();
+      reject(new Error(`Connection timeout to ${ip}:${port}`));
+    };
+    
+    socket.once("error", handleInitialError);
+    socket.once("timeout", handleTimeout);
+    
+    socket.once("connect", () => {
+      // Remove the initial error and timeout handlers since we're now connected
+      socket.removeListener("error", handleInitialError);
+      socket.removeListener("timeout", handleTimeout);
+      
       const send: Sender = (data) => socket.write(data);
       let buf = Buffer.alloc(0);
 
@@ -63,7 +87,6 @@ export const startConnection = (conf: ConnectionConf): Promise<net.Socket> =>
 
       socket.on("error", (e) => {
         onError(send, e);
-        reject(e);
       });
 
       socket.on("close", onClose);

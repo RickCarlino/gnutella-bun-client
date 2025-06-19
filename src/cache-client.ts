@@ -246,6 +246,12 @@ export async function createGnutellaCache() {
     return [...data.hosts];
   }
 
+  function removePeer(ip: string, port: number): void {
+    data.hosts = data.hosts.filter(
+      (h) => !(h.ip === ip && h.port === port)
+    );
+  }
+
   function evictHosts(cutoffMS = 1000 * 60 * 60): void {
     const cutoffTime = Date.now() - cutoffMS;
     data.hosts = data.hosts.filter((host) => host.lastSeen > cutoffTime);
@@ -366,6 +372,7 @@ export async function createGnutellaCache() {
     store,
     addPeer,
     getHosts,
+    removePeer,
     evictHosts,
     addCache,
     pullHostsFromCache,
@@ -376,5 +383,31 @@ export async function createGnutellaCache() {
   };
 }
 
+let cacheInstance: Awaited<ReturnType<typeof createGnutellaCache>> | null = null;
+let initializationPromise: Promise<Awaited<ReturnType<typeof createGnutellaCache>>> | null = null;
+
+export async function getCache() {
+  if (cacheInstance) {
+    return cacheInstance;
+  }
+
+  if (initializationPromise) {
+    return await initializationPromise;
+  }
+
+  initializationPromise = (async () => {
+    try {
+      const cache = await createGnutellaCache();
+      await cache.load();
+      cacheInstance = cache;
+      return cache;
+    } catch (error) {
+      initializationPromise = null;
+      throw error;
+    }
+  })();
+
+  return await initializationPromise;
+}
 export type GnutellaCache = Awaited<ReturnType<typeof createGnutellaCache>>;
 export type { StoredHost, StoredCache };

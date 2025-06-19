@@ -2,9 +2,9 @@ import os from "os";
 import { startConnection } from "./gnutella-connection";
 import {
   createHandshakeConnect,
+  GnutellaObject,
   createHandshakeOk,
   createPong,
-  GnutellaObject,
 } from "./parser";
 
 const SEEDS: string[] = [
@@ -145,18 +145,3 @@ const handle = (addr: string, send: (b: Buffer) => void, m: GnutellaObject) => {
       break;
   }
 };
-
-console.log(`Gnutella ${LOCAL_IP}:${LOCAL_PORT}`);
-shuffle(SEEDS).forEach(connect);
-
-setInterval(() => {
-  if (!sessions.size) {
-    console.log("No active sessions");
-    return;
-  }
-  sessions.forEach((v, p) =>
-    console.log(
-      v.handshake ? `✓ ${p} (v${v.version})` : `… ${p} (handshake pending)`
-    )
-  );
-}, 5_000);
