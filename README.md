@@ -3,17 +3,15 @@
 This repository contains a variety of tools related to [Gnutella 0.6](https://en.wikipedia.org/wiki/Gnutella). It is the result of a Gnutella deep-dive I did for fun in 2025.
 
 - [A minimal GWebCache Server - Run via `bun cache-server.ts`](cache-server.ts)
-- [An interface for calling GWebCache servers like the one above](cache-client.ts) - run `bun cache-client.ts` to get peer IPs.
-- [Outbound Gnutella connection handler](gnutella-connection.ts)
-- [Inbound Gnutella TCP listener](gnutella-server.ts) - accepts incoming connections
-- [Gnutella server implementation](server.ts) - run `bun server.ts` to accept inbound connections
+- [A minimal Gnutella node implementation](main.ts) - run `bun main.ts` to start a full Gnutella node
+- [An interface for calling GWebCache servers with persistent data storage](cache-client.ts)
 - [Parser of various Gnutella messages](parser.ts)
 
 ## Notes
 
 It is pretty much impossible to peer with Gnutella users in 2025 without a client that supports "Query Routing Protocol" and "Compressed Connections".
 
-**If you just want to try it out:** Run GTK-Gnutella locally, uncheck compressed connections, enable LAN connections, run `bun server.rb` and manually add `127.0.0.1::6346`
+**If you just want to try it out:** Run GTK-Gnutella locally, uncheck compressed connections, enable LAN connections, run `bun main.ts` and manually add `127.0.0.1::6346`
 
 I am not sure if I will implement these.
 
@@ -21,25 +19,42 @@ Although this is mostly complete, I don't think it is usable as a real gnutella 
 
 ## TODO
 
-- auto bootstrapping and caching of peers so that I don't need to copy/paste peers into `FIND_PEERS_USING_WEB_CACHES`.
-- QRP (maybe)
-- Compressed connections (maybe)
+- Update internal host file when we get `X-Try-*` responses.
+- Maintain minimum number of peers
+- QRP
+- Compressed connections
 
-## Running the Gnutella Client
+## Running the Gnutella Node
 
-1. Use the cache client to find initial peers.
-2. Update the value of the IP address in list in client.ts
-3. Run `bun client.ts` for outbound connections
-
-## Running the Gnutella Server
-
-To accept inbound connections:
+To start a full Gnutella node that automatically bootstraps peers, accepts connections, and maintains cache updates:
 
 ```bash
-bun server.ts
+bun main.ts
 ```
 
-The server will listen on port 6346 by default and accept up to 10 simultaneous connections.
+This will:
+
+- Automatically discover and store peers from GWebCaches
+- Start a server listening on port 6346
+- Push your IP to all known GWebCaches
+- Accept incoming Gnutella connections
+- Periodically update caches and discover new peers
+
+## Running Individual Components
+
+### GWebCache Server
+
+Optional. You can host a GWebCache to help clients bootstrap. I don't know if its any good.
+
+```bash
+bun cache-server.ts
+```
+
+### Manual Gnutella Client (for testing outbound connections)
+
+```bash
+bun client.ts
+```
 
 ## Resources
 

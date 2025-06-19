@@ -125,6 +125,7 @@ const handle = (addr: string, send: (b: Buffer) => void, m: GnutellaObject) => {
 
     case "pong":
       console.log(`${addr} pong ${m.ipAddress}:${m.port}`);
+      // Add peer to cache:
       break;
 
     case "query":
@@ -149,7 +150,10 @@ console.log(`Gnutella ${LOCAL_IP}:${LOCAL_PORT}`);
 shuffle(SEEDS).forEach(connect);
 
 setInterval(() => {
-  console.log(`Connections ${sessions.size}`);
+  if (!sessions.size) {
+    console.log("No active sessions");
+    return;
+  }
   sessions.forEach((v, p) =>
     console.log(
       v.handshake ? `✓ ${p} (v${v.version})` : `… ${p} (handshake pending)`

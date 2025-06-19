@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { existsSync, unlinkSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { createGnutellaCache } from "./cache-client";
+import { createGnutellaCache } from "../src/cache-client";
 
 const TEST_SETTINGS_FILE = "settings.json";
 
@@ -31,11 +31,11 @@ describe("GnutellaCache", () => {
 
     test("should initialize with KNOWN_CACHE_LIST when creating new file", async () => {
       await cache.load();
-      
+
       // Read the created file
       const content = await readFile(TEST_SETTINGS_FILE, "utf-8");
       const data = JSON.parse(content);
-      
+
       // Check that caches were initialized with known list
       const cacheUrls = Object.keys(data.caches);
       expect(cacheUrls.length).toBeGreaterThan(0);
@@ -52,7 +52,7 @@ describe("GnutellaCache", () => {
       // Create new cache instance and load
       const newCache = await createGnutellaCache();
       await newCache.load();
-      
+
       const hosts = newCache.getHosts();
       expect(hosts).toHaveLength(2);
       expect(hosts[0].ip).toBe("192.168.1.1");
@@ -90,10 +90,10 @@ describe("GnutellaCache", () => {
     test("should update existing host's lastSeen time", () => {
       const oldTime = Date.now() - 10000;
       cache.addHost("192.168.1.1", 6346, oldTime);
-      
+
       const newTime = Date.now();
       cache.addHost("192.168.1.1", 6346, newTime);
-      
+
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(1);
       expect(hosts[0].lastSeen).toBe(newTime);
@@ -103,7 +103,7 @@ describe("GnutellaCache", () => {
       cache.addHost("192.168.1.1", 6346);
       cache.addHost("192.168.1.2", 6346);
       cache.addHost("192.168.1.1", 6347); // Different port
-      
+
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(3);
     });
@@ -112,32 +112,32 @@ describe("GnutellaCache", () => {
   describe("evictHosts()", () => {
     test("should remove hosts older than cutoff", () => {
       const now = Date.now();
-      const oldTime = now - (2 * 60 * 60 * 1000); // 2 hours ago
-      const recentTime = now - (30 * 60 * 1000); // 30 minutes ago
-      
+      const oldTime = now - 2 * 60 * 60 * 1000; // 2 hours ago
+      const recentTime = now - 30 * 60 * 1000; // 30 minutes ago
+
       cache.addHost("192.168.1.1", 6346, oldTime);
       cache.addHost("192.168.1.2", 6346, recentTime);
       cache.addHost("192.168.1.3", 6346, now);
-      
+
       // Evict hosts older than 1 hour
       cache.evictHosts(60 * 60 * 1000);
-      
+
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(2);
-      expect(hosts.find(h => h.ip === "192.168.1.1")).toBeUndefined();
-      expect(hosts.find(h => h.ip === "192.168.1.2")).toBeDefined();
-      expect(hosts.find(h => h.ip === "192.168.1.3")).toBeDefined();
+      expect(hosts.find((h) => h.ip === "192.168.1.1")).toBeUndefined();
+      expect(hosts.find((h) => h.ip === "192.168.1.2")).toBeDefined();
+      expect(hosts.find((h) => h.ip === "192.168.1.3")).toBeDefined();
     });
 
     test("should use default cutoff of 1 hour", () => {
       const now = Date.now();
-      const oldTime = now - (2 * 60 * 60 * 1000); // 2 hours ago
-      
+      const oldTime = now - 2 * 60 * 60 * 1000; // 2 hours ago
+
       cache.addHost("192.168.1.1", 6346, oldTime);
       cache.addHost("192.168.1.2", 6346, now);
-      
+
       cache.evictHosts(); // Use default
-      
+
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(1);
       expect(hosts[0].ip).toBe("192.168.1.2");
@@ -156,7 +156,7 @@ describe("GnutellaCache", () => {
       cache.addCache("http://example.com/gwc");
       cache.addCache("http://example.com/gwc");
       cache.addCache("  http://example.com/gwc  "); // With whitespace
-      
+
       // We can't directly check the caches array, but we can verify through store/load
       cache.store();
     });
@@ -165,9 +165,9 @@ describe("GnutellaCache", () => {
   describe("parseXTryHeaders()", () => {
     test("should parse X-Try header", () => {
       const headers = {
-        "x-try": "192.168.1.1:6346,10.0.0.1:6347"
+        "x-try": "192.168.1.1:6346,10.0.0.1:6347",
       };
-      
+
       cache.parseXTryHeaders(headers);
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(2);
@@ -179,9 +179,9 @@ describe("GnutellaCache", () => {
 
     test("should parse X-Try-Ultrapeer header", () => {
       const headers = {
-        "x-try-ultrapeer": "192.168.1.1:6346"
+        "x-try-ultrapeer": "192.168.1.1:6346",
       };
-      
+
       cache.parseXTryHeaders(headers);
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(1);
@@ -190,9 +190,9 @@ describe("GnutellaCache", () => {
 
     test("should parse X-Try-Hub header with complex format", () => {
       const headers = {
-        "x-try-hub": "192.168.1.1:6346 leaves=5,10.0.0.1:6347 extra=data"
+        "x-try-hub": "192.168.1.1:6346 leaves=5,10.0.0.1:6347 extra=data",
       };
-      
+
       cache.parseXTryHeaders(headers);
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(2);
@@ -204,9 +204,9 @@ describe("GnutellaCache", () => {
       const headers = {
         "x-try": "192.168.1.1:6346",
         "x-try-ultrapeer": "10.0.0.1:6347",
-        "x-try-hub": "172.16.0.1:6348"
+        "x-try-hub": "172.16.0.1:6348",
       };
-      
+
       cache.parseXTryHeaders(headers);
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(3);
@@ -214,9 +214,10 @@ describe("GnutellaCache", () => {
 
     test("should ignore invalid entries", () => {
       const headers = {
-        "x-try": "192.168.1.1:6346,invalid-ip,10.0.0.1:invalid-port,172.16.0.1:6347"
+        "x-try":
+          "192.168.1.1:6346,invalid-ip,10.0.0.1:invalid-port,172.16.0.1:6347",
       };
-      
+
       cache.parseXTryHeaders(headers);
       const hosts = cache.getHosts();
       expect(hosts).toHaveLength(2); // Only valid entries
@@ -229,13 +230,13 @@ describe("GnutellaCache", () => {
     test("should track cache push cooldowns", async () => {
       cache.addCache("http://example.com/gwc");
       await cache.store();
-      
+
       // Initially should be able to push
       expect(cache.canPushToCache("http://example.com/gwc")).toBe(true);
-      
+
       // Update push time
       cache.updateCachePushTime("http://example.com/gwc");
-      
+
       // Should not be able to push immediately after
       expect(cache.canPushToCache("http://example.com/gwc")).toBe(false);
     });

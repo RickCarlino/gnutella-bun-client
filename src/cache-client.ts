@@ -274,29 +274,38 @@ export async function createGnutellaCache() {
       return;
     }
 
-    for (const cacheUrl of availableCacheUrls) {
-      try {
-        console.log(`Pulling hosts from ${cacheUrl}`);
-        const results = await cacheGet([cacheUrl]);
+    try {
+      console.log(`Pulling hosts from ${availableCacheUrls.length} caches`);
+      // Call cacheGet once with all URLs to avoid duplicate requests
+      const results = await cacheGet(availableCacheUrls);
 
+      // Update pull times for all queried caches
+      for (const cacheUrl of availableCacheUrls) {
         data.caches[cacheUrl].lastPull = now;
-
-        for (const peer of results.peers) {
-          const [ip, portStr] = peer.split(":");
-          const port = parseInt(portStr, 10);
-          if (!isNaN(port)) {
-            addHost(ip, port, now);
-          }
-        }
-
-        for (const newCacheUrl of results.caches) {
-          addCache(newCacheUrl);
-        }
-
-        await store();
-      } catch (error) {
-        console.error(`Failed to pull from ${cacheUrl}:`, error);
       }
+
+      // Process discovered peers
+      for (const peer of results.peers) {
+        const [ip, portStr] = peer.split(":");
+        const port = parseInt(portStr, 10);
+        if (!isNaN(port)) {
+          addHost(ip, port, now);
+        }
+      }
+
+      // Add newly discovered caches
+      for (const newCacheUrl of results.caches) {
+        addCache(newCacheUrl);
+      }
+
+      await store();
+      
+      console.log(`Found ${results.peers.size} peers from ${results.caches.size} caches`);
+      if (results.failed.length > 0) {
+        console.log(`Failed to query ${results.failed.length} caches`);
+      }
+    } catch (error) {
+      console.error(`Failed to pull from caches:`, error);
     }
   }
 
@@ -348,6 +357,10 @@ export async function createGnutellaCache() {
     }
   }
 
+  function getCacheUrls(): string[] {
+    return Object.keys(data.caches);
+  }
+
   return {
     load,
     store,
@@ -359,6 +372,7 @@ export async function createGnutellaCache() {
     parseXTryHeaders,
     canPushToCache,
     updateCachePushTime,
+    getCacheUrls,
   };
 }
 
