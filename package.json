@@ -1,0 +1,21 @@
+{
+  "name": "gnutella",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "bun run index.ts",
+    "dev": "bun run index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "bun-types": "^1.2.16",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "coffeescript": "^2.7.0"
+  }
+}

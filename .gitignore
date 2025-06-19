@@ -1,0 +1,5 @@
+.claude/
+node_modules/
+.env
+failed*
+peers.json
