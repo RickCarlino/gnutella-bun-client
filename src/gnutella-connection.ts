@@ -11,86 +11,64 @@ interface ConnectionConf {
   onClose: () => void;
 }
 
-const handshakeSize = (buf: Buffer): number => {
-  const s = buf.toString("ascii");
-  const v06 = s.indexOf("\r\n\r\n");
-  if (v06 !== -1) return v06 + 4;
-  return 0;
+const getHandshakeSize = (buffer: Buffer): number => {
+  const handshakeEnd = "\r\n\r\n";
+  const index = buffer.toString("ascii").indexOf(handshakeEnd);
+  return index !== -1 ? index + handshakeEnd.length : 0;
 };
 
-function binarySize(parsed: GnutellaObject): number {
-  switch (parsed.type) {
-    case "handshake_connect":
-    case "handshake_ok":
-    case "handshake_error":
-      throw new Error("Invalid message type for binary size calculation");
-    default:
-      return 23 + parsed.header.payloadLength;
+const getBinarySize = (parsed: GnutellaObject): number => {
+  if ("header" in parsed) {
+    return 23 + parsed.header.payloadLength;
   }
-}
+  throw new Error("Invalid message type for binary size calculation");
+};
 
-const messageSize = (m: GnutellaObject, buf: Buffer): number =>
-  ["handshake_connect", "handshake_ok", "handshake_error"].includes(m.type)
-    ? handshakeSize(buf)
-    : binarySize(m);
+const getMessageSize = (message: GnutellaObject, buffer: Buffer): number => {
+  const isHandshake = ["handshake_connect", "handshake_ok", "handshake_error"].includes(message.type);
+  return isHandshake ? getHandshakeSize(buffer) : getBinarySize(message);
+};
 
-export const startConnection = (conf: ConnectionConf): Promise<net.Socket> =>
-  new Promise((resolve, reject) => {
-    const { ip, port, onMessage, onError, onClose } = conf;
-    const socket = net.createConnection({ 
-      host: ip, 
-      port,
-      timeout: 5000 // 5 second connection timeout
-    });
-    
-    // Handle connection errors before the socket is connected
-    const handleInitialError = (e: Error) => {
-      socket.destroy();
-      reject(e);
-    };
-    
-    const handleTimeout = () => {
-      socket.destroy();
-      reject(new Error(`Connection timeout to ${ip}:${port}`));
-    };
-    
-    socket.once("error", handleInitialError);
-    socket.once("timeout", handleTimeout);
-    
-    socket.once("connect", () => {
-      // Remove the initial error and timeout handlers since we're now connected
-      socket.removeListener("error", handleInitialError);
-      socket.removeListener("timeout", handleTimeout);
-      
-      const send: Sender = (data) => socket.write(data);
-      let buf = Buffer.alloc(0);
-
-      const process = () => {
-        while (buf.length) {
-          const parsed = parseGnutella(buf);
-          if (!parsed) return;
-          const size = messageSize(parsed, buf);
-          if (size === 0 || buf.length < size) return;
-          onMessage(send, parsed);
-          buf = buf.subarray(size);
-        }
-      };
-
-      socket.on("data", (chunk) => {
-        buf = Buffer.concat([buf, chunk]);
-        try {
-          process();
-        } catch (e) {
-          onError(send, e as Error);
-        }
-      });
-
-      socket.on("error", (e) => {
-        onError(send, e);
-      });
-
-      socket.on("close", onClose);
-
-      resolve(socket);
-    });
+const connectSocket = (ip: string, port: number): Promise<net.Socket> => {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: ip, port, timeout: 5000 });
+    socket.once("connect", () => resolve(socket));
+    socket.once("error", (err) => reject(err));
+    socket.once("timeout", () => reject(new Error(`Connection timeout to ${ip}:${port}`)));
   });
+};
+
+export const startConnection = async (conf: ConnectionConf): Promise<net.Socket> => {
+  const { ip, port, onMessage, onError, onClose } = conf;
+  const socket = await connectSocket(ip, port);
+
+  const send: Sender = (data) => socket.write(data);
+  let buffer = Buffer.alloc(0);
+
+  const processBuffer = () => {
+    while (buffer.length > 0) {
+      const parsed = parseGnutella(buffer);
+      if (!parsed) break;
+
+      const size = getMessageSize(parsed, buffer);
+      if (size === 0 || buffer.length < size) break;
+
+      onMessage(send, parsed);
+      buffer = buffer.subarray(size);
+    }
+  };
+
+  socket.on("data", (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    try {
+      processBuffer();
+    } catch (e) {
+      onError(send, e as Error);
+    }
+  });
+
+  socket.on("error", (err) => onError(send, err));
+  socket.on("close", onClose);
+
+  return socket;
+};

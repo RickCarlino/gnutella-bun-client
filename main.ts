@@ -1,11 +1,20 @@
 import { createGnutellaServer } from "./src/server";
-import { createHandshakeOk, createHandshakeError, createPong } from "./src/parser";
-import { localIp } from "./src/client";
+import {
+  createHandshakeOk,
+  createHandshakeError,
+  createPong,
+} from "./src/parser";
 import { cachePut } from "./src/cache-client";
 import { getCache } from "./src/cache-client";
 import { createConnectionManager } from "./src/connection-manager";
 
-// Configuration
+export const localIp = async () => {
+  const response = await fetch(CHECK_URL);
+  const ip = await response.text();
+  return ip.trim();
+};
+
+const CHECK_URL = "https://wtfismyip.com/text";
 const LOCAL_IP = await localIp();
 const LOCAL_PORT = 6346;
 const MAX_CONNECTIONS = 10;
@@ -129,7 +138,7 @@ async function main() {
   console.log("Pushing IP to GWebCaches...");
   let successCount = 0;
   const cacheUrls = cache.getCacheUrls();
-  
+
   for (const url of cacheUrls) {
     if (cache.canPushToCache(url)) {
       try {
@@ -146,7 +155,7 @@ async function main() {
       }
     }
   }
-  
+
   console.log(`Pushed IP to ${successCount} caches`);
   await cache.store();
 
@@ -159,7 +168,9 @@ async function main() {
     localPort: LOCAL_PORT,
     headers: HEADERS,
     onConnectionsChanged: (activeCount) => {
-      console.log(`[Outbound] Active connections: ${activeCount}/${TARGET_OUTBOUND_CONNECTIONS}`);
+      console.log(
+        `[Outbound] Active connections: ${activeCount}/${TARGET_OUTBOUND_CONNECTIONS}`
+      );
     },
   });
 
@@ -170,7 +181,7 @@ async function main() {
   const statusInterval = setInterval(() => {
     const inboundClients = server.getClients();
     const outboundConnections = connectionManager.getConnections();
-    
+
     console.log(`\n=== Connection Status ===`);
     console.log(`Inbound connections: ${inboundClients.length}`);
     inboundClients.forEach((client) => {
@@ -180,7 +191,7 @@ async function main() {
         }`
       );
     });
-    
+
     console.log(`\nOutbound connections: ${outboundConnections.length}`);
     outboundConnections.forEach((conn) => {
       const duration = Math.floor(conn.duration / 1000);
@@ -195,7 +206,7 @@ async function main() {
   // Periodic cache update (every hour)
   const cacheUpdateInterval = setInterval(async () => {
     console.log("\nUpdating caches...");
-    
+
     for (const url of cache.getCacheUrls()) {
       if (cache.canPushToCache(url)) {
         try {
@@ -211,7 +222,7 @@ async function main() {
         }
       }
     }
-    
+
     await cache.store();
   }, 60 * 60 * 1000); // Every hour
 
