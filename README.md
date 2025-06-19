@@ -2,10 +2,15 @@
 
 This repository contains a variety of tools related to [Gnutella 0.6](https://en.wikipedia.org/wiki/Gnutella). It is the result of a Gnutella deep-dive I did for fun in 2025.
 
-- [A minimal GWebCache Server - Run via `bun cache-server.ts`](cache-server.ts)
-- [A minimal Gnutella node implementation](main.ts) - run `bun main.ts` to start a full Gnutella node
-- [An interface for calling GWebCache servers with persistent data storage](cache-client.ts)
-- [Parser of various Gnutella messages](parser.ts)
+## Components
+
+- **[Full Gnutella Node](main.ts)** - Run `bun main.ts` to start a complete Gnutella node with automatic peer discovery and connection management
+- **[GWebCache Server](src/cache-server.ts)** - Run `bun src/cache-server.ts` to host a GWebCache for peer discovery
+- **[GWebCache Client](src/cache-client.ts)** - Library for querying GWebCache servers with persistent peer storage
+- **[Connection Manager](src/connection-manager.ts)** - Automatic outbound connection management with configurable targets
+- **[Protocol Parser](src/parser.ts)** - Parser and builder for Gnutella protocol messages
+- **[Gnutella Server](src/server.ts)** - Accepts incoming Gnutella connections
+- **[Gnutella Client](src/client.ts)** - Manual client for testing outbound connections
 
 ## Notes
 
