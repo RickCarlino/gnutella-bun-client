@@ -7,21 +7,27 @@ import {
   GnutellaObject,
 } from "./parser";
 
-const SEEDS = ["find peers with `bun cache-client.ts`"];
+const SEEDS: string[] = [
+  // "find peers with `bun cache-client.ts`"
+];
 
-const localIp = (): string =>
-  Object.values(os.networkInterfaces())
-    .flat()
-    .find((i) => i && i.family === "IPv4" && !i.internal)?.address ??
-  "127.0.0.1";
+const CHECK_URL = "https://wtfismyip.com/text";
+const localIp = async () =>
+  await fetch(CHECK_URL)
+    .then((res) => res.text())
+    .then((ip) => ip.trim());
 
-const LOCAL_IP = localIp();
+const LOCAL_IP = await localIp();
 const LOCAL_PORT = 6346;
 
 type Session = { handshake: boolean; version?: string };
 const sessions = new Map<string, Session>();
 
-const HEADERS = { "User-Agent": "GnutellaBun/0.1", "X-Ultrapeer": "False" };
+const HEADERS = {
+  "User-Agent": "GnutellaBun/0.1",
+  "X-Ultrapeer": "False",
+  // "Accept-Encoding": "deflate",
+};
 
 const shuffle = <T>(a: T[]) =>
   a
@@ -31,7 +37,7 @@ const shuffle = <T>(a: T[]) =>
 
 const connect = async (addr: string) => {
   const [ip, port] = addr.split(":");
-
+  console.log(addr);
   try {
     await startConnection({
       ip,

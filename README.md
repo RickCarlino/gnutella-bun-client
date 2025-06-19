@@ -5,7 +5,9 @@ This repository contains a variety of tools related to Gnutella 0.6. It is the r
 - [A minimal GWebCache Server - Run via `bun cache-server.ts`](cache-server.ts)
 - [An interface for calling GWebCache servers like the one above](cache-client.ts) - run `bun cache-client.ts` to get peer IPs.
 - [Outbound Gnutella connection handler](gnutella-connection.ts)
-- [Parser of varaious Gnutella messages](parser.ts)
+- [Inbound Gnutella TCP listener](gnutella-server.ts) - accepts incoming connections
+- [Gnutella server implementation](server.ts) - run `bun server.ts` to accept inbound connections
+- [Parser of various Gnutella messages](parser.ts)
 
 ## Notes
 
@@ -17,7 +19,6 @@ Although this is mostly complete, I don't think it is usable as a real gnutella 
 
 ## TODO
 
-- Inbound connection handler.
 - auto bootstrapping and caching of peers so that I don't need to copy/paste peers into `FIND_PEERS_USING_WEB_CACHES`.
 - QRP (maybe)
 - Compressed connections (maybe)
@@ -26,7 +27,15 @@ Although this is mostly complete, I don't think it is usable as a real gnutella 
 
 1. Use the cache client to find initial peers.
 2. Update the value of the IP address in list in client.ts
-3. Run `bun client.ts`
+3. Run `bun client.ts` for outbound connections
+
+## Running the Gnutella Server
+
+To accept inbound connections:
+```bash
+bun server.ts
+```
+The server will listen on port 6346 by default and accept up to 10 simultaneous connections.
 
 ## Resources
 
