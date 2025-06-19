@@ -1,3 +1,4 @@
+import os from "os";
 import { startConnection } from "./gnutella-connection";
 import {
   createHandshakeConnect,
@@ -5,220 +6,128 @@ import {
   createPong,
   GnutellaObject,
 } from "./parser";
-import os from "os";
 
-const FIND_PEERS_USING_WEB_CACHES: string[] = [
-  "find peers with `bun cache-client.ts`",
-];
+const SEEDS = ["find peers with `bun cache-client.ts`"];
 
-function getLocalIP(): string {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]!) {
-      if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return "127.0.0.1";
-}
+const localIp = (): string =>
+  Object.values(os.networkInterfaces())
+    .flat()
+    .find((i) => i && i.family === "IPv4" && !i.internal)?.address ??
+  "127.0.0.1";
 
-const localIP = getLocalIP();
-const localPort = 6346; // Standard Gnutella port
+const LOCAL_IP = localIp();
+const LOCAL_PORT = 6346;
 
-type Session = {
-  handshakeComplete: boolean;
-  version: string | undefined;
-};
-// Track active connections
-const activeConnections = new Map<string, Session>();
+type Session = { handshake: boolean; version?: string };
+const sessions = new Map<string, Session>();
 
-async function connectToPeer(peerAddress: string) {
-  const [ip, port] = peerAddress.split(":");
-  const portNum = parseInt(port);
+const HEADERS = { "User-Agent": "GnutellaBun/0.1", "X-Ultrapeer": "False" };
+
+const shuffle = <T>(a: T[]) =>
+  a
+    .map((v) => [v, Math.random()] as const)
+    .sort((a, b) => a[1] - b[1])
+    .map(([v]) => v);
+
+const connect = async (addr: string) => {
+  const [ip, port] = addr.split(":");
 
   try {
-    const socket = await startConnection({
+    await startConnection({
       ip,
-      port: portNum,
-      onMessage(send, message) {
-        handleMessage(peerAddress, send, message);
+      port: +port,
+      onMessage: (send, msg) => handle(addr, send, msg),
+      onError: (_, e) => {
+        console.error(`Error ${addr}:`, e.message);
+        sessions.delete(addr);
       },
-      onError(_send, error) {
-        console.error(`Error from ${peerAddress}:`, error.message);
-        activeConnections.delete(peerAddress);
+      onClose: () => {
+        console.log(`Closed ${addr}`);
+        sessions.delete(addr);
       },
-      onClose() {
-        console.log(`Disconnected from ${peerAddress}`);
-        activeConnections.delete(peerAddress);
-      },
+    }).then((sock) => {
+      sessions.set(addr, { handshake: false });
+      sock.write(createHandshakeConnect(HEADERS));
     });
-
-    // Store connection info
-    activeConnections.set(peerAddress, {
-      handshakeComplete: false,
-      version: undefined,
-    });
-
-    // Send Gnutella handshake
-    const handshake = createHandshakeConnect("0.6", {
-      "User-Agent": "GnutellaBun/0.1",
-      "X-Ultrapeer": "False",
-      // "X-Dynamic-Querying": "0.1",
-      // "X-Query-Routing": "0.1",
-    });
-    socket.write(handshake);
-  } catch (error) {
-    console.error(`Failed to connect to ${peerAddress}:`, error);
+  } catch (e) {
+    console.error(`Connect fail ${addr}:`, e);
   }
-}
+};
 
-function handleMessage(
-  peerAddress: string,
-  send: (data: Buffer) => void,
-  message: GnutellaObject
-) {
-  const connection = activeConnections.get(peerAddress);
-  if (!connection) return;
+const handle = (addr: string, send: (b: Buffer) => void, m: GnutellaObject) => {
+  const s = sessions.get(addr);
+  if (!s) return;
 
-  switch (message.type) {
+  const alt = (h?: string) =>
+    h
+      ?.split(",")
+      .map((p) => p.trim())
+      .filter(Boolean) ?? [];
+
+  switch (m.type) {
     case "handshake_connect":
-      // Peer is initiating handshake (shouldn't happen as client)
-      console.log(`${peerAddress} sent handshake connect v${message.version}`);
-      const okResponse = createHandshakeOk(message.version, {
-        "User-Agent": "MinimalGnutellaClient/0.1",
-        "X-Ultrapeer": "False",
-        // "X-Dynamic-Querying": "0.1",
-        // "X-Query-Routing": "0.1",
-      });
-      send(okResponse);
+      send(createHandshakeOk(HEADERS));
       break;
 
     case "handshake_ok":
-      // Handshake accepted
-      console.log(`${peerAddress} accepted handshake`);
-      connection.handshakeComplete = true;
-      connection.version = message.version;
+      s.handshake = true;
+      s.version = m.version;
       break;
 
     case "handshake_error":
-      // Handshake rejected
-      console.log(`${peerAddress} rejected handshake: ${message.message}`);
-      if (message.headers?.["X-Try"]) {
-        console.log(`Alternative hosts: ${message.headers["X-Try"]}`);
-      }
-      if (message.headers?.["X-Try-Ultrapeers"]) {
-        console.log(
-          `=== Ultrapeers found: ${message.headers["X-Try-Ultrapeers"]}`
-        );
-      }
-
-      ["x-Try", "X-Try-Ultrapeers", "X-Try-Hubs"].forEach((header) => {
-        if (message.headers?.[header]) {
-          const alternativePeers = message.headers[header]
-            .split(",")
-            .map((p) => p.trim());
-          console.log(`Alternative peers from ${header}:`, alternativePeers);
-          alternativePeers.forEach((altPeer) => {
-            if (!activeConnections.has(altPeer)) {
-              console.log(`Trying alternative peer: ${altPeer}`);
-              if (header === "X-Try-hubs") {
-                connectToPeer(altPeer.split(" ")[0]);
-              } else {
-                connectToPeer(altPeer);
-              }
-            } else {
-              console.log(`Already connected to alternative peer: ${altPeer}`);
-            }
-          });
-        }
-      });
-      activeConnections.delete(peerAddress);
+      ["X-Try", "X-Try-Ultrapeers", "X-Try-Hubs"].forEach((h) =>
+        alt(m.headers?.[h]).forEach((p) => {
+          const host = h === "X-Try-Hubs" ? p.split(" ")[0] : p;
+          if (!sessions.has(host)) connect(host);
+        })
+      );
+      sessions.delete(addr);
       break;
 
     case "ping":
-      // Respond to ping with pong
-      if (connection.handshakeComplete) {
-        console.log(`${peerAddress} sent ping, responding with pong`);
-        const pong = createPong(
-          message.header.descriptorId,
-          localPort,
-          localIP,
-          0, // No files shared
-          0, // No KB shared
-          message.header.ttl
+      if (s.handshake)
+        send(
+          createPong(
+            m.header.descriptorId,
+            LOCAL_PORT,
+            LOCAL_IP,
+            0,
+            0,
+            m.header.ttl
+          )
         );
-        send(pong);
-      }
       break;
 
     case "pong":
-      console.log(
-        `${peerAddress} sent pong from ${message.ipAddress}:${message.port}`
-      );
+      console.log(`${addr} pong ${m.ipAddress}:${m.port}`);
       break;
 
     case "query":
-      console.log(`${peerAddress} sent query: "${message.searchCriteria}"`);
-      // We don't share files, so no QueryHits response
+      console.log(`${addr} query "${m.searchCriteria}"`);
       break;
 
     case "queryhits":
-      console.log(`${peerAddress} sent ${message.numberOfHits} query hits`);
+      console.log(`${addr} ${m.numberOfHits} hits`);
       break;
 
     case "push":
-      console.log(`${peerAddress} sent push request`);
-      // We don't support push
+      console.log(`${addr} push`);
       break;
 
     case "bye":
-      console.log(
-        `${peerAddress} sent bye: ${message.code} ${message.message}`
-      );
+      console.log(`${addr} bye ${m.code} ${m.message}`);
       break;
-
-    default:
-      console.log(`${peerAddress} sent unknown message type`);
   }
-}
+};
 
-// Connect to all peers
-console.log(`Starting Gnutella client as ${localIP}:${localPort}`);
-console.log(`Connecting to ${FIND_PEERS_USING_WEB_CACHES.length} peers...`);
-function shuffle(array: string[]) {
-  let currentIndex = array.length;
-
-  // While there remain elements to shuffle...
-  while (currentIndex != 0) {
-    // Pick a remaining element...
-    let randomIndex = Math.floor(Math.random() * currentIndex);
-    currentIndex--;
-
-    // And swap it with the current element.
-    [array[currentIndex], array[randomIndex]] = [
-      array[randomIndex],
-      array[currentIndex],
-    ];
-  }
-}
-shuffle(FIND_PEERS_USING_WEB_CACHES);
-
-for (const peer of FIND_PEERS_USING_WEB_CACHES) {
-  try {
-    await connectToPeer(peer);
-  } catch (error) {
-    console.error(`Error connecting to ${peer}:`, error);
-  }
-}
+console.log(`Gnutella ${LOCAL_IP}:${LOCAL_PORT}`);
+shuffle(SEEDS).forEach(connect);
 
 setInterval(() => {
-  console.log(`Active connections: ${activeConnections.size}`);
-  activeConnections.forEach((conn, peer) => {
-    if (!conn.handshakeComplete) {
-      console.log(`Handshake not complete with ${peer}`);
-    } else {
-      console.log(`Connected to ${peer} (v${conn.version})`);
-    }
-  });
-}, 5000);
+  console.log(`Connections ${sessions.size}`);
+  sessions.forEach((v, p) =>
+    console.log(
+      v.handshake ? `✓ ${p} (v${v.version})` : `… ${p} (handshake pending)`
+    )
+  );
+}, 5_000);

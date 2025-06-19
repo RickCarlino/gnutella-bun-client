@@ -9,9 +9,9 @@ This repository contains a variety tools related to Gnutella 0.6. It is the resu
 
 ## Notes
 
-It is pretty much impossible to peer with Gnutella peers in 2025 if you do not have the "Query Routing Protocol" and "Compressed Connections".
+It is pretty much impossible to peer with Gnutella users in 2025 without a client that supports "Query Routing Protocol" and "Compressed Connections".
 
-I am not sure if I will implement these or not since it appears to be hard to find a spec.
+I am not sure if I will implement these.
 
 Although this is mostly complete, I don't think it is usable as a real gnutella client without these additions.
 
