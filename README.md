@@ -1,6 +1,6 @@
 # Gnutella Bun Experiments
 
-This repository contains a variety tools related to Gnutella 0.6. It is the result of a Gnutella deep-dive I did for fun in 2025.
+This repository contains a variety of tools related to Gnutella 0.6. It is the result of a Gnutella deep-dive I did for fun in 2025.
 
 - [A minimal GWebCache Server - Run via `bun cache-server.ts`](cache-server.ts)
 - [An interface for calling GWebCache servers like the one above](cache-client.ts) - run `bun cache-client.ts` to get peer IPs.

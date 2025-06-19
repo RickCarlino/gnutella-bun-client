@@ -13,8 +13,6 @@ interface ConnectionConf {
 
 const handshakeSize = (buf: Buffer): number => {
   const s = buf.toString("ascii");
-  const v04 = s.indexOf("\n\n");
-  if (v04 !== -1) return v04 + 2;
   const v06 = s.indexOf("\r\n\r\n");
   if (v06 !== -1) return v06 + 4;
   return 0;

@@ -841,19 +841,6 @@ export function parseGnutella(buffer: Buffer): GnutellaObject | null {
     | null => {
     const message = buffer.toString("ascii");
 
-    const connectMatch = message.match(/^GNUTELLA CONNECT\/(\d+\.\d+)\n\n/);
-    if (connectMatch) {
-      return {
-        type: "handshake_connect",
-        version: connectMatch[1],
-      };
-    }
-
-    if (message === "GNUTELLA OK\n\n") {
-      return {
-        type: "handshake_ok",
-      };
-    }
 
     const v06ConnectMatch = message.match(/^GNUTELLA CONNECT\/(\d+\.\d+)\r\n/);
     if (v06ConnectMatch) {
@@ -924,13 +911,6 @@ export function parseGnutella(buffer: Buffer): GnutellaObject | null {
       }
     }
 
-    const errorMatch = message.match(/^(\d{3} .+)\n\n/);
-    if (errorMatch) {
-      return {
-        type: "handshake_error",
-        message: errorMatch[1],
-      };
-    }
 
     return null;
   };
