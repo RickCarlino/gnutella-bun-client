@@ -13,6 +13,8 @@ This repository contains a variety of tools related to Gnutella 0.6. It is the r
 
 It is pretty much impossible to peer with Gnutella users in 2025 without a client that supports "Query Routing Protocol" and "Compressed Connections".
 
+**If you just want to try it out:** Run GTK-Gnutella locally, uncheck compressed connections, enable LAN connections, run `bun server.rb` and manually add `127.0.0.1::6346`
+
 I am not sure if I will implement these.
 
 Although this is mostly complete, I don't think it is usable as a real gnutella client without these additions.
