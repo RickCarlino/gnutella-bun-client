@@ -24,12 +24,20 @@ I am not sure if I will implement these.
 
 Although this is mostly complete, I don't think it is usable as a real gnutella client without these additions.
 
+## Features
+
+- **Automatic Peer Discovery**: Pulls peers from multiple GWebCache servers
+- **Connection Management**: Automatically maintains a target number of outbound connections
+- **Failed Peer Removal**: Peers that fail to connect are immediately removed from the cache (no retry cooldown)
+- **Persistent Peer Storage**: Discovered peers are saved to `settings.json`
+- **X-Try Header Support**: Extracts alternative peers from handshake error responses
+- **Configurable**: Target connections, check intervals, and timeouts are all configurable
+
 ## TODO
 
-- Update internal host file when we get `X-Try-*` responses.
-- Maintain minimum number of peers
-- QRP
-- Compressed connections
+- Connection manager does not work, need to figure out why.
+- QRP (Query Routing Protocol)
+- Compressed connections (Not implementing at this time)
 
 ## Running the Gnutella Node
 
