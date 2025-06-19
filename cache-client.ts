@@ -183,3 +183,5 @@ export async function cachePut(input: CacheInput): Promise<void> {
     throw error;
   }
 }
+
+console.log(await cacheGet(KNOWN_CACHE_LIST));

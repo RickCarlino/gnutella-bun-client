@@ -7,8 +7,8 @@ import {
 } from "./parser";
 import os from "os";
 
-const peers: string[] = [
-  // Create this list via cache-client.ts
+const FIND_PEERS_USING_WEB_CACHES: string[] = [
+  "find peers with `bun cache-client.ts`",
 ];
 
 function getLocalIP(): string {
@@ -63,11 +63,9 @@ async function connectToPeer(peerAddress: string) {
     // Send Gnutella handshake
     const handshake = createHandshakeConnect("0.6", {
       "User-Agent": "GnutellaBun/0.1",
-      "X-Degree": "10",
-      "X-Max-TTL": "3",
-      "X-Ultrapeer": "True",
-      "X-Dynamic-Querying": "0.1",
-      "X-Query-Routing": "True",
+      "X-Ultrapeer": "False",
+      // "X-Dynamic-Querying": "0.1",
+      // "X-Query-Routing": "0.1",
     });
     socket.write(handshake);
   } catch (error) {
@@ -90,8 +88,8 @@ function handleMessage(
       const okResponse = createHandshakeOk(message.version, {
         "User-Agent": "MinimalGnutellaClient/0.1",
         "X-Ultrapeer": "False",
-        "X-Dynamic-Querying": "0.1",
-        "X-Query-Routing": "0.1",
+        // "X-Dynamic-Querying": "0.1",
+        // "X-Query-Routing": "0.1",
       });
       send(okResponse);
       break;
@@ -187,7 +185,7 @@ function handleMessage(
 
 // Connect to all peers
 console.log(`Starting Gnutella client as ${localIP}:${localPort}`);
-console.log(`Connecting to ${peers.length} peers...`);
+console.log(`Connecting to ${FIND_PEERS_USING_WEB_CACHES.length} peers...`);
 function shuffle(array: string[]) {
   let currentIndex = array.length;
 
@@ -204,9 +202,9 @@ function shuffle(array: string[]) {
     ];
   }
 }
-shuffle(peers);
+shuffle(FIND_PEERS_USING_WEB_CACHES);
 
-for (const peer of peers) {
+for (const peer of FIND_PEERS_USING_WEB_CACHES) {
   try {
     await connectToPeer(peer);
   } catch (error) {
