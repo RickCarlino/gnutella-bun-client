@@ -2,7 +2,8 @@ import net from "net";
 import { GnutellaObject, parseGnutella } from "./parser";
 
 type Sender = (message: Buffer) => void;
-interface GnutellaConnectionConfig {
+
+interface ConnectionConf {
   ip: string;
   port: number;
   onMessage: (send: Sender, message: GnutellaObject) => void;
@@ -10,23 +11,16 @@ interface GnutellaConnectionConfig {
   onClose: () => void;
 }
 
-function getHandshakeMessageSize(buf: Buffer): number {
-  const str = buf.toString("ascii");
-  const v04End = str.indexOf("\n\n");
+const handshakeSize = (buf: Buffer): number => {
+  const s = buf.toString("ascii");
+  const v04 = s.indexOf("\n\n");
+  if (v04 !== -1) return v04 + 2;
+  const v06 = s.indexOf("\r\n\r\n");
+  if (v06 !== -1) return v06 + 4;
+  return 0;
+};
 
-  if (v04End !== -1) {
-    return v04End + 2;
-  }
-
-  const v06End = str.indexOf("\r\n\r\n");
-  if (v06End !== -1) {
-    return v06End + 4;
-  }
-
-  return 0; // Incomplete handshake message
-}
-
-function getBinaryMessageSize(parsed: GnutellaObject): number {
+function binarySize(parsed: GnutellaObject): number {
   switch (parsed.type) {
     case "handshake_connect":
     case "handshake_ok":
@@ -37,83 +31,45 @@ function getBinaryMessageSize(parsed: GnutellaObject): number {
   }
 }
 
-function getMessageSize(parsed: GnutellaObject, buf: Buffer): number {
-  switch (parsed.type) {
-    case "handshake_connect":
-    case "handshake_ok":
-    case "handshake_error":
-      return getHandshakeMessageSize(buf);
-    case "ping":
-    case "pong":
-    case "query":
-    case "queryhits":
-    case "push":
-    case "bye":
-      return getBinaryMessageSize(parsed);
-    default:
-      return 0;
-  }
-}
+const messageSize = (m: GnutellaObject, buf: Buffer): number =>
+  ["handshake_connect", "handshake_ok", "handshake_error"].includes(m.type)
+    ? handshakeSize(buf)
+    : binarySize(m);
 
-export const startConnection = (
-  params: GnutellaConnectionConfig
-): Promise<net.Socket> => {
-  const { ip, port, onMessage, onError, onClose } = params;
-
-  return new Promise((resolve, reject) => {
+export const startConnection = (conf: ConnectionConf): Promise<net.Socket> =>
+  new Promise((resolve, reject) => {
+    const { ip, port, onMessage, onError, onClose } = conf;
     const socket = net.createConnection({ host: ip, port }, () => {
-      console.log(`Connected to ${ip}:${port}`);
+      const send: Sender = (data) => socket.write(data);
+      let buf = Buffer.alloc(0);
 
-      const send: Sender = (data: Buffer) => {
-        socket.write(data);
+      const process = () => {
+        while (buf.length) {
+          const parsed = parseGnutella(buf);
+          if (!parsed) return;
+          const size = messageSize(parsed, buf);
+          if (size === 0 || buf.length < size) return;
+          onMessage(send, parsed);
+          buf = buf.subarray(size);
+        }
       };
 
-      let leftover: Buffer | null = null;
-      socket.on("data", (chunk: Buffer) => {
-        console.log(chunk.toString("ascii"));
+      socket.on("data", (chunk) => {
+        buf = Buffer.concat([buf, chunk]);
         try {
-          let buf = leftover ? Buffer.concat([leftover, chunk]) : chunk;
-
-          // Try to parse complete messages
-          while (buf.length) {
-            const parsed = parseGnutella(buf);
-
-            if (!parsed) {
-              console.debug("...assembling incomplete message...");
-              break;
-            }
-
-            const messageSize = getMessageSize(parsed, buf);
-
-            if (messageSize === 0 || buf.length < messageSize) {
-              console.debug("...waiting for more data...");
-              break;
-            }
-
-            // Handle the parsed message
-            onMessage(send, parsed);
-
-            // Remove processed message from buffer
-            buf = buf.subarray(messageSize);
-          }
-
-          leftover = buf.length > 0 ? buf : null;
-        } catch (error) {
-          onError(send, error as Error);
+          process();
+        } catch (e) {
+          onError(send, e as Error);
         }
       });
 
-      socket.on("error", (error) => {
-        onError(send, error);
-        reject(error);
+      socket.on("error", (e) => {
+        onError(send, e);
+        reject(e);
       });
 
-      socket.on("close", () => {
-        console.log(`Connection to ${ip}:${port} closed`);
-        onClose();
-      });
+      socket.on("close", onClose);
 
       resolve(socket);
     });
   });
-};
