@@ -2,6 +2,8 @@ import net from "net";
 import { GnutellaObject, parseGnutella } from "./parser";
 import os from "os";
 import { createHandshakeOk, createHandshakeError, createPong } from "./parser";
+import { localIp } from "./client";
+import { cachePut, KNOWN_CACHE_LIST } from "./cache-client";
 
 type Sender = (message: Buffer) => void;
 
@@ -157,13 +159,7 @@ export function createGnutellaServer(config: ServerConfig) {
   };
 }
 
-const localIp = (): string =>
-  Object.values(os.networkInterfaces())
-    .flat()
-    .find((i) => i && i.family === "IPv4" && !i.internal)?.address ??
-  "127.0.0.1";
-
-const LOCAL_IP = localIp();
+const LOCAL_IP = await localIp();
 const LOCAL_PORT = 6346;
 const MAX_CONNECTIONS = 10;
 
@@ -279,4 +275,12 @@ process.on("SIGINT", async () => {
   console.log("\nShutting down server...");
   await server.stop();
   process.exit(0);
+});
+
+KNOWN_CACHE_LIST.forEach((url) => {
+  cachePut({
+    url,
+    network: "Gnutella",
+    ip: LOCAL_IP,
+  });
 });

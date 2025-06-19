@@ -19,7 +19,7 @@ interface ParsedSpec2Response {
   info: string[];
 }
 
-const KNOWN_CACHE_LIST = [
+export const KNOWN_CACHE_LIST = [
   "http://cache.jayl.de/g2/gwc.php",
   "http://cache.jayl.de/g2/gwc.php/",
   "http://gweb.4octets.co.uk/skulls.php",
@@ -155,7 +155,7 @@ export async function cachePut(input: CacheInput): Promise<void> {
     requestUrl.searchParams.set("update", "1");
     requestUrl.searchParams.set("net", input.network.toLowerCase());
     requestUrl.searchParams.set("ip", input.ip);
-    requestUrl.searchParams.set("client", "GNUT");
+    requestUrl.searchParams.set("client", "GBUN");
     requestUrl.searchParams.set("version", "0.1.0");
     requestUrl.searchParams.set("ping", "1");
 
@@ -178,9 +178,9 @@ export async function cachePut(input: CacheInput): Promise<void> {
     if (updateStatus && !updateStatus.includes("|OK")) {
       throw new Error(`Update failed: ${updateStatus}`);
     }
+    console.log(`Cache updated successfully at ${input.url}`);
   } catch (error) {
-    console.error(`Failed to update cache at ${input.url}:`, error);
-    throw error;
+    console.error(error);
   }
 }
 

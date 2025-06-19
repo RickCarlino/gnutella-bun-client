@@ -12,7 +12,7 @@ const SEEDS: string[] = [
 ];
 
 const CHECK_URL = "https://wtfismyip.com/text";
-const localIp = async () =>
+export const localIp = async () =>
   await fetch(CHECK_URL)
     .then((res) => res.text())
     .then((ip) => ip.trim());
@@ -26,7 +26,26 @@ const sessions = new Map<string, Session>();
 const HEADERS = {
   "User-Agent": "GnutellaBun/0.1",
   "X-Ultrapeer": "False",
-  // "Accept-Encoding": "deflate",
+  // Node: 127.0.0.1:57713
+  // Remote-IP: 192.168.1.123
+  // Pong-Caching: 0.1
+  // Bye-Packet: 0.1
+  // GGEP: 0.5
+  // GUID: fdd731021d378172b688cddeb27ffb4d
+  // Vendor-Message: 0.2
+  // X-Query-Routing: 0.2
+  // X-Requeries: False
+  // Accept-Encoding: deflate
+  // X-Token: aFQLJZn7iL7/ZlJj+6jPJhoxWmZ01uocVpqR; KeA=
+  // X-Live-Since: Thu, 19 Jun 2025 07:31:31 -0500
+  // X-Ultrapeer: True
+  // X-Ultrapeer-Query-Routing: 0.1
+  // X-Degree: 16
+  // X-Max-TTL: 4
+  // X-Dynamic-Querying: 0.1
+  // X-Ext-Probes: 0.1
+  // X-Guess: 0.2
+  // X-Features: sflag/0.1, IP/6.0, HSEP/0.2
 };
 
 const shuffle = <T>(a: T[]) =>
