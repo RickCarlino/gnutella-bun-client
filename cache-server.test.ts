@@ -5,7 +5,7 @@ describe("cache.ts", () => {
   const baseUrl = "http://localhost:3211";
 
   beforeEach(async () => {
-    server = Bun.spawn(["bun", "./cache.ts"], {
+    server = Bun.spawn(["bun", "./cache-server.ts"], {
       env: { ...process.env, PORT: "3211", TEST_MODE: "true" },
     });
     await Bun.sleep(200); // Give server more time to start

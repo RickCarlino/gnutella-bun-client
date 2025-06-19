@@ -44,7 +44,6 @@ function parseSpec2Response(text: string): ParsedSpec2Response {
 
   for (const line of lines) {
     if (line.startsWith("H|")) {
-      // H|IP:port|age[|cluster][|leaves][|vendor][|uptime]
       const parts = line.split("|");
       if (parts.length >= 3) {
         result.hosts.push({
@@ -56,7 +55,6 @@ function parseSpec2Response(text: string): ParsedSpec2Response {
     }
 
     if (line.startsWith("U|")) {
-      // U|http://cache.url[:port]/path|age
       const parts = line.split("|");
       if (parts.length >= 3) {
         result.caches.push({
@@ -68,7 +66,6 @@ function parseSpec2Response(text: string): ParsedSpec2Response {
     }
 
     if (line.startsWith("I|")) {
-      // I|pong|..., I|update|..., I|WARNING|...
       result.info.push(line);
     }
   }
@@ -76,12 +73,6 @@ function parseSpec2Response(text: string): ParsedSpec2Response {
   return result;
 }
 
-// Given a list of URLs, fetches a list of IP addresses on the gnutella network.
-// This function will recursively call "U" entries and add them to the returned `caches` set
-// if the call succeeds.
-// Errors are collected in the `failed` array.
-// "I" entries are logged to the console.
-// Please hard code a "ping" param in your request.
 export async function cacheGet(urls: string[]): Promise<CacheResults> {
   const results: CacheResults = {
     peers: new Set(),
@@ -95,14 +86,12 @@ export async function cacheGet(urls: string[]): Promise<CacheResults> {
   while (queue.length > 0) {
     const url = queue.shift()!;
 
-    // Skip if already visited
     if (visited.has(url)) {
       continue;
     }
     visited.add(url);
 
     try {
-      // Build request URL with spec 2 parameters
       const requestUrl = new URL(url);
       requestUrl.searchParams.set("client", "GBUN");
       requestUrl.searchParams.set("get", "50");
@@ -119,17 +108,14 @@ export async function cacheGet(urls: string[]): Promise<CacheResults> {
       const text = await response.text();
       const parsed = parseSpec2Response(text);
 
-      // Log info lines
       for (const info of parsed.info) {
         console.log(`[${url}] ${info}`);
       }
 
-      // Add hosts to results
       for (const host of parsed.hosts) {
         results.peers.add(host.ip);
       }
 
-      // Add caches to results and queue for recursive fetch
       for (const cache of parsed.caches) {
         results.caches.add(cache.url);
         if (!visited.has(cache.url)) {
@@ -151,7 +137,6 @@ export async function cachePut(input: CacheInput): Promise<void> {
   try {
     const requestUrl = new URL(input.url);
 
-    // Add spec 2 update parameters
     requestUrl.searchParams.set("update", "1");
     requestUrl.searchParams.set("net", input.network.toLowerCase());
     requestUrl.searchParams.set("ip", input.ip);
@@ -168,12 +153,10 @@ export async function cachePut(input: CacheInput): Promise<void> {
     const text = await response.text();
     const parsed = parseSpec2Response(text);
 
-    // Log all info lines (includes update status)
     for (const info of parsed.info) {
       console.log(`[${input.url}] ${info}`);
     }
 
-    // Check for update confirmation
     const updateStatus = parsed.info.find((line) => line.includes("update"));
     if (updateStatus && !updateStatus.includes("|OK")) {
       throw new Error(`Update failed: ${updateStatus}`);
@@ -184,4 +167,200 @@ export async function cachePut(input: CacheInput): Promise<void> {
   }
 }
 
-console.log(await cacheGet(KNOWN_CACHE_LIST));
+import { readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+
+interface StoredHost {
+  ip: string;
+  port: number;
+  lastSeen: number;
+}
+
+interface StoredCache {
+  lastPush: number;
+  lastPull: number;
+}
+
+interface CacheData {
+  hosts: StoredHost[];
+  caches: Record<string, StoredCache>;
+}
+
+const SETTINGS_FILE = "settings.json";
+const CACHE_COOLDOWN_MS = 60 * 60 * 1000;
+
+export async function createGnutellaCache() {
+  let data: CacheData = {
+    hosts: [],
+    caches: {},
+  };
+
+  async function load(): Promise<void> {
+    if (!existsSync(SETTINGS_FILE)) {
+      for (const url of KNOWN_CACHE_LIST) {
+        data.caches[url] = {
+          lastPush: 0,
+          lastPull: 0,
+        };
+      }
+      await store();
+      return;
+    }
+
+    try {
+      const content = await readFile(SETTINGS_FILE, "utf-8");
+      const parsed = JSON.parse(content);
+      data = {
+        hosts: parsed.hosts || [],
+        caches: parsed.caches || {},
+      };
+    } catch (error) {
+      console.error("Failed to load settings:", error);
+      data = { hosts: [], caches: {} };
+    }
+  }
+
+  async function store(): Promise<void> {
+    try {
+      const content = JSON.stringify(data, null, 2);
+      await writeFile(SETTINGS_FILE, content, "utf-8");
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      throw error;
+    }
+  }
+
+  function addHost(ip: string, port: number, seen = Date.now()): void {
+    const existingIndex = data.hosts.findIndex(
+      (h) => h.ip === ip && h.port === port
+    );
+
+    if (existingIndex >= 0) {
+      data.hosts[existingIndex].lastSeen = seen;
+    } else {
+      data.hosts.push({ ip, port, lastSeen: seen });
+    }
+  }
+
+  function getHosts(): StoredHost[] {
+    return [...data.hosts];
+  }
+
+  function evictHosts(cutoffMS = 1000 * 60 * 60): void {
+    const cutoffTime = Date.now() - cutoffMS;
+    data.hosts = data.hosts.filter((host) => host.lastSeen > cutoffTime);
+  }
+
+  function addCache(url: string): void {
+    const normalizedUrl = url.trim();
+
+    if (!data.caches[normalizedUrl]) {
+      data.caches[normalizedUrl] = {
+        lastPush: 0,
+        lastPull: 0,
+      };
+    }
+  }
+
+  async function pullHostsFromCache(): Promise<void> {
+    const now = Date.now();
+
+    const availableCacheUrls = Object.entries(data.caches)
+      .filter(([url, cache]) => now - cache.lastPull >= CACHE_COOLDOWN_MS)
+      .map(([url]) => url);
+
+    if (availableCacheUrls.length === 0) {
+      console.log("No caches available for pulling (cooldown period)");
+      return;
+    }
+
+    for (const cacheUrl of availableCacheUrls) {
+      try {
+        console.log(`Pulling hosts from ${cacheUrl}`);
+        const results = await cacheGet([cacheUrl]);
+
+        data.caches[cacheUrl].lastPull = now;
+
+        for (const peer of results.peers) {
+          const [ip, portStr] = peer.split(":");
+          const port = parseInt(portStr, 10);
+          if (!isNaN(port)) {
+            addHost(ip, port, now);
+          }
+        }
+
+        for (const newCacheUrl of results.caches) {
+          addCache(newCacheUrl);
+        }
+
+        await store();
+      } catch (error) {
+        console.error(`Failed to pull from ${cacheUrl}:`, error);
+      }
+    }
+  }
+
+  function parseXTryHeaders(headers: Record<string, string>): void {
+    const now = Date.now();
+
+    const tryHeaders = ["x-try", "x-try-ultrapeer"];
+    for (const headerName of tryHeaders) {
+      const value = headers[headerName];
+      if (value) {
+        const peers = value.split(",").map((p) => p.trim());
+        for (const peer of peers) {
+          const [ip, portStr] = peer.split(":");
+          const port = parseInt(portStr, 10);
+          if (!isNaN(port)) {
+            addHost(ip, port, now);
+          }
+        }
+      }
+    }
+
+    const hubValue = headers["x-try-hub"];
+    if (hubValue) {
+      const peers = hubValue.split(",").map((p) => p.trim());
+      for (const peer of peers) {
+        const match = peer.match(/^(\d+\.\d+\.\d+\.\d+):(\d+)/);
+        if (match) {
+          const ip = match[1];
+          const port = parseInt(match[2], 10);
+          if (!isNaN(port)) {
+            addHost(ip, port, now);
+          }
+        }
+      }
+    }
+  }
+
+  function canPushToCache(url: string): boolean {
+    const cache = data.caches[url];
+    if (!cache) return false;
+
+    const now = Date.now();
+    return now - cache.lastPush >= CACHE_COOLDOWN_MS;
+  }
+
+  function updateCachePushTime(url: string): void {
+    if (data.caches[url]) {
+      data.caches[url].lastPush = Date.now();
+    }
+  }
+
+  return {
+    load,
+    store,
+    addHost,
+    getHosts,
+    evictHosts,
+    addCache,
+    pullHostsFromCache,
+    parseXTryHeaders,
+    canPushToCache,
+    updateCachePushTime,
+  };
+}
+
+export type GnutellaCache = Awaited<ReturnType<typeof createGnutellaCache>>;
+export type { StoredHost, StoredCache };

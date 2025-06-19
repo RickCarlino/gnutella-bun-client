@@ -1,6 +1,6 @@
 # Gnutella Bun Experiments
 
-This repository contains a variety of tools related to Gnutella 0.6. It is the result of a Gnutella deep-dive I did for fun in 2025.
+This repository contains a variety of tools related to [Gnutella 0.6](https://en.wikipedia.org/wiki/Gnutella). It is the result of a Gnutella deep-dive I did for fun in 2025.
 
 - [A minimal GWebCache Server - Run via `bun cache-server.ts`](cache-server.ts)
 - [An interface for calling GWebCache servers like the one above](cache-client.ts) - run `bun cache-client.ts` to get peer IPs.
@@ -34,9 +34,11 @@ Although this is mostly complete, I don't think it is usable as a real gnutella 
 ## Running the Gnutella Server
 
 To accept inbound connections:
+
 ```bash
 bun server.ts
 ```
+
 The server will listen on port 6346 by default and accept up to 10 simultaneous connections.
 
 ## Resources

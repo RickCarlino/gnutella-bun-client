@@ -277,10 +277,18 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-KNOWN_CACHE_LIST.forEach((url) => {
-  cachePut({
-    url,
-    network: "Gnutella",
-    ip: LOCAL_IP,
-  });
-});
+setTimeout(async () => {
+  console.log("Updating cache...");
+  for (const url of KNOWN_CACHE_LIST) {
+    try {
+      await cachePut({
+        url,
+        network: "Gnutella",
+        ip: LOCAL_IP,
+      });
+      console.log(`Cache updated for ${url}`);
+    } catch (error) {
+      console.error(`Failed to update cache for ${url}:`, error);
+    }
+  }
+}, 1000 * 60 * 56);
