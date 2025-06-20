@@ -1,7 +1,7 @@
 import net from "net";
-import { GnutellaObject, parseGnutella } from "./parser";
-
-type Sender = (message: Buffer) => void;
+import { GnutellaObject } from "./parser";
+import { createSocketHandler, sendMessage } from "./utils/socket-handler";
+import type { Sender, ClientInfo } from "./types";
 
 interface InboundConnectionHandler {
   onMessage: (clientId: string, send: Sender, message: GnutellaObject) => void;
@@ -18,11 +18,6 @@ interface ServerConfig {
   handler: InboundConnectionHandler;
 }
 
-interface ClientInfo {
-  socket: net.Socket;
-  handshake: boolean;
-  version?: string;
-}
 
 interface GnutellaServerState {
   server: net.Server;
@@ -30,71 +25,34 @@ interface GnutellaServerState {
   config: ServerConfig;
 }
 
-const handshakeSize = (buf: Buffer): number => {
-  const s = buf.toString("ascii");
-  const v06 = s.indexOf("\r\n\r\n");
-  if (v06 !== -1) return v06 + 4;
-  return 0;
-};
-
-const binarySize = (parsed: GnutellaObject): number => {
-  switch (parsed.type) {
-    case "handshake_connect":
-    case "handshake_ok":
-    case "handshake_error":
-      throw new Error("Invalid message type for binary size calculation");
-    default:
-      return 23 + parsed.header.payloadLength;
-  }
-};
-
-const messageSize = (m: GnutellaObject, buf: Buffer): number =>
-  ["handshake_connect", "handshake_ok", "handshake_error"].includes(m.type)
-    ? handshakeSize(buf)
-    : binarySize(m);
 
 const handleConnection = (state: GnutellaServerState, socket: net.Socket) => {
   const clientId = `${socket.remoteAddress}:${socket.remotePort}`;
   console.log(`New connection from ${clientId}`);
 
-  const send: Sender = (data) => socket.write(data);
-  let buf = Buffer.alloc(0);
+  const send: Sender = (data) => sendMessage(socket, data);
 
-  state.clients.set(clientId, { socket, handshake: false });
+  state.clients.set(clientId, { 
+    id: clientId,
+    socket, 
+    handshake: false 
+  });
   state.config.handler.onConnect(clientId, send);
 
-  const process = () => {
-    while (buf.length) {
-      const parsed = parseGnutella(buf);
-      if (!parsed) return;
-
-      const size = messageSize(parsed, buf);
-      if (size === 0 || buf.length < size) return;
-
-      state.config.handler.onMessage(clientId, send, parsed);
-      buf = buf.subarray(size);
-    }
-  };
-
-  socket.on("data", (chunk) => {
-    console.log(`Received data from ${clientId}: ${chunk.length} bytes`);
-    console.log(chunk.toString("ascii").slice(0, 8));
-    buf = Buffer.concat([buf, chunk]);
-    try {
-      process();
-    } catch (e) {
-      state.config.handler.onError(clientId, send, e as Error);
-    }
-  });
-
-  socket.on("error", (e) => {
-    state.config.handler.onError(clientId, send, e);
-    state.clients.delete(clientId);
-  });
-
-  socket.on("close", () => {
-    state.config.handler.onClose(clientId);
-    state.clients.delete(clientId);
+  createSocketHandler({
+    socket,
+    onMessage: (message) => {
+      console.log(`Received data from ${clientId}`);
+      state.config.handler.onMessage(clientId, send, message);
+    },
+    onError: (error) => {
+      state.config.handler.onError(clientId, send, error);
+      state.clients.delete(clientId);
+    },
+    onClose: () => {
+      state.config.handler.onClose(clientId);
+      state.clients.delete(clientId);
+    },
   });
 };
 

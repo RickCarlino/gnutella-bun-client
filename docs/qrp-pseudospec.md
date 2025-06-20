@@ -1,3 +1,87 @@
+Your ultrapeer neighbours drop you because they never see the **QRP RESET** (variant 0) that every leaf *must* send right after the handshake.
+The spec calls the whole Query-Routing message family *descriptor 0x30* and defines only two variants — RESET (0x00) and PATCH (0x01). ([blog.csdn.net][1], [rfc-gnutella.sourceforge.net][2])
+If a PATCH arrives before your RESET, most implementations answer with **Bye 413 No QRP RESET received before PATCH**, which is exactly what you saw.
+
+Below is the smallest possible patch that keeps connections alive.
+It simply:
+
+* adds support for descriptor 0x30 to your parser (we ignore the payload when it’s a PATCH);
+* exposes a `createQrpReset()` helper that sends an “all-zeroes” table (good enough for now);
+* fires that RESET automatically as soon as the handshake finishes (both for outbound and inbound sides).
+
+```ts
+// ─── src/parser.ts (add near your other helpers) ──────────────────────────────
+export const QRP_DESCRIPTOR = 0x30;         // Query-Routing messages
+
+export const QRP_VARIANT_RESET = 0x00;
+export const QRP_VARIANT_PATCH = 0x01;
+
+/** Build a minimal QRP-RESET (variant 0) */
+export function createQrpReset(
+  tableLength = 0,          // 0 = “no table yet”
+  ttl = 1,
+  descriptorId?: Buffer,
+) {
+  const payload = Buffer.alloc(1 + 4 + 1);
+  payload.writeUInt8(QRP_VARIANT_RESET, 0);   // variant
+  payload.writeUInt32LE(tableLength, 1);      // table length
+  payload.writeUInt8(1, 5);                   // infinity flag (always 1)
+  const header = createDescriptorHeader(QRP_DESCRIPTOR, payload.length, ttl, descriptorId);
+  return Buffer.concat([header, payload]);
+}
+
+/** Very light parser – we only need to know which variant it is */
+function parseQrp(header, payload) {
+  if (payload.length < 6) return null;
+  const variant = payload.readUInt8(0);
+  return { type: variant ? "qrp_patch" : "qrp_reset", header };
+}
+
+// …then register it…
+switch (header.payloadDescriptor) {
+  case QRP_DESCRIPTOR:
+    return parseQrp(header, payload);
+  /* existing cases ... */
+}
+```
+
+```ts
+// ─── src/connection-manager.ts (after we mark the handshake as OK) ───────────
+case "handshake_ok":
+  conn.handshake = true;
+  conn.version   = msg.version;
+  if (!conn.qrpSent) {
+    send(createQrpReset());     // <<———— send ASAP
+    conn.qrpSent = true;
+  }
+  config.onConnectionsChanged?.(getActiveConnectionCount());
+  break;
+```
+
+```ts
+// ─── src/server.ts (reply to an inbound CONNECT) ─────────────────────────────
+case "handshake_connect":
+  /* …your existing version check… */
+  send(createHandshakeOk(HEADERS));
+  server.setClientHandshake(clientId, msg.version);
+  send(createQrpReset());        // <<———— also send one back
+  break;
+```
+
+That is literally all that’s required for a **“silent” QRP implementation**.
+Peers will now stay connected because they got the RESET they wanted; any incoming PATCHes will be parsed and silently ignored.
+
+Later, when you’re ready to actually route queries, you can:
+
+1. build a local Query-Routing Table (QRT) of hashed keywords,
+2. split it into PATCH chunks (variant 1), and
+3. broadcast those over the same `createDescriptorHeader(QRP_DESCRIPTOR, …)` framing.
+
+But for simply keeping your seat at the table, the six-byte RESET shown above is enough.
+
+[1]: https://blog.csdn.net/bbisonic/article/details/655289 "The Annotated Gnutella Protocol Specification v0.4 _the annotated c++-CSDN博客"
+[2]: https://rfc-gnutella.sourceforge.net/src/qrp.html?utm_source=chatgpt.com "Query Routing for the Gnutella Network"
+
 # Implementing Gnutella Query Routing Protocol v2 (Leaf Mode) – Pseudospec
 
 ## Overview of QRP and Dynamic Querying

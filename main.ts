@@ -2,11 +2,11 @@ import { createGnutellaServer } from "./src/server";
 import {
   createHandshakeOk,
   createHandshakeError,
-  createPong,
 } from "./src/parser";
 import { cachePut } from "./src/cache-client";
 import { getCache } from "./src/cache-client";
 import { createConnectionManager } from "./src/connection-manager";
+import { handlePing } from "./src/utils/message-handlers";
 
 export const localIp = async () => {
   const response = await fetch(CHECK_URL);
@@ -81,17 +81,13 @@ async function main() {
             break;
 
           case "ping":
-            if (server.getClients().find((c) => c.id === clientId)?.handshake) {
-              send(
-                createPong(
-                  msg.header.descriptorId,
-                  LOCAL_PORT,
-                  LOCAL_IP,
-                  0,
-                  0,
-                  msg.header.ttl
-                )
-              );
+            const isHandshakeComplete = server.getClients().find((c) => c.id === clientId)?.handshake || false;
+            handlePing(msg, {
+              localPort: LOCAL_PORT,
+              localIp: LOCAL_IP,
+              send,
+            }, isHandshakeComplete);
+            if (isHandshakeComplete) {
               console.log(`[${clientId}] Responded to ping`);
             }
             break;

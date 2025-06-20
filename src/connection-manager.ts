@@ -3,17 +3,11 @@ import { startConnection } from "./gnutella-connection";
 import {
   createHandshakeConnect,
   createHandshakeOk,
-  createPong,
   GnutellaObject,
 } from "./parser";
 import { getCache } from "./cache-client";
-
-interface ConnectionInfo {
-  socket: net.Socket;
-  handshake: boolean;
-  version?: string;
-  connectTime: number;
-}
+import { handlePing, extractPeersFromHandshakeError } from "./utils/message-handlers";
+import type { ConnectionInfo, Sender } from "./types";
 
 interface ConnectionManagerConfig {
   targetConnections: number;
@@ -39,7 +33,7 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
 
     const [ip, portStr] = address.split(":");
     const port = parseInt(portStr, 10);
-    
+
     if (isNaN(port)) {
       console.error(`Invalid port in address: ${address}`);
       return;
@@ -60,7 +54,10 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         port,
         onMessage: (send, msg) => handleMessage(address, send, msg),
         onError: async (_, error) => {
-          console.error(`[ConnectionManager] Error with ${address}:`, error.message);
+          console.error(
+            `[ConnectionManager] Error with ${address}:`,
+            error.message
+          );
           await removeConnection(address);
         },
         onClose: async () => {
@@ -83,15 +80,19 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         const conn = connections.get(address);
         if (conn && !conn.handshake) {
           console.log(`[ConnectionManager] Handshake timeout for ${address}`);
-          conn.socket.destroy();
-          removeConnection(address).catch(err => 
-            console.error(`[ConnectionManager] Error removing connection: ${err}`)
+          conn?.socket?.destroy?.();
+          removeConnection(address).catch((err) =>
+            console.error(
+              `[ConnectionManager] Error removing connection: ${err}`
+            )
           );
         }
       }, config.handshakeTimeout);
-
     } catch (error) {
-      console.error(`[ConnectionManager] Failed to connect to ${address}:`, error);
+      console.error(
+        `[ConnectionManager] Failed to connect to ${address}:`,
+        error
+      );
       removeConnection(address);
       // Delete failed peer from cache
       const [ip, portStr] = address.split(":");
@@ -99,7 +100,9 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
       if (!isNaN(port)) {
         cache.removePeer(ip, port);
         await cache.store();
-        console.log(`[ConnectionManager] Removed failed peer ${address} from cache`);
+        console.log(
+          `[ConnectionManager] Removed failed peer ${address} from cache`
+        );
       }
     }
   }
@@ -119,65 +122,54 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         break;
 
       case "handshake_ok":
-        console.log(`[ConnectionManager] Handshake OK from ${address} v${msg.version}`);
+        console.log(
+          `[ConnectionManager] Handshake OK from ${address} v${msg.version}`
+        );
         conn.handshake = true;
         conn.version = msg.version;
         config.onConnectionsChanged?.(getActiveConnectionCount());
         break;
 
       case "handshake_error":
-        console.log(`[ConnectionManager] Handshake error from ${address}: ${msg.code} ${msg.message}`);
-        
-        // Extract alternative peers from headers
-        const tryHeaders = ["X-Try", "X-Try-Ultrapeers", "X-Try-Hubs"];
-        for (const header of tryHeaders) {
-          const alternatives = msg.headers?.[header];
-          if (alternatives) {
-            const peers = alternatives.split(",").map(p => p.trim()).filter(Boolean);
-            for (const peer of peers) {
-              const peerAddress = header === "X-Try-Hubs" ? peer.split(" ")[0] : peer;
-              const [ip, port] = peerAddress.split(":");
-              if (ip && port) {
-                cache.addPeer(ip, parseInt(port, 10));
-              }
-            }
-          }
-        }
-        
-        conn.socket.destroy();
-        removeConnection(address).catch(err => 
+        console.log(
+          `[ConnectionManager] Handshake error from ${address}: ${msg.code} ${msg.message}`
+        );
+
+        extractPeersFromHandshakeError(msg, (ip, port) => cache.addPeer(ip, port));
+
+        conn?.socket?.destroy?.();
+        removeConnection(address).catch((err) =>
           console.error(`[ConnectionManager] Error removing connection: ${err}`)
         );
         break;
 
       case "ping":
-        if (conn.handshake) {
-          send(
-            createPong(
-              msg.header.descriptorId,
-              config.localPort,
-              config.localIp,
-              0,
-              0,
-              msg.header.ttl
-            )
-          );
-        }
+        handlePing(msg, {
+          localPort: config.localPort,
+          localIp: config.localIp,
+          send,
+        }, conn.handshake);
         break;
 
       case "pong":
-        console.log(`[ConnectionManager] Pong from ${address}: ${msg.ipAddress}:${msg.port}`);
+        console.log(
+          `[ConnectionManager] Pong from ${address}: ${msg.ipAddress}:${msg.port}`
+        );
         // Add discovered peer to cache
         cache.addPeer(msg.ipAddress, msg.port);
         cache.store();
         break;
 
       case "query":
-        console.log(`[ConnectionManager] Query from ${address}: "${msg.searchCriteria}"`);
+        console.log(
+          `[ConnectionManager] Query from ${address}: "${msg.searchCriteria}"`
+        );
         break;
 
       case "queryhits":
-        console.log(`[ConnectionManager] QueryHits from ${address}: ${msg.numberOfHits} results`);
+        console.log(
+          `[ConnectionManager] QueryHits from ${address}: ${msg.numberOfHits} results`
+        );
         break;
 
       case "push":
@@ -185,9 +177,11 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         break;
 
       case "bye":
-        console.log(`[ConnectionManager] Bye from ${address}: ${msg.code} ${msg.message}`);
-        conn.socket.destroy();
-        removeConnection(address).catch(err => 
+        console.log(
+          `[ConnectionManager] Bye from ${address}: ${msg.code} ${msg.message}`
+        );
+        conn?.socket?.destroy?.();
+        removeConnection(address).catch((err) =>
           console.error(`[ConnectionManager] Error removing connection: ${err}`)
         );
         break;
@@ -197,7 +191,7 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
   async function removeConnection(address: string): Promise<void> {
     connections.delete(address);
     config.onConnectionsChanged?.(getActiveConnectionCount());
-    
+
     // Delete the peer from cache when connection is removed due to error
     const [ip, portStr] = address.split(":");
     const port = parseInt(portStr, 10);
@@ -208,9 +202,9 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
     }
   }
 
-
   function getActiveConnectionCount(): number {
-    return Array.from(connections.values()).filter(conn => conn.handshake).length;
+    return Array.from(connections.values()).filter((conn) => conn.handshake)
+      .length;
   }
 
   async function checkAndMaintainConnections(): Promise<void> {
@@ -218,7 +212,9 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
 
     console.log(`[ConnectionManager] Running connection check...`);
     const activeCount = getActiveConnectionCount();
-    console.log(`[ConnectionManager] Active connections: ${activeCount}/${config.targetConnections}`);
+    console.log(
+      `[ConnectionManager] Active connections: ${activeCount}/${config.targetConnections}`
+    );
 
     if (activeCount >= config.targetConnections) {
       return; // We have enough connections
@@ -232,28 +228,32 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
     const hosts = cache.getHosts();
 
     // Filter out already connected peers
-    const availablePeers = hosts.filter(host => {
+    const availablePeers = hosts.filter((host) => {
       const address = `${host.ip}:${host.port}`;
       return !connections.has(address);
     });
 
     if (availablePeers.length === 0) {
-      console.log("[ConnectionManager] No available peers in cache, pulling from GWebCache...");
+      console.log(
+        "[ConnectionManager] No available peers in cache, pulling from GWebCache..."
+      );
       await cache.pullHostsFromCache();
       await cache.store();
-      
+
       // Check again for newly fetched peers
       const newHosts = cache.getHosts();
-      const newAvailablePeers = newHosts.filter(host => {
+      const newAvailablePeers = newHosts.filter((host) => {
         const address = `${host.ip}:${host.port}`;
         return !connections.has(address);
       });
-      
+
       if (newAvailablePeers.length === 0) {
-        console.log("[ConnectionManager] Still no available peers after cache update");
+        console.log(
+          "[ConnectionManager] Still no available peers after cache update"
+        );
         return;
       }
-      
+
       availablePeers.push(...newAvailablePeers);
     }
 
@@ -282,7 +282,7 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
 
     // Set up periodic checks
     intervalId = setInterval(() => {
-      checkAndMaintainConnections().catch(error => {
+      checkAndMaintainConnections().catch((error) => {
         console.error("[ConnectionManager] Error in connection check:", error);
       });
     }, config.checkInterval);
@@ -302,7 +302,7 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
     // Close all connections
     for (const [address, conn] of connections) {
       console.log(`[ConnectionManager] Closing connection to ${address}`);
-      conn.socket.destroy();
+      conn?.socket?.destroy?.();
     }
     connections.clear();
   }
