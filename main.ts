@@ -2,11 +2,13 @@ import { createGnutellaServer } from "./src/server";
 import {
   createHandshakeOk,
   createHandshakeError,
+  createQrpReset,
 } from "./src/parser";
 import { cachePut } from "./src/cache-client";
 import { getCache } from "./src/cache-client";
 import { createConnectionManager } from "./src/connection-manager";
 import { handlePing } from "./src/utils/message-handlers";
+import { sendQrpTable, type SharedFile } from "./src/qrp";
 
 export const localIp = async () => {
   const response = await fetch(CHECK_URL);
@@ -25,9 +27,17 @@ const HANDSHAKE_TIMEOUT = 5000; // 5 seconds
 const HEADERS = {
   "User-Agent": "GnutellaBun/0.1",
   "X-Ultrapeer": "False",
+  "X-Query-Routing": "0.2",
   "Listen-IP": `${LOCAL_IP}:${LOCAL_PORT}`,
   "Remote-IP": LOCAL_IP,
 };
+
+// Example shared files (you would normally load these from disk)
+const SHARED_FILES: SharedFile[] = [
+  { name: "example-file.txt", size: 1024 },
+  { name: "test-document.pdf", size: 2048 },
+  { name: "music-track.mp3", size: 4096 },
+];
 
 async function main() {
   console.log("Starting Gnutella node...");
@@ -65,7 +75,9 @@ async function main() {
               case "0.6":
                 send(createHandshakeOk(HEADERS));
                 server.setClientHandshake(clientId, msg.version);
-                console.log(`[${clientId}] Handshake accepted`);
+                // Send QRP table immediately after handshake
+                sendQrpTable(send, SHARED_FILES);
+                console.log(`[${clientId}] Handshake accepted, QRP table sent (${SHARED_FILES.length} files)`);
                 break;
               default:
                 send(
@@ -111,6 +123,14 @@ async function main() {
 
           case "bye":
             console.log(`[${clientId}] Bye: ${msg.code} ${msg.message}`);
+            break;
+
+          case "qrp_reset":
+            console.log(`[${clientId}] QRP RESET: table length ${msg.tableLength}`);
+            break;
+
+          case "qrp_patch":
+            console.log(`[${clientId}] QRP PATCH: seq ${msg.seqNo}/${msg.seqCount}`);
             break;
         }
       },
@@ -163,6 +183,7 @@ async function main() {
     localIp: LOCAL_IP,
     localPort: LOCAL_PORT,
     headers: HEADERS,
+    sharedFiles: SHARED_FILES,
     onConnectionsChanged: (activeCount) => {
       console.log(
         `[Outbound] Active connections: ${activeCount}/${TARGET_OUTBOUND_CONNECTIONS}`

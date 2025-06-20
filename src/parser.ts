@@ -88,6 +88,25 @@ export type Bye = {
   headers?: Record<string, string>;
 };
 
+export type QrpReset = {
+  type: "qrp_reset";
+  header: DescriptorHeader;
+  variant: number;
+  tableLength: number;
+  infinity: number;
+};
+
+export type QrpPatch = {
+  type: "qrp_patch";
+  header: DescriptorHeader;
+  variant: number;
+  seqNo: number;
+  seqCount: number;
+  compression: number;
+  entryBits: number;
+  data: Buffer;
+};
+
 export type GGEPExtension = {
   id: string;
   data: Buffer;
@@ -108,7 +127,13 @@ export type GnutellaObject =
   | Query
   | QueryHits
   | Push
-  | Bye;
+  | Bye
+  | QrpReset
+  | QrpPatch;
+
+export const QRP_DESCRIPTOR = 0x30;
+export const QRP_VARIANT_RESET = 0x00;
+export const QRP_VARIANT_PATCH = 0x01;
 
 const generateDescriptorId = (): Buffer => {
   const id = Buffer.alloc(16);
@@ -190,6 +215,39 @@ export const createPong = (
   payload.writeUInt32LE(filesShared, 6);
   payload.writeUInt32LE(kilobytesShared, 10);
   const header = createDescriptorHeader(0x01, 14, ttl, descriptorId);
+  return Buffer.concat([header, payload]);
+};
+
+export const createQrpReset = (
+  tableLength: number = 0,
+  ttl: number = 1,
+  descriptorId?: Buffer
+): Buffer => {
+  const payload = Buffer.alloc(6);
+  payload.writeUInt8(QRP_VARIANT_RESET, 0);
+  payload.writeUInt32LE(tableLength, 1);
+  payload.writeUInt8(1, 5); // infinity flag
+  const header = createDescriptorHeader(QRP_DESCRIPTOR, payload.length, ttl, descriptorId);
+  return Buffer.concat([header, payload]);
+};
+
+export const createQrpPatch = (
+  seqNo: number,
+  seqCount: number,
+  entryBits: number,
+  data: Buffer,
+  compression: number = 0,
+  ttl: number = 1,
+  descriptorId?: Buffer
+): Buffer => {
+  const payload = Buffer.alloc(5 + data.length);
+  payload.writeUInt8(QRP_VARIANT_PATCH, 0);
+  payload.writeUInt8(seqNo, 1);
+  payload.writeUInt8(seqCount, 2);
+  payload.writeUInt8(compression, 3);
+  payload.writeUInt8(entryBits, 4);
+  data.copy(payload, 5);
+  const header = createDescriptorHeader(QRP_DESCRIPTOR, payload.length, ttl, descriptorId);
   return Buffer.concat([header, payload]);
 };
 
@@ -322,6 +380,36 @@ const parseBye = (header: DescriptorHeader, payload: Buffer): Bye | null => {
   return { type: "bye", header, code, message, headers };
 };
 
+const parseQrp = (header: DescriptorHeader, payload: Buffer): QrpReset | QrpPatch | null => {
+  if (payload.length < 6) return null;
+  const variant = payload.readUInt8(0);
+  
+  switch (variant) {
+    case QRP_VARIANT_RESET:
+      return {
+        type: "qrp_reset",
+        header,
+        variant,
+        tableLength: payload.readUInt32LE(1),
+        infinity: payload.readUInt8(5)
+      };
+    case QRP_VARIANT_PATCH:
+      if (payload.length < 5) return null;
+      return {
+        type: "qrp_patch",
+        header,
+        variant,
+        seqNo: payload.readUInt8(1),
+        seqCount: payload.readUInt8(2),
+        compression: payload.readUInt8(3),
+        entryBits: payload.readUInt8(4),
+        data: payload.subarray(5)
+      };
+    default:
+      return null;
+  }
+};
+
 const parseQueryHits = (header: DescriptorHeader, payload: Buffer): QueryHits | null => {
   if (payload.length < 27) return null;
   const numberOfHits = payload.readUInt8(0);
@@ -362,6 +450,7 @@ const parseDescriptor = (buffer: Buffer): GnutellaObject | null => {
     case 0x00: return parsePing(header, payload);
     case 0x01: return parsePong(header, payload);
     case 0x02: return parseBye(header, payload);
+    case 0x30: return parseQrp(header, payload);
     case 0x40: return parsePush(header, payload);
     case 0x80: return parseQuery(header, payload);
     case 0x81: return parseQueryHits(header, payload);

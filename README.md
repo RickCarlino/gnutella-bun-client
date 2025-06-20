@@ -40,8 +40,7 @@ Although this is mostly complete, I don't think it is usable as a real gnutella 
 
 ## TODO
 
-- Connection manager (outbound connection handler) rarely works, probably due to lack of QRP and compression.
-- QRP (Query Routing Protocol)
+- QRP works for the sake of fixing 503 errors from peers, but does not actually do any QRP'ing
 - Compressed connections (Not implementing at this time)
 
 ### GWebCache Server

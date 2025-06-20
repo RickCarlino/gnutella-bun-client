@@ -3,11 +3,13 @@ import { startConnection } from "./gnutella-connection";
 import {
   createHandshakeConnect,
   createHandshakeOk,
+  createQrpReset,
   GnutellaObject,
 } from "./parser";
 import { getCache } from "./cache-client";
 import { handlePing, extractPeersFromHandshakeError } from "./utils/message-handlers";
 import type { ConnectionInfo, Sender } from "./types";
+import { sendQrpTable, type SharedFile } from "./qrp";
 
 interface ConnectionManagerConfig {
   targetConnections: number;
@@ -16,6 +18,7 @@ interface ConnectionManagerConfig {
   localIp: string;
   localPort: number;
   headers: Record<string, string>;
+  sharedFiles?: SharedFile[];
   onConnectionsChanged?: (activeConnections: number) => void;
 }
 
@@ -127,6 +130,10 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         );
         conn.handshake = true;
         conn.version = msg.version;
+        // Send QRP table immediately after handshake
+        const sharedFiles = config.sharedFiles || [];
+        sendQrpTable(send, sharedFiles);
+        console.log(`[ConnectionManager] Sent QRP table to ${address} (${sharedFiles.length} files)`);
         config.onConnectionsChanged?.(getActiveConnectionCount());
         break;
 
@@ -183,6 +190,18 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         conn?.socket?.destroy?.();
         removeConnection(address).catch((err) =>
           console.error(`[ConnectionManager] Error removing connection: ${err}`)
+        );
+        break;
+
+      case "qrp_reset":
+        console.log(
+          `[ConnectionManager] QRP RESET from ${address}: table length ${msg.tableLength}`
+        );
+        break;
+
+      case "qrp_patch":
+        console.log(
+          `[ConnectionManager] QRP PATCH from ${address}: seq ${msg.seqNo}/${msg.seqCount}`
         );
         break;
     }
