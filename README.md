@@ -41,7 +41,8 @@ Although this is mostly complete, I don't think it is usable as a real gnutella 
 ## TODO
 
 - QRP works for the sake of fixing 503 errors from peers, but does not actually do any QRP'ing
-- Compressed connections (Not implementing at this time)
+- (See above) Need to actually send a search table, get queries.
+- Send PING messages
 
 ### GWebCache Server
 
@@ -55,6 +56,7 @@ bun cache-server.ts
 
 - [Gnutella spec](./docs/Gnutella-0.6-spec.txt)
 - [WebCache Spec](https://shareaza.sourceforge.net/mediawiki/GWC_specs)
+- [GTKGnutella Network Pane Docs](https://gtk-gnutella.sourceforge.io/manual/gnutellanet.html) - My main network debugger for ensuring protocol compliance.
 - [WebCache Pseudopec, by DeepResearchTM](./docs/gwebcache-spec.md)
 - [QRP Pseudospec, by DeepResearchTM](./docs/qrp-pseudospec.md)
 - Gnutella example clients I found while researching this: [1](https://github.com/comick/mini-gnutella), [2](https://github.com/advait/crepe), [3](https://github.com/thapam/gnutella-client). The clients I tried, like my client, struggle to connect to real world Gnutella nodes due to missing QRP and compression.

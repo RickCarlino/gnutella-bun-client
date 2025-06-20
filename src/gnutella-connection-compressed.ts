@@ -1,6 +1,6 @@
 import net from "net";
 import { GnutellaObject } from "./parser";
-import { createSocketHandler, sendMessage } from "./utils/socket-handler";
+import { createCompressedSocketHandler, CompressionState } from "./utils/compressed-socket-handler";
 import { connectSocket } from "./utils/socket-utils";
 import type { Sender } from "./types";
 
@@ -13,18 +13,24 @@ interface ConnectionConf {
 }
 
 
-export const startConnection = async (conf: ConnectionConf): Promise<net.Socket> => {
+export interface CompressedConnection {
+  socket: net.Socket;
+  send: Sender;
+  compressionState: CompressionState;
+  completeHandshake: () => void;
+}
+
+export const startCompressedConnection = async (conf: ConnectionConf): Promise<CompressedConnection> => {
   const { ip, port, onMessage, onError, onClose } = conf;
   const socket = await connectSocket(ip, port);
 
-  const send: Sender = (data) => sendMessage(socket, data);
-
-  createSocketHandler({
+  const { send, compressionState, completeHandshake } = createCompressedSocketHandler({
     socket,
     onMessage: (message) => onMessage(send, message),
     onError: (error) => onError(send, error),
     onClose,
+    isServer: false,
   });
 
-  return socket;
+  return { socket, send, compressionState, completeHandshake };
 };

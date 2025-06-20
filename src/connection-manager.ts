@@ -1,15 +1,17 @@
-import net from "net";
-import { startConnection } from "./gnutella-connection";
+import { getCache } from "./cache-client";
+import { startCompressedConnection } from "./gnutella-connection-compressed";
 import {
   createHandshakeConnect,
   createHandshakeOk,
-  createQrpReset,
+  createPing,
   GnutellaObject,
 } from "./parser";
-import { getCache } from "./cache-client";
-import { handlePing, extractPeersFromHandshakeError } from "./utils/message-handlers";
-import type { ConnectionInfo, Sender } from "./types";
 import { sendQrpTable, type SharedFile } from "./qrp";
+import type { ConnectionInfo } from "./types";
+import {
+  extractPeersFromHandshakeError,
+  handlePing,
+} from "./utils/message-handlers";
 
 interface ConnectionManagerConfig {
   targetConnections: number;
@@ -21,6 +23,13 @@ interface ConnectionManagerConfig {
   sharedFiles?: SharedFile[];
   onConnectionsChanged?: (activeConnections: number) => void;
 }
+
+const shuffle = <T>(array: T[]): T[] => {
+  return array
+    .map((a) => ({ rand: Math.random(), value: a }))
+    .sort((a, b) => a.rand - b.rand)
+    .map((a) => a.value);
+};
 
 const cache = await getCache();
 
@@ -52,31 +61,34 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
     });
 
     try {
-      const socket = await startConnection({
-        ip,
-        port,
-        onMessage: (send, msg) => handleMessage(address, send, msg),
-        onError: async (_, error) => {
-          console.error(
-            `[ConnectionManager] Error with ${address}:`,
-            error.message
-          );
-          await removeConnection(address);
-        },
-        onClose: async () => {
-          console.log(`[ConnectionManager] Connection closed: ${address}`);
-          await removeConnection(address);
-        },
-      });
+      const { socket, send, compressionState } =
+        await startCompressedConnection({
+          ip,
+          port,
+          onMessage: (send, msg) => handleMessage(address, send, msg),
+          onError: async (_, error) => {
+            console.error(
+              `[ConnectionManager] Error with ${address}:`,
+              error.message
+            );
+            await removeConnection(address);
+          },
+          onClose: async () => {
+            console.log(`[ConnectionManager] Connection closed: ${address}`);
+            await removeConnection(address);
+          },
+        });
 
-      // Update connection info with actual socket
+      // Update connection info with actual socket and compression state
       const conn = connections.get(address);
       if (conn) {
         conn.socket = socket;
+        conn.compressionState = compressionState;
+        conn.send = send;
       }
 
       // Send handshake
-      socket.write(createHandshakeConnect(config.headers));
+      send(createHandshakeConnect(config.headers));
 
       // Set timeout for handshake
       setTimeout(() => {
@@ -128,12 +140,41 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         console.log(
           `[ConnectionManager] Handshake OK from ${address} v${msg.version}`
         );
+
+        // Send our final OK to complete the three-way handshake
+        send(createHandshakeOk(config.headers));
+        console.log(`[ConnectionManager] Sent final OK to ${address}`);
+
+        // Mark handshake complete
         conn.handshake = true;
         conn.version = msg.version;
-        // Send QRP table immediately after handshake
-        const sharedFiles = config.sharedFiles || [];
-        sendQrpTable(send, sharedFiles);
-        console.log(`[ConnectionManager] Sent QRP table to ${address} (${sharedFiles.length} files)`);
+
+        // The compressed socket handler will now enable compression
+        // based on the negotiated headers
+
+        // Wait a bit for compression to be set up, then send QRP table
+        setTimeout(() => {
+          // Log compression status
+          if (conn.compressionState?.isCompressed) {
+            console.log(
+              `[ConnectionManager] Compression enabled with ${address} (recv: ${conn.compressionState.peerSendsCompressed}, send: ${conn.compressionState.peerAcceptsCompression})`
+            );
+          }
+
+          // Send QRP table after handshake and compression setup
+          const sharedFiles = config.sharedFiles || [];
+          sendQrpTable(send, sharedFiles);
+          console.log(
+            `[ConnectionManager] Sent QRP table to ${address} (${sharedFiles.length} files)`
+          );
+
+          // Send initial PING with TTL 3
+          send(createPing(undefined, 3));
+          console.log(
+            `[ConnectionManager] Sent initial PING to ${address} with TTL 3`
+          );
+        }, 100);
+
         config.onConnectionsChanged?.(getActiveConnectionCount());
         break;
 
@@ -142,7 +183,19 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
           `[ConnectionManager] Handshake error from ${address}: ${msg.code} ${msg.message}`
         );
 
-        extractPeersFromHandshakeError(msg, (ip, port) => cache.addPeer(ip, port));
+        // Check for compression-related errors
+        if (
+          msg.code === 403 &&
+          msg.message.toLowerCase().includes("compress")
+        ) {
+          console.error(
+            `[ConnectionManager] ${address} requires compression but it failed to negotiate`
+          );
+        }
+
+        extractPeersFromHandshakeError(msg, (ip, port) =>
+          cache.addPeer(ip, port)
+        );
 
         conn?.socket?.destroy?.();
         removeConnection(address).catch((err) =>
@@ -151,11 +204,15 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
         break;
 
       case "ping":
-        handlePing(msg, {
-          localPort: config.localPort,
-          localIp: config.localIp,
-          send,
-        }, conn.handshake);
+        handlePing(
+          msg,
+          {
+            localPort: config.localPort,
+            localIp: config.localIp,
+            send,
+          },
+          conn.handshake
+        );
         break;
 
       case "pong":
@@ -229,7 +286,6 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
   async function checkAndMaintainConnections(): Promise<void> {
     if (!isRunning) return;
 
-    console.log(`[ConnectionManager] Running connection check...`);
     const activeCount = getActiveConnectionCount();
     console.log(
       `[ConnectionManager] Active connections: ${activeCount}/${config.targetConnections}`
@@ -280,10 +336,10 @@ export function createConnectionManager(config: ConnectionManagerConfig) {
     availablePeers.sort((a, b) => b.lastSeen - a.lastSeen);
 
     // Connect to needed peers
-    const peersToConnect = availablePeers.slice(0, needed);
+    const peersToConnect = shuffle(availablePeers).slice(0, needed);
     for (const peer of peersToConnect) {
       const address = `${peer.ip}:${peer.port}`;
-      await connectToPeer(address);
+      connectToPeer(address);
     }
   }
 

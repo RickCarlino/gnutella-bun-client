@@ -1,22 +1,7 @@
 import net from "net";
-import { GnutellaObject } from "./parser";
 import { createSocketHandler, sendMessage } from "./utils/socket-handler";
-import type { Sender, ClientInfo } from "./types";
-
-interface InboundConnectionHandler {
-  onMessage: (clientId: string, send: Sender, message: GnutellaObject) => void;
-  onError: (clientId: string, send: Sender, error: Error) => void;
-  onClose: (clientId: string) => void;
-  onConnect: (clientId: string, send: Sender) => void;
-}
-
-interface ServerConfig {
-  port: number;
-  host?: string;
-  maxConnections?: number;
-  headers?: Record<string, string>;
-  handler: InboundConnectionHandler;
-}
+import { createServerLifecycle } from "./utils/server-lifecycle";
+import type { Sender, ClientInfo, InboundConnectionHandler, ServerConfig } from "./types";
 
 
 interface GnutellaServerState {
@@ -70,31 +55,14 @@ export function createGnutellaServer(config: ServerConfig) {
     state.server.maxConnections = config.maxConnections;
   }
 
+  const lifecycle = createServerLifecycle(state.server, config, () => {
+    state.clients.forEach((client) => client.socket.destroy());
+    state.clients.clear();
+  });
+
   return {
-    start: (): Promise<void> =>
-      new Promise((resolve, reject) => {
-        state.server.listen(config.port, config.host || "0.0.0.0", () => {
-          const addr = state.server.address();
-          if (addr && typeof addr === "object") {
-            console.log(
-              `Gnutella server listening on ${addr.address}:${addr.port}`
-            );
-          }
-          resolve();
-        });
-        state.server.on("error", reject);
-      }),
-
-    stop: (): Promise<void> =>
-      new Promise((resolve) => {
-        state.clients.forEach((client) => client.socket.destroy());
-        state.clients.clear();
-
-        state.server.close(() => {
-          console.log("Gnutella server stopped");
-          resolve();
-        });
-      }),
+    start: lifecycle.start,
+    stop: lifecycle.stop,
 
     getClients: () =>
       Array.from(state.clients.entries()).map(([id, client]) => ({
@@ -113,5 +81,3 @@ export function createGnutellaServer(config: ServerConfig) {
   };
 }
 
-// Export types for external use
-export type { ServerConfig, InboundConnectionHandler, Sender };

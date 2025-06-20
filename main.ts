@@ -1,4 +1,4 @@
-import { createGnutellaServer } from "./src/server";
+import { createCompressedGnutellaServer } from "./src/server-compressed";
 import {
   createHandshakeOk,
   createHandshakeError,
@@ -9,6 +9,10 @@ import { getCache } from "./src/cache-client";
 import { createConnectionManager } from "./src/connection-manager";
 import { handlePing } from "./src/utils/message-handlers";
 import { sendQrpTable, type SharedFile } from "./src/qrp";
+import {
+  checkCompressionSupport,
+  addCompressionHeaders,
+} from "./src/utils/handshake-utils";
 
 export const localIp = async () => {
   const response = await fetch(CHECK_URL);
@@ -20,7 +24,7 @@ const CHECK_URL = "https://wtfismyip.com/text";
 const LOCAL_IP = await localIp();
 const LOCAL_PORT = 6346;
 const MAX_CONNECTIONS = 10;
-const TARGET_OUTBOUND_CONNECTIONS = 4;
+const TARGET_OUTBOUND_CONNECTIONS = 8;
 const CONNECTION_CHECK_INTERVAL = 10000; // 10 seconds
 const HANDSHAKE_TIMEOUT = 5000; // 5 seconds
 
@@ -28,6 +32,7 @@ const HEADERS = {
   "User-Agent": "GnutellaBun/0.1",
   "X-Ultrapeer": "False",
   "X-Query-Routing": "0.2",
+  "Accept-Encoding": "deflate",
   "Listen-IP": `${LOCAL_IP}:${LOCAL_PORT}`,
   "Remote-IP": LOCAL_IP,
 };
@@ -54,7 +59,7 @@ async function main() {
   console.log(`Found ${hosts.length} peers`);
 
   // Create server with handler
-  const server = createGnutellaServer({
+  const server = createCompressedGnutellaServer({
     port: LOCAL_PORT,
     host: "0.0.0.0",
     maxConnections: MAX_CONNECTIONS,
@@ -73,11 +78,27 @@ async function main() {
 
             switch (msg.version) {
               case "0.6":
-                send(createHandshakeOk(HEADERS));
-                server.setClientHandshake(clientId, msg.version);
-                // Send QRP table immediately after handshake
-                sendQrpTable(send, SHARED_FILES);
-                console.log(`[${clientId}] Handshake accepted, QRP table sent (${SHARED_FILES.length} files)`);
+                // Check if client accepts compression
+                const clientAcceptsCompression = checkCompressionSupport(
+                  msg.headers
+                );
+                if (clientAcceptsCompression) {
+                  console.log(
+                    `[${clientId}] Client supports compression, enabling deflate`
+                  );
+                }
+
+                // Create response headers with compression if client supports it
+                const responseHeaders = addCompressionHeaders(
+                  HEADERS,
+                  clientAcceptsCompression
+                );
+
+                send(createHandshakeOk(responseHeaders));
+                // Don't mark handshake complete yet - wait for client's final OK
+                console.log(
+                  `[${clientId}] Sent handshake OK, waiting for client's final OK`
+                );
                 break;
               default:
                 send(
@@ -92,13 +113,31 @@ async function main() {
             }
             break;
 
+          case "handshake_ok":
+            // This is the client's final OK after our OK - handshake is now complete
+            console.log(`[${clientId}] ⭐⭐⭐ handshake complete ⭐⭐⭐`);
+            server.setClientHandshake(clientId, "0.6");
+
+            // Now it's safe to send QRP table
+            sendQrpTable(send, SHARED_FILES);
+            console.log(
+              `[${clientId}] Handshake complete, QRP table sent (${SHARED_FILES.length} files)`
+            );
+            break;
+
           case "ping":
-            const isHandshakeComplete = server.getClients().find((c) => c.id === clientId)?.handshake || false;
-            handlePing(msg, {
-              localPort: LOCAL_PORT,
-              localIp: LOCAL_IP,
-              send,
-            }, isHandshakeComplete);
+            const isHandshakeComplete =
+              server.getClients().find((c) => c.id === clientId)?.handshake ||
+              false;
+            handlePing(
+              msg,
+              {
+                localPort: LOCAL_PORT,
+                localIp: LOCAL_IP,
+                send,
+              },
+              isHandshakeComplete
+            );
             if (isHandshakeComplete) {
               console.log(`[${clientId}] Responded to ping`);
             }
@@ -126,11 +165,15 @@ async function main() {
             break;
 
           case "qrp_reset":
-            console.log(`[${clientId}] QRP RESET: table length ${msg.tableLength}`);
+            console.log(
+              `[${clientId}] QRP RESET: table length ${msg.tableLength}`
+            );
             break;
 
           case "qrp_patch":
-            console.log(`[${clientId}] QRP PATCH: seq ${msg.seqNo}/${msg.seqCount}`);
+            console.log(
+              `[${clientId}] QRP PATCH: seq ${msg.seqNo}/${msg.seqCount}`
+            );
             break;
         }
       },
