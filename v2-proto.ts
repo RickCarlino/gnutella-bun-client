@@ -71,6 +71,8 @@ const QRP_VARIANTS = {
 const seenMessages = new Map<string, number>();
 const MESSAGE_CACHE_TIME = 600000; // 10 minutes
 
+const log = (msg: string) => console.log(msg);
+
 function readUInt32LE(buffer: Buffer, offset: number): number {
   return buffer.readUInt32LE(offset);
 }
@@ -426,7 +428,7 @@ function createSocketHandler(
       const size = getMessageSize(message, buffer);
       if (size === 0 || buffer.length < size) break;
 
-      console.log(`[SOCKET] Parsed message: ${message.type}, size: ${size}`);
+      log(`[SOCKET] Parsed message: ${message.type}, size: ${size}`);
       onMessage(message);
       buffer = buffer.slice(size);
     }
@@ -459,23 +461,23 @@ function createSocketHandler(
 
   const enableCompression = () => {
     if (compressionEnabled) {
-      console.log("[SOCKET] Compression already enabled");
+      log("[SOCKET] Compression already enabled");
       return;
     }
-    console.log("[SOCKET] Enabling compression");
+    log("[SOCKET] Enabling compression");
     compressionEnabled = true;
 
     inflater = createInflate();
     inflater.on("data", handleData);
     inflater.on("error", (err: Error) => {
-      console.error("[SOCKET] Inflater error:", err);
+      log("[SOCKET] Inflater error:", err);
       onError(err);
     });
 
     deflater = createDeflate({ flush: 2 }); // Z_SYNC_FLUSH
     deflater.on("data", (chunk: Buffer) => socket.write(chunk));
     deflater.on("error", (err: Error) => {
-      console.error("[SOCKET] Deflater error:", err);
+      log("[SOCKET] Deflater error:", err);
       onError(err);
     });
   };
@@ -501,7 +503,7 @@ function getMessageSize(message: Message, buffer: Buffer): number {
 
 class PeerStore {
   private peers: Map<string, Peer> = new Map();
-  private filename: string = "peers.json";
+  private filename: string = "settings.json";
 
   async load(): Promise<void> {
     try {
@@ -509,13 +511,37 @@ class PeerStore {
       const data = await readFile(this.filename, "utf8");
       const parsed = JSON.parse(data);
       parsed.peers?.forEach((p: Peer) => this.add(p.ip, p.port, p.lastSeen));
-    } catch {}
+      log(
+        `[PEERSTORE] Loaded ${parsed.peers?.length || 0} peers from ${
+          this.filename
+        }`
+      );
+    } catch (error) {
+      log(`[PEERSTORE] Failed to load peers:`, error);
+    }
   }
 
   async save(): Promise<void> {
-    const { writeFile } = await import("node:fs/promises");
-    const data = { peers: Array.from(this.peers.values()) };
-    await writeFile(this.filename, JSON.stringify(data, null, 2));
+    try {
+      const { readFile, writeFile } = await import("node:fs/promises");
+
+      // Read existing data to preserve caches
+      let existingData: any = {};
+      try {
+        const fileContent = await readFile(this.filename, "utf8");
+        existingData = JSON.parse(fileContent);
+      } catch {
+        // File might not exist yet
+      }
+
+      // Update only the peers section
+      existingData.peers = Array.from(this.peers.values());
+
+      await writeFile(this.filename, JSON.stringify(existingData, null, 2));
+      log(`[PEERSTORE] Saved ${this.peers.size} peers to ${this.filename}`);
+    } catch (error) {
+      log(`[PEERSTORE] Failed to save peers:`, error);
+    }
   }
 
   add(ip: string, port: number, lastSeen: number = Date.now()): void {
@@ -544,21 +570,18 @@ class PeerStore {
 
 async function connect(ip: string, port: number): Promise<any> {
   return new Promise((resolve, reject) => {
-    console.log(`[CONNECT] Attempting connection to ${ip}:${port}`);
+    log(`[CONNECT] Attempting connection to ${ip}:${port}`);
     const socket = net.createConnection({ host: ip, port, timeout: 5000 });
     socket.once("connect", () => {
-      console.log(`[CONNECT] Successfully connected to ${ip}:${port}`);
+      log(`[CONNECT] Successfully connected to ${ip}:${port}`);
       resolve(socket);
     });
     socket.once("error", (err) => {
-      console.error(
-        `[CONNECT] Error connecting to ${ip}:${port}:`,
-        err.message
-      );
+      log(`[CONNECT] Error connecting to ${ip}:${port}:`, err.message);
       reject(err);
     });
     socket.once("timeout", () => {
-      console.error(`[CONNECT] Connection timeout to ${ip}:${port}`);
+      log(`[CONNECT] Connection timeout to ${ip}:${port}`);
       socket.destroy();
       reject(new Error("Connection timeout"));
     });
@@ -594,7 +617,7 @@ class ConnectionPool {
   async connectToPeer(ip: string, port: number): Promise<void> {
     const id = `${ip}:${port}`;
     if (this.connections.has(id)) {
-      console.log(`[POOL] Connection to ${id} already exists, skipping`);
+      log(`[POOL] Connection to ${id} already exists, skipping`);
       return;
     }
 
@@ -618,36 +641,32 @@ class ConnectionPool {
       };
 
       this.connections.set(id, connection);
-      console.log(`[POOL] Added connection ${id} to pool, sending handshake`);
+      log(`[POOL] Added connection ${id} to pool, sending handshake`);
       handler.send(buildHandshake("GNUTELLA CONNECT/0.6", this.headers));
 
       setTimeout(() => {
         if (!connection.handshake) {
-          console.warn(
-            `[POOL] Handshake timeout for ${id}, closing connection`
-          );
+          log(`[POOL] Handshake timeout for ${id}, closing connection`);
           handler.close();
           this.connections.delete(id);
         }
       }, HANDSHAKE_TIMEOUT);
     } catch (error) {
-      console.error(`[POOL] Failed to connect to ${id}:`, error);
+      log(`[POOL] Failed to connect to ${id}:`, error);
     }
   }
 
   private handleMessage(id: string, msg: Message): void {
     const conn = this.connections.get(id);
     if (!conn) {
-      console.warn(`[POOL] Received message for unknown connection ${id}`);
+      log(`[POOL] Received message for unknown connection ${id}`);
       return;
     }
 
-    console.log(`[POOL] Received ${msg.type} from ${id}`);
+    log(`[POOL] Received ${msg.type} from ${id}`);
 
     if (msg.type === "handshake_ok" && !conn.handshake) {
-      console.log(
-        `[POOL] Handshake successful with ${id}, sending vendor headers`
-      );
+      log(`[POOL] Handshake successful with ${id}, sending vendor headers`);
       conn.handshake = true;
 
       // Check compression negotiation
@@ -680,16 +699,16 @@ class ConnectionPool {
   }
 
   private handleError(id: string, error: Error): void {
-    console.error(`[POOL] Connection error ${id}:`, error.message);
+    log(`[POOL] Connection error ${id}:`, error.message);
     this.sendByeIfPossible(id, 500, "Connection error");
     this.connections.delete(id);
-    console.log(`[POOL] Removed connection ${id} from pool due to error`);
+    log(`[POOL] Removed connection ${id} from pool due to error`);
   }
 
   private handleClose(id: string): void {
-    console.log(`[POOL] Connection ${id} closed`);
+    log(`[POOL] Connection ${id} closed`);
     this.connections.delete(id);
-    console.log(`[POOL] Removed connection ${id} from pool`);
+    log(`[POOL] Removed connection ${id} from pool`);
   }
 
   private sendByeIfPossible(id: string, code: number, message: string): void {
@@ -704,14 +723,14 @@ class ConnectionPool {
   }
 
   private sendInitialMessages(conn: Connection): void {
-    console.log(`[POOL] Sending initial messages to ${conn.id}`);
+    log(`[POOL] Sending initial messages to ${conn.id}`);
     const qrp = new QrpTable();
     conn.send(buildQrpReset());
-    console.log(`[POOL] Sent QRP RESET to ${conn.id}`);
+    log(`[POOL] Sent QRP RESET to ${conn.id}`);
     conn.send(buildQrpPatch(1, 1, 1, qrp.toBuffer()));
-    console.log(`[POOL] Sent QRP PATCH to ${conn.id}`);
+    log(`[POOL] Sent QRP PATCH to ${conn.id}`);
     conn.send(buildPing());
-    console.log(`[POOL] Sent PING to ${conn.id}`);
+    log(`[POOL] Sent PING to ${conn.id}`);
   }
 
   getActiveCount(): number {
@@ -758,7 +777,7 @@ class GnutellaServer {
 
   private handleConnection(socket: any): void {
     const id = `${socket.remoteAddress}:${socket.remotePort}`;
-    console.log(`[SERVER] New incoming connection from ${id}`);
+    log(`[SERVER] New incoming connection from ${id}`);
 
     const handler = createSocketHandler(
       socket,
@@ -778,20 +797,20 @@ class GnutellaServer {
     };
 
     this.connections.set(id, connection);
-    console.log(`[SERVER] Added connection ${id} to server connections`);
+    log(`[SERVER] Added connection ${id} to server connections`);
   }
 
   private handleMessage(id: string, msg: Message): void {
     const conn = this.connections.get(id);
     if (!conn) {
-      console.warn(`[SERVER] Received message for unknown connection ${id}`);
+      log(`[SERVER] Received message for unknown connection ${id}`);
       return;
     }
 
-    console.log(`[SERVER] Received ${msg.type} from ${id}`);
+    log(`[SERVER] Received ${msg.type} from ${id}`);
 
     if (msg.type === "handshake_connect") {
-      console.log(`[SERVER] Received handshake connect from ${id}, sending OK`);
+      log(`[SERVER] Received handshake connect from ${id}, sending OK`);
 
       // Check compression support
       const clientAcceptsDeflate =
@@ -806,7 +825,7 @@ class GnutellaServer {
     }
 
     if (msg.type === "handshake_ok" && !conn.handshake) {
-      console.log(`[SERVER] Handshake completed with ${id}`);
+      log(`[SERVER] Handshake completed with ${id}`);
       conn.handshake = true;
 
       // Check if we should enable compression
@@ -823,15 +842,15 @@ class GnutellaServer {
   }
 
   private handleError(id: string, error: Error): void {
-    console.error(`[SERVER] Connection error ${id}:`, error.message);
+    log(`[SERVER] Connection error ${id}:`, error.message);
     this.connections.delete(id);
-    console.log(`[SERVER] Removed connection ${id} due to error`);
+    log(`[SERVER] Removed connection ${id} due to error`);
   }
 
   private handleClose(id: string): void {
-    console.log(`[SERVER] Connection ${id} closed`);
+    log(`[SERVER] Connection ${id} closed`);
     this.connections.delete(id);
-    console.log(`[SERVER] Removed connection ${id}`);
+    log(`[SERVER] Removed connection ${id}`);
   }
 
   stop(): Promise<void> {
@@ -849,10 +868,10 @@ async function getPublicIp(): Promise<string> {
 }
 
 async function main() {
-  console.log("[MAIN] Starting Gnutella v2 protocol client...");
+  log("[MAIN] Starting Gnutella v2 protocol client...");
   const localIp = await getPublicIp();
   const localPort = DEFAULT_PORT;
-  console.log(`[MAIN] Local IP: ${localIp}, Port: ${localPort}`);
+  log(`[MAIN] Local IP: ${localIp}, Port: ${localPort}`);
 
   const headers = {
     "User-Agent": "GnutellaBun/0.1",
@@ -867,7 +886,7 @@ async function main() {
   await peerStore.load();
 
   const handleMessage = (conn: Connection, msg: Message) => {
-    console.log(`[MAIN] Processing ${msg.type} from ${conn.id}`);
+    log(`[MAIN] Processing ${msg.type} from ${conn.id}`);
 
     // Handle duplicate detection and hop accounting for routable messages
     if (
@@ -875,15 +894,13 @@ async function main() {
       ["ping", "pong", "query", "queryhits", "push"].includes(msg.type)
     ) {
       if (isDuplicate(msg.header)) {
-        console.log(`[MAIN] Dropping duplicate ${msg.type} from ${conn.id}`);
+        log(`[MAIN] Dropping duplicate ${msg.type} from ${conn.id}`);
         return;
       }
 
       // Don't forward if TTL exhausted
       if (!adjustHopsAndTtl(msg.header)) {
-        console.log(
-          `[MAIN] Dropping ${msg.type} from ${conn.id} - TTL exhausted`
-        );
+        log(`[MAIN] Dropping ${msg.type} from ${conn.id} - TTL exhausted`);
         return;
       }
     }
@@ -891,7 +908,7 @@ async function main() {
     switch (msg.type) {
       case "ping":
         if (conn.handshake) {
-          console.log(`[MAIN] Responding to PING from ${conn.id} with PONG`);
+          log(`[MAIN] Responding to PING from ${conn.id} with PONG`);
           // Use ping.hops + 1 as TTL for the pong
           const pongTtl = Math.max(msg.header!.hops + 1, 7);
           conn.send(
@@ -905,55 +922,56 @@ async function main() {
             )
           );
         } else {
-          console.warn(
-            `[MAIN] Ignoring PING from ${conn.id} - handshake not complete`
-          );
+          log(`[MAIN] Ignoring PING from ${conn.id} - handshake not complete`);
         }
         break;
 
       case "pong":
-        console.log(
+        log(
           `[MAIN] Received PONG from ${conn.id}: ${msg.ipAddress}:${msg.port}`
         );
         peerStore.add(msg.ipAddress, msg.port);
-        console.log(`[MAIN] Added peer ${msg.ipAddress}:${msg.port} to store`);
+        log(`[MAIN] Added peer ${msg.ipAddress}:${msg.port} to store`);
         break;
 
       case "query":
-        console.log(`[MAIN] Query from ${conn.id}: "${msg.searchCriteria}"`);
+        log(`[MAIN] Query from ${conn.id}: "${msg.searchCriteria.slice(0, 2)}..."`);
         if (msg.extensions) {
-          console.log(`[MAIN] Query has extensions (GGEP/HUGE)`);
+          log(`[MAIN] Query has extensions (GGEP/HUGE)`);
         }
         break;
 
       case "qrp_reset":
-        console.log(
+        log(
           `[MAIN] Received QRP RESET from ${conn.id}, table size: ${msg.tableLength}`
         );
         break;
 
       case "qrp_patch":
-        console.log(
+        log(
           `[MAIN] Received QRP PATCH from ${conn.id}, seq ${msg.seqNo}/${msg.seqCount}`
         );
         break;
 
       case "bye":
-        console.log(
+        log(
           `[MAIN] Received BYE from ${conn.id}: ${msg.code} - ${msg.message}`
         );
         break;
 
-      default:
-        console.log(
-          `[MAIN] Unhandled message type: ${msg.type} from ${conn.id}`
+      case "handshake_error":
+        log(
+          `[MAIN] Handshake error from ${conn.id}: ${msg.code} - ${msg.message}`
         );
+        break;
+      default:
+        log(`[MAIN] Unhandled message type: ${msg.type} from ${conn.id}`);
     }
   };
 
   const server = new GnutellaServer({ onMessage: handleMessage, headers });
   await server.start(localPort);
-  console.log(`[MAIN] Server listening on ${localIp}:${localPort}`);
+  log(`[MAIN] Server listening on ${localIp}:${localPort}`);
 
   const pool = new ConnectionPool({
     targetCount: TARGET_CONNECTIONS,
@@ -965,50 +983,46 @@ async function main() {
 
   const maintainConnections = async () => {
     const activeCount = pool.getActiveCount();
-    console.log(
-      `[MAINTAIN] Active connections: ${activeCount}/${TARGET_CONNECTIONS}`
-    );
+    log(`[MAINTAIN] Active connections: ${activeCount}/${TARGET_CONNECTIONS}`);
 
     if (!pool.needsConnections()) {
-      console.log(`[MAINTAIN] Target connections reached, skipping`);
+      log(`[MAINTAIN] Target connections reached, skipping`);
       return;
     }
 
     const peers = peerStore.get(10);
-    console.log(`[MAINTAIN] Found ${peers.length} peers in store`);
+    log(`[MAINTAIN] Found ${peers.length} peers in store`);
 
     for (const peer of peers) {
-      console.log(
-        `[MAINTAIN] Attempting to connect to ${peer.ip}:${peer.port}`
-      );
-      await pool.connectToPeer(peer.ip, peer.port);
+      log(`[MAINTAIN] Attempting to connect to ${peer.ip}:${peer.port}`);
+      pool.connectToPeer(peer.ip, peer.port);
       if (!pool.needsConnections()) break;
     }
   };
 
   setInterval(maintainConnections, CONNECTION_CHECK_INTERVAL);
   setInterval(() => {
-    console.log("[MAIN] Saving peer store...");
+    log("[MAIN] Saving peer store...");
     peerStore.save();
   }, 60000);
   setInterval(() => {
-    console.log("[MAIN] Pruning old peers...");
+    log("[MAIN] Pruning old peers...");
     peerStore.prune();
   }, 3600000);
 
   await maintainConnections();
 
   process.on("SIGINT", async () => {
-    console.log("\n[MAIN] Shutting down...");
-    console.log("[MAIN] Closing connection pool...");
+    log("\n[MAIN] Shutting down...");
+    log("[MAIN] Closing connection pool...");
     pool.close();
-    console.log("[MAIN] Stopping server...");
+    log("[MAIN] Stopping server...");
     await server.stop();
-    console.log("[MAIN] Saving peer store...");
+    log("[MAIN] Saving peer store...");
     await peerStore.save();
-    console.log("[MAIN] Shutdown complete");
+    log("[MAIN] Shutdown complete");
     process.exit(0);
   });
 }
 
-main().catch(console.error);
+main().catch(log);
