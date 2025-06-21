@@ -9,39 +9,47 @@ This is a Gnutella 0.6 P2P protocol implementation in TypeScript using the Bun r
 ## Commands
 
 ### Running Components
+
 - `bun cache-server.ts` - Run the GWebCache server (for peer discovery)
 - `bun cache-client.ts` - Query GWebCache servers to get peer IPs
 - `bun server.ts` - Run Gnutella server (listens on port 6346 for incoming connections)
 - `bun client.ts` - Run Gnutella client (connects to other peers)
 
 ### Testing
+
 - `bun test` - Run all tests (uses Bun's built-in test framework)
 - `bun test cache-server.test.ts` - Run specific test file
 
 ### Development
+
 There are no lint or typecheck commands configured. TypeScript is set to noEmit mode, with Bun handling execution directly.
 
 ## Architecture
 
 ### Core Protocol Implementation
+
 - **gnutella-connection.ts**: Handles the Gnutella protocol handshake and message exchange
 - **parser.ts**: Parses various Gnutella protocol messages (PING, PONG, QUERY, etc.)
 - **client.ts**: Outbound connection client - connects to other Gnutella nodes
 - **server.ts**: Inbound connection server - accepts connections from other nodes
 
 ### Peer Discovery
+
 - **cache-server.ts**: GWebCache server implementation (tested)
 - **cache-client.ts**: GWebCache client for discovering initial peers
 - **peers.json**: Stores peer information persistently
 
 ### Protocol Specifications
+
 The `/docs` directory contains the Gnutella protocol specifications that this implementation follows:
+
 - Gnutella 0.6 is the primary target (docs/Gnutella-0.6-spec.txt)
 - GWebCache protocol for peer discovery (docs/gwebcache-spec.md)
 
 ## Development Guidelines
 
 ### Code Style Requirements
+
 - **NO class keyword** - Use functions and interfaces only
 - **NO else if statements** - Use switch statements instead
 - Use Unix timestamps for all time tracking
@@ -49,17 +57,21 @@ The `/docs` directory contains the Gnutella protocol specifications that this im
 - Prefer non-dynamic imports.
 
 ### Testing Approach
+
 - Tests use Bun's built-in test framework with describe/test/expect syntax
 - Test files are named `*.test.ts`
 - See cache-server.test.ts for testing patterns
 
 ## Known Limitations
+
 The implementation is not yet suitable for real-world Gnutella usage. Missing features include:
+
 - Query Routing Protocol (QRP)
 - Compressed connections
 - Automatic bootstrapping and peer caching
 
 For local testing with GTK-Gnutella:
+
 1. Disable compressed connections in GTK-Gnutella
 2. Enable LAN connections
 3. Run `bun server.ts`

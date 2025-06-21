@@ -52,7 +52,9 @@ describe("cache.ts", () => {
     });
 
     test("handles URL update", async () => {
-      const response = await fetch(`${baseUrl}/?url=http://example.com/cache.php&net=gnutella`);
+      const response = await fetch(
+        `${baseUrl}/?url=http://example.com/cache.php&net=gnutella`,
+      );
       expect(response.status).toBe(200);
       const text = await response.text();
       expect(text).toContain("I|update|OK");
@@ -82,7 +84,9 @@ describe("cache.ts", () => {
     });
 
     test("handles update and get in single request", async () => {
-      const response = await fetch(`${baseUrl}/?ip=8.8.8.8:6346&get=1&net=gnutella`);
+      const response = await fetch(
+        `${baseUrl}/?ip=8.8.8.8:6346&get=1&net=gnutella`,
+      );
       expect(response.status).toBe(200);
       const text = await response.text();
       expect(text).toContain("I|update|OK");
@@ -90,8 +94,12 @@ describe("cache.ts", () => {
     });
 
     test("handles cluster parameter", async () => {
-      await fetch(`${baseUrl}/?ip=8.8.8.8:6346&cluster=testcluster&net=gnutella`);
-      const response = await fetch(`${baseUrl}/?get=1&getclusters=1&net=gnutella`);
+      await fetch(
+        `${baseUrl}/?ip=8.8.8.8:6346&cluster=testcluster&net=gnutella`,
+      );
+      const response = await fetch(
+        `${baseUrl}/?get=1&getclusters=1&net=gnutella`,
+      );
       expect(response.status).toBe(200);
       const text = await response.text();
       expect(text).toMatch(/H\|8\.8\.8\.8:6346\|\d+\|testcluster/);
@@ -113,7 +121,7 @@ describe("cache.ts", () => {
     test("separates hosts by network", async () => {
       await fetch(`${baseUrl}/?ip=8.8.8.8:6346&net=gnutella`);
       await fetch(`${baseUrl}/?ip=8.8.4.4:6346&net=gnutella2`);
-      
+
       const response1 = await fetch(`${baseUrl}/?get=1&net=gnutella`);
       const text1 = await response1.text();
       expect(text1).toContain("8.8.8.8");
@@ -127,7 +135,7 @@ describe("cache.ts", () => {
 
     test("handles x-forwarded-for header", async () => {
       const response = await fetch(`${baseUrl}/?ping=1`, {
-        headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" }
+        headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" },
       });
       expect(response.status).toBe(200);
     });
@@ -157,7 +165,9 @@ describe("cache.ts", () => {
     });
 
     test("handles multiple updates in single request", async () => {
-      const response = await fetch(`${baseUrl}/?ip=8.8.8.8:6346&url=http://example.com&net=gnutella`);
+      const response = await fetch(
+        `${baseUrl}/?ip=8.8.8.8:6346&url=http://example.com&net=gnutella`,
+      );
       expect(response.status).toBe(200);
       const text = await response.text();
       const lines = text.trim().split("\n");
@@ -181,7 +191,9 @@ describe("cache.ts", () => {
     });
 
     test("handles cluster without getclusters parameter", async () => {
-      await fetch(`${baseUrl}/?ip=8.8.8.8:6346&cluster=testcluster&net=gnutella`);
+      await fetch(
+        `${baseUrl}/?ip=8.8.8.8:6346&cluster=testcluster&net=gnutella`,
+      );
       const response = await fetch(`${baseUrl}/?get=1&net=gnutella`);
       expect(response.status).toBe(200);
       const text = await response.text();
