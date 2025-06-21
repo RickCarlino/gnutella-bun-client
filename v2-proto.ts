@@ -1,4 +1,5 @@
 import { createDeflate, createInflate } from "node:zlib";
+import { randomBytes } from "node:crypto";
 import * as net from "net";
 
 interface Message {
@@ -38,6 +39,8 @@ interface Connection {
   send: (data: Buffer) => void;
   handshake: boolean;
   compressed: boolean;
+  isServer: boolean;
+  enableCompression?: () => void;
 }
 
 interface SocketHandler {
@@ -64,6 +67,10 @@ const QRP_VARIANTS = {
   PATCH: 1,
 };
 
+// Message ID tracking for duplicate detection
+const seenMessages = new Map<string, number>();
+const MESSAGE_CACHE_TIME = 600000; // 10 minutes
+
 function readUInt32LE(buffer: Buffer, offset: number): number {
   return buffer.readUInt32LE(offset);
 }
@@ -73,8 +80,7 @@ function writeUInt32LE(buffer: Buffer, value: number, offset: number): void {
 }
 
 function generateId(): Buffer {
-  const id = Buffer.alloc(16);
-  crypto.getRandomValues(id);
+  const id = randomBytes(16);
   id[8] = 0xff;
   id[15] = 0x00;
   return id;
@@ -113,8 +119,8 @@ function buildHandshake(
   Object.entries(headers).forEach(([key, value]) =>
     lines.push(`${key}: ${value}`)
   );
-  lines.push("", "");
-  return Buffer.from(lines.join("\r\n"), "ascii");
+  lines.push(""); // Single blank line
+  return Buffer.from(lines.join("\r\n") + "\r\n", "ascii");
 }
 
 function buildPing(id?: Buffer, ttl: number = 7): Buffer {
@@ -126,7 +132,8 @@ function buildPong(
   port: number,
   ip: string,
   files: number = 0,
-  kb: number = 0
+  kb: number = 0,
+  ttl?: number
 ): Buffer {
   const payload = Buffer.alloc(14);
   payload.writeUInt16LE(port, 0);
@@ -134,7 +141,17 @@ function buildPong(
   writeUInt32LE(payload, files, 6);
   writeUInt32LE(payload, kb, 10);
 
-  const header = buildHeader(MESSAGE_TYPES.PONG, 14, 7, pingId);
+  const header = buildHeader(MESSAGE_TYPES.PONG, 14, ttl || 7, pingId);
+  return Buffer.concat([header, payload]);
+}
+
+function buildBye(code: number, message: string = ""): Buffer {
+  const messageBuffer = Buffer.from(message, "utf8");
+  const payload = Buffer.alloc(2 + messageBuffer.length);
+  payload.writeUInt16LE(code, 0);
+  messageBuffer.copy(payload, 2);
+
+  const header = buildHeader(MESSAGE_TYPES.BYE, payload.length, 1);
   return Buffer.concat([header, payload]);
 }
 
@@ -142,7 +159,7 @@ function buildQrpReset(tableSize: number = 65536): Buffer {
   const payload = Buffer.alloc(6);
   payload[0] = QRP_VARIANTS.RESET;
   writeUInt32LE(payload, tableSize, 1);
-  payload[5] = 1;
+  payload[5] = 0; // infinity must be 0, not 1
 
   const header = buildHeader(MESSAGE_TYPES.QRP, 6, 1);
   return Buffer.concat([header, payload]);
@@ -254,15 +271,34 @@ function parsePayload(header: MessageHeader, payload: Buffer): Message | null {
         kilobytesShared: readUInt32LE(payload, 10),
       };
 
+    case MESSAGE_TYPES.BYE:
+      if (payload.length < 2) return null;
+      const code = payload.readUInt16LE(0);
+      const message =
+        payload.length > 2 ? payload.slice(2).toString("utf8") : "";
+      return {
+        type: "bye",
+        header,
+        code,
+        message,
+      };
+
     case MESSAGE_TYPES.QUERY:
       if (payload.length < 3) return null;
       const nullIndex = payload.indexOf(0, 2);
       if (nullIndex === -1) return null;
+
+      // Parse full query including GGEP/HUGE extensions
+      const searchCriteria = payload.slice(2, nullIndex).toString("utf8");
+      const extensions =
+        nullIndex < payload.length - 1 ? payload.slice(nullIndex + 1) : null;
+
       return {
         type: "query",
         header,
         minimumSpeed: payload.readUInt16LE(0),
-        searchCriteria: payload.slice(2, nullIndex).toString("utf8"),
+        searchCriteria,
+        extensions,
       };
 
     case MESSAGE_TYPES.QRP:
@@ -294,6 +330,37 @@ function parsePayload(header: MessageHeader, payload: Buffer): Message | null {
     default:
       return null;
   }
+}
+
+// Duplicate detection helpers
+function getMessageId(header: MessageHeader): string {
+  return header.descriptorId.toString("hex");
+}
+
+function isDuplicate(header: MessageHeader): boolean {
+  const id = getMessageId(header);
+  const now = Date.now();
+
+  // Clean old entries
+  for (const [msgId, timestamp] of seenMessages.entries()) {
+    if (now - timestamp > MESSAGE_CACHE_TIME) {
+      seenMessages.delete(msgId);
+    }
+  }
+
+  if (seenMessages.has(id)) {
+    return true;
+  }
+
+  seenMessages.set(id, now);
+  return false;
+}
+
+function adjustHopsAndTtl(header: MessageHeader): boolean {
+  if (header.ttl === 0) return false;
+  header.ttl--;
+  header.hops++;
+  return header.ttl > 0;
 }
 
 class QrpTable {
@@ -331,7 +398,8 @@ class QrpTable {
       h ^= str.charCodeAt(i);
       h = Math.imul(h, 0x01000193) >>> 0;
     }
-    return h & 0xffff;
+    // Pre-rotate for better distribution
+    return (h >>> 16) ^ (h & 0xffff);
   }
 
   toBuffer(): Buffer {
@@ -385,7 +453,7 @@ function createSocketHandler(
       socket.write(data);
     } else {
       deflater.write(data);
-      deflater.flush();
+      // Don't flush after every write - let the stream decide
     }
   };
 
@@ -404,7 +472,7 @@ function createSocketHandler(
       onError(err);
     });
 
-    deflater = createDeflate();
+    deflater = createDeflate({ flush: 2 }); // Z_SYNC_FLUSH
     deflater.on("data", (chunk: Buffer) => socket.write(chunk));
     deflater.on("error", (err: Error) => {
       console.error("[SOCKET] Deflater error:", err);
@@ -502,6 +570,7 @@ class ConnectionPool {
   private targetCount: number;
   private onMessage: (conn: Connection, msg: Message) => void;
   private headers: Record<string, string>;
+  private vendorHeaders: Record<string, string>;
 
   constructor(config: {
     targetCount: number;
@@ -513,6 +582,13 @@ class ConnectionPool {
     this.targetCount = config.targetCount;
     this.onMessage = config.onMessage;
     this.headers = config.headers;
+
+    // Vendor headers for second handshake
+    this.vendorHeaders = {
+      "User-Agent": config.headers["User-Agent"],
+      "X-Ultrapeer": config.headers["X-Ultrapeer"],
+      "Bye-Packet": config.headers["Bye-Packet"],
+    };
   }
 
   async connectToPeer(ip: string, port: number): Promise<void> {
@@ -537,6 +613,8 @@ class ConnectionPool {
         send: handler.send,
         handshake: false,
         compressed: false,
+        isServer: false,
+        enableCompression: handler.enableCompression,
       };
 
       this.connections.set(id, connection);
@@ -568,10 +646,33 @@ class ConnectionPool {
 
     if (msg.type === "handshake_ok" && !conn.handshake) {
       console.log(
-        `[POOL] Handshake successful with ${id}, sending OK response`
+        `[POOL] Handshake successful with ${id}, sending vendor headers`
       );
       conn.handshake = true;
-      conn.send(buildHandshake("GNUTELLA/0.6 200 OK", this.headers));
+
+      // Check compression negotiation
+      const peerAcceptsDeflate =
+        msg.headers["Accept-Encoding"]?.includes("deflate");
+      const shouldCompress =
+        peerAcceptsDeflate &&
+        this.headers["Accept-Encoding"]?.includes("deflate");
+
+      const responseHeaders = { ...this.vendorHeaders };
+      if (shouldCompress) {
+        responseHeaders["Content-Encoding"] = "deflate";
+      }
+
+      // Send only vendor headers as per spec
+      conn.send(buildHandshake("GNUTELLA/0.6 200 OK", responseHeaders));
+
+      // Enable compression if negotiated
+      if (
+        shouldCompress &&
+        msg.headers["Content-Encoding"]?.includes("deflate")
+      ) {
+        conn.enableCompression?.();
+      }
+
       this.sendInitialMessages(conn);
     }
 
@@ -580,6 +681,7 @@ class ConnectionPool {
 
   private handleError(id: string, error: Error): void {
     console.error(`[POOL] Connection error ${id}:`, error.message);
+    this.sendByeIfPossible(id, 500, "Connection error");
     this.connections.delete(id);
     console.log(`[POOL] Removed connection ${id} from pool due to error`);
   }
@@ -588,6 +690,17 @@ class ConnectionPool {
     console.log(`[POOL] Connection ${id} closed`);
     this.connections.delete(id);
     console.log(`[POOL] Removed connection ${id} from pool`);
+  }
+
+  private sendByeIfPossible(id: string, code: number, message: string): void {
+    const conn = this.connections.get(id);
+    if (conn && conn.handshake) {
+      try {
+        conn.send(buildBye(code, message));
+      } catch (e) {
+        // Socket might already be closed
+      }
+    }
   }
 
   private sendInitialMessages(conn: Connection): void {
@@ -611,7 +724,10 @@ class ConnectionPool {
   }
 
   close(): void {
-    this.connections.forEach((conn) => conn.socket.destroy());
+    this.connections.forEach((conn) => {
+      this.sendByeIfPossible(conn.id, 200, "Shutting down");
+      conn.socket.destroy();
+    });
     this.connections.clear();
   }
 }
@@ -657,6 +773,8 @@ class GnutellaServer {
       send: handler.send,
       handshake: false,
       compressed: false,
+      isServer: true,
+      enableCompression: handler.enableCompression,
     };
 
     this.connections.set(id, connection);
@@ -674,12 +792,31 @@ class GnutellaServer {
 
     if (msg.type === "handshake_connect") {
       console.log(`[SERVER] Received handshake connect from ${id}, sending OK`);
-      conn.send(buildHandshake("GNUTELLA/0.6 200 OK", this.headers));
+
+      // Check compression support
+      const clientAcceptsDeflate =
+        msg.headers["Accept-Encoding"]?.includes("deflate");
+      const responseHeaders = { ...this.headers };
+
+      if (clientAcceptsDeflate) {
+        responseHeaders["Content-Encoding"] = "deflate";
+      }
+
+      conn.send(buildHandshake("GNUTELLA/0.6 200 OK", responseHeaders));
     }
 
     if (msg.type === "handshake_ok" && !conn.handshake) {
       console.log(`[SERVER] Handshake completed with ${id}`);
       conn.handshake = true;
+
+      // Check if we should enable compression
+      const shouldCompress =
+        msg.headers["Content-Encoding"]?.includes("deflate") &&
+        this.headers["Accept-Encoding"]?.includes("deflate");
+
+      if (shouldCompress) {
+        conn.enableCompression?.();
+      }
     }
 
     this.onMessage(conn, msg);
@@ -723,6 +860,7 @@ async function main() {
     "X-Query-Routing": "0.2",
     "Accept-Encoding": "deflate",
     "Listen-IP": `${localIp}:${localPort}`,
+    "Bye-Packet": "0.1",
   };
 
   const peerStore = new PeerStore();
@@ -730,11 +868,42 @@ async function main() {
 
   const handleMessage = (conn: Connection, msg: Message) => {
     console.log(`[MAIN] Processing ${msg.type} from ${conn.id}`);
+
+    // Handle duplicate detection and hop accounting for routable messages
+    if (
+      msg.header &&
+      ["ping", "pong", "query", "queryhits", "push"].includes(msg.type)
+    ) {
+      if (isDuplicate(msg.header)) {
+        console.log(`[MAIN] Dropping duplicate ${msg.type} from ${conn.id}`);
+        return;
+      }
+
+      // Don't forward if TTL exhausted
+      if (!adjustHopsAndTtl(msg.header)) {
+        console.log(
+          `[MAIN] Dropping ${msg.type} from ${conn.id} - TTL exhausted`
+        );
+        return;
+      }
+    }
+
     switch (msg.type) {
       case "ping":
         if (conn.handshake) {
           console.log(`[MAIN] Responding to PING from ${conn.id} with PONG`);
-          conn.send(buildPong(msg.header!.descriptorId, localPort, localIp));
+          // Use ping.hops + 1 as TTL for the pong
+          const pongTtl = Math.max(msg.header!.hops + 1, 7);
+          conn.send(
+            buildPong(
+              msg.header!.descriptorId,
+              localPort,
+              localIp,
+              0,
+              0,
+              pongTtl
+            )
+          );
         } else {
           console.warn(
             `[MAIN] Ignoring PING from ${conn.id} - handshake not complete`
@@ -752,6 +921,9 @@ async function main() {
 
       case "query":
         console.log(`[MAIN] Query from ${conn.id}: "${msg.searchCriteria}"`);
+        if (msg.extensions) {
+          console.log(`[MAIN] Query has extensions (GGEP/HUGE)`);
+        }
         break;
 
       case "qrp_reset":
@@ -763,6 +935,12 @@ async function main() {
       case "qrp_patch":
         console.log(
           `[MAIN] Received QRP PATCH from ${conn.id}, seq ${msg.seqNo}/${msg.seqCount}`
+        );
+        break;
+
+      case "bye":
+        console.log(
+          `[MAIN] Received BYE from ${conn.id}: ${msg.code} - ${msg.message}`
         );
         break;
 
