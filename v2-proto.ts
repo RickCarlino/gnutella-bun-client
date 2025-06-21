@@ -949,7 +949,9 @@ async function main() {
         break;
 
       case "query":
-        log(`[MAIN] Query from ${conn.id}: "${msg.searchCriteria.slice(0, 2)}..."`);
+        log(
+          `[MAIN] Query from ${conn.id}: "${msg.searchCriteria.slice(0, 2)}..."`
+        );
         if (msg.extensions) {
           log(`[MAIN] Query has extensions (GGEP/HUGE)`);
         }
