@@ -161,7 +161,7 @@ function buildQrpReset(tableSize: number = 65536): Buffer {
   const payload = Buffer.alloc(6);
   payload[0] = QRP_VARIANTS.RESET;
   writeUInt32LE(payload, tableSize, 1);
-  payload[5] = 0; // infinity must be 0, not 1
+  payload[5] = 1; // infinity flag must be 1 (0x01)
 
   const header = buildHeader(MESSAGE_TYPES.QRP, 6, 1);
   return Buffer.concat([header, payload]);
@@ -836,6 +836,9 @@ class GnutellaServer {
       if (shouldCompress) {
         conn.enableCompression?.();
       }
+
+      // Send QRP table after server handshake
+      this.sendServerInitialMessages(conn);
     }
 
     this.onMessage(conn, msg);
@@ -851,6 +854,17 @@ class GnutellaServer {
     log(`[SERVER] Connection ${id} closed`);
     this.connections.delete(id);
     log(`[SERVER] Removed connection ${id}`);
+  }
+
+  private sendServerInitialMessages(conn: Connection): void {
+    log(`[SERVER] Sending initial messages to ${conn.id}`);
+    const qrp = new QrpTable();
+    conn.send(buildQrpReset());
+    log(`[SERVER] Sent QRP RESET to ${conn.id}`);
+    conn.send(buildQrpPatch(1, 1, 1, qrp.toBuffer()));
+    log(`[SERVER] Sent QRP PATCH to ${conn.id}`);
+    conn.send(buildPing());
+    log(`[SERVER] Sent PING to ${conn.id}`);
   }
 
   stop(): Promise<void> {
@@ -875,7 +889,7 @@ async function main() {
 
   const headers = {
     "User-Agent": "GnutellaBun/0.1",
-    "X-Ultrapeer": "True",
+    "X-Ultrapeer": "False",
     "X-Query-Routing": "0.2",
     "Accept-Encoding": "deflate",
     "Listen-IP": `${localIp}:${localPort}`,
