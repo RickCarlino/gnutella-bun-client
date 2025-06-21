@@ -2,7 +2,6 @@ import { createCompressedGnutellaServer } from "./src/server-compressed";
 import {
   createHandshakeOk,
   createHandshakeError,
-  createQrpReset,
 } from "./src/parser";
 import { cachePut } from "./src/cache-client";
 import { getCache } from "./src/cache-client";

@@ -1,7 +1,7 @@
 import net from "net";
 import { createCompressedSocketHandler, CompressionState } from "./utils/compressed-socket-handler";
 import { createServerLifecycle } from "./utils/server-lifecycle";
-import type { Sender, InboundConnectionHandler, ServerConfig } from "./types";
+import type { Sender, ServerConfig } from "./types";
 
 interface CompressedClientInfo {
   id: string;
@@ -23,7 +23,7 @@ const handleConnection = (state: GnutellaServerState, socket: net.Socket) => {
   const clientId = `${socket.remoteAddress}:${socket.remotePort}`;
   console.log(`New connection from ${clientId}`);
 
-  const { send, compressionState, enableCompression, completeHandshake } = createCompressedSocketHandler({
+  const { send, compressionState, completeHandshake } = createCompressedSocketHandler({
     socket,
     onMessage: (message) => {
       console.log(`Received data from ${clientId}`);
@@ -106,7 +106,6 @@ export function createCompressedGnutellaServer(config: ServerConfig) {
       const client = state.clients.get(clientId);
       if (client && client.compressionState) {
         // Find the handler and enable compression
-        const handlers = (state.server as any)._connections;
         // This is a workaround - in production you'd store the enableCompression function with the client
         console.log(`[Server] Enabling compression for ${clientId}: send=${sendCompressed}, recv=${receiveCompressed}`);
         client.compressionState.peerAcceptsCompression = sendCompressed;

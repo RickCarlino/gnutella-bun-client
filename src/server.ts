@@ -1,7 +1,7 @@
 import net from "net";
 import { createSocketHandler, sendMessage } from "./utils/socket-handler";
 import { createServerLifecycle } from "./utils/server-lifecycle";
-import type { Sender, ClientInfo, InboundConnectionHandler, ServerConfig } from "./types";
+import type { Sender, ClientInfo, ServerConfig } from "./types";
 
 
 interface GnutellaServerState {

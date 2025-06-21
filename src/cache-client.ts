@@ -272,7 +272,7 @@ export async function createGnutellaCache() {
     const now = Date.now();
 
     const availableCacheUrls = Object.entries(data.caches)
-      .filter(([url, cache]) => now - cache.lastPull >= CACHE_COOLDOWN_MS)
+      .filter(([_, cache]) => now - cache.lastPull >= CACHE_COOLDOWN_MS)
       .map(([url]) => url);
 
     if (availableCacheUrls.length === 0) {

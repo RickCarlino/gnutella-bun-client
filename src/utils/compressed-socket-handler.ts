@@ -2,7 +2,7 @@ import * as net from "net";
 import { createInflate, createDeflate, Inflate, Deflate } from "node:zlib";
 import { createBufferProcessor } from "./buffer-processor";
 import { checkCompressionSupport } from "./handshake-utils";
-import type { GnutellaObject, HandshakeOk, HandshakeError } from "../parser";
+import type { GnutellaObject, HandshakeOk } from "../parser";
 
 export type CompressedSocketHandlerOptions = {
   socket: net.Socket;

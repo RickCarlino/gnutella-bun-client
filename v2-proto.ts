@@ -1,5 +1,5 @@
 import { createDeflate, createInflate } from "node:zlib";
-import net from "net";
+import * as net from "net";
 
 interface Message {
   type:

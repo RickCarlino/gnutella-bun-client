@@ -26,7 +26,6 @@ describe("Handshake Compression", () => {
   test("server should wait for client's final OK before sending binary data", async () => {
     let serverSentOk = false;
     let receivedClientFinalOk = false;
-    let sentBinaryData = false;
 
     server = createCompressedGnutellaServer({
       port: TEST_PORT,
@@ -59,7 +58,6 @@ describe("Handshake Compression", () => {
               if (!receivedClientFinalOk) {
                 // This should not be sent yet
                 send(Buffer.from([0x78, 0x9c, 0x01, 0x02, 0x03])); // Fake compressed data
-                sentBinaryData = true;
               }
             }, 50);
           } else if (msg.type === "handshake_ok") {
@@ -216,7 +214,7 @@ describe("Handshake Compression", () => {
       },
       handler: {
         onConnect: () => {},
-        onMessage: (clientId, send, msg) => {
+        onMessage: (_, send, msg) => {
           messageOrder.push(`server_received_${msg.type}`);
 
           if (msg.type === "handshake_connect") {
