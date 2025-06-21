@@ -77,7 +77,7 @@ export function buildQRTBits(files: string[]): Uint8Array {
 /** Reset = “clear table, expect 1 patch” */
 export function qrpResetPayload(
   slots = TABLE_SLOTS,
-  entryBits = ENTRY_BITS
+  entryBits = ENTRY_BITS,
 ): Uint8Array {
   const buf = new Uint8Array(5 + 4); // 5-byte header + 4-byte table size
   buf.set([0x00, 0x00, 0x01, 0x00, entryBits]); // Variant, Seq#, Count, Comp, Bits
@@ -91,7 +91,7 @@ export function qrpResetPayload(
 /** Patch = one chunk containing the whole bit-array */
 export function qrpPatchPayload(
   bits: Uint8Array,
-  entryBits = ENTRY_BITS
+  entryBits = ENTRY_BITS,
 ): Uint8Array {
   const out = new Uint8Array(5 + bits.length);
   out.set([0x01, 0x01, 0x01, 0x00, entryBits]); // Variant, Seq#, Count, Comp, Bits

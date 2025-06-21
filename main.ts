@@ -1,318 +1,245 @@
-import { createCompressedGnutellaServer } from "./src/server-compressed";
+import { DEFAULT_PORT, SERVENT_ID } from "./src/const";
+import { Message, Connection } from "./src/interfaces";
+import { PeerStore } from "./src/peer_store";
+import { GnutellaServer } from "./src/gnutella_server";
+import { SharedFileManager } from "./src/shared_files";
+import { QrpTable } from "./src/qrp_table";
 import {
-  createHandshakeOk,
-  createHandshakeError,
-} from "./src/parser";
-import { cachePut } from "./src/cache-client";
-import { getCache } from "./src/cache-client";
-import { createConnectionManager } from "./src/connection-manager";
-import { handlePing } from "./src/utils/message-handlers";
-import { sendQrpTable, type SharedFile } from "./src/qrp";
-import {
-  checkCompressionSupport,
-  addCompressionHeaders,
-} from "./src/utils/handshake-utils";
-
-export const localIp = async () => {
-  const response = await fetch(CHECK_URL);
-  const ip = await response.text();
-  return ip.trim();
-};
-
-const CHECK_URL = "https://wtfismyip.com/text";
-const LOCAL_IP = await localIp();
-const LOCAL_PORT = 6346;
-const MAX_CONNECTIONS = 10;
-const TARGET_OUTBOUND_CONNECTIONS = 8;
-const CONNECTION_CHECK_INTERVAL = 10000; // 10 seconds
-const HANDSHAKE_TIMEOUT = 5000; // 5 seconds
-
-const HEADERS = {
-  "User-Agent": "GnutellaBun/0.1",
-  "X-Ultrapeer": "False",
-  "X-Query-Routing": "0.2",
-  "Accept-Encoding": "deflate",
-  "Listen-IP": `${LOCAL_IP}:${LOCAL_PORT}`,
-  "Remote-IP": LOCAL_IP,
-};
-
-// Example shared files (you would normally load these from disk)
-const SHARED_FILES: SharedFile[] = [
-  { name: "example-file.txt", size: 1024 },
-  { name: "test-document.pdf", size: 2048 },
-  { name: "music-track.mp3", size: 4096 },
-];
+  log,
+  adjustHopsAndTtl,
+  buildPong,
+  buildQueryHit,
+  buildQrpReset,
+  buildQrpPatch,
+  getPublicIp,
+} from "./src/util";
 
 async function main() {
-  console.log("Starting Gnutella node...");
-  console.log(`Local IP: ${LOCAL_IP}`);
+  log("[MAIN] Starting Gnutella v2 protocol client...");
+  const localIp = await getPublicIp();
+  const localPort = DEFAULT_PORT;
+  log(`[MAIN] Local IP: ${localIp}, Port: ${localPort}`);
 
-  // Initialize cache
-  const cache = await getCache();
-  console.log("Cache loaded");
+  const headers = {
+    "User-Agent": "GnutellaBun/0.1",
+    "X-Ultrapeer": "False",
+    "X-Query-Routing": "0.2",
+    "Accept-Encoding": "deflate",
+    "Listen-IP": `${localIp}:${localPort}`,
+    "Bye-Packet": "0.1",
+  };
 
-  // Bootstrap peer list
-  console.log("Bootstrapping peer list...");
-  await cache.pullHostsFromCache();
-  const hosts = cache.getHosts();
-  console.log(`Found ${hosts.length} peers`);
+  const peerStore = new PeerStore();
+  await peerStore.load();
 
-  // Create server with handler
-  const server = createCompressedGnutellaServer({
-    port: LOCAL_PORT,
-    host: "0.0.0.0",
-    maxConnections: MAX_CONNECTIONS,
-    headers: HEADERS,
-    handler: {
-      onConnect: (clientId) => {
-        console.log(`[${clientId}] Connected`);
-      },
+  // Set up shared files
+  const sharedFiles = new SharedFileManager();
+  const targetFile = "bird watchers handbook audio 01jy9ysw 2.mp3";
+  const fileSize = 1 * 1024 * 1024; // 1MB dummy size
+  sharedFiles.addFile(targetFile, fileSize);
+  log(`[MAIN] Sharing file: ${targetFile}`);
+  // Also add some common test files for easier searching
+  sharedFiles.addFile("test.mp3", 2 * 1024 * 1024);
+  sharedFiles.addFile("music.mp3", 3 * 1024 * 1024);
+  log(`[MAIN] Also sharing test.mp3 and music.mp3 for testing`);
 
-      onMessage: (clientId, send, msg) => {
-        console.log(`[${clientId}] Received:`, msg.type);
+  // Test QRP hash function
+  log("[MAIN] Testing QRP hash function...");
+  QrpTable.testHash();
+  // Initialize QRP table
+  const qrpTable = new QrpTable();
+  const keywords = sharedFiles.getKeywords();
+  qrpTable.addKeywords(keywords);
+  log(`[MAIN] QRP table initialized with keywords: ${keywords.join(", ")}`);
 
-        switch (msg.type) {
-          case "handshake_connect":
-            console.log(`[${clientId}] Handshake request v${msg.version}`);
+  // Track connections for QRP updates
+  const activeConnections = new Set<Connection>();
 
-            switch (msg.version) {
-              case "0.6":
-                // Check if client accepts compression
-                const clientAcceptsCompression = checkCompressionSupport(
-                  msg.headers
-                );
-                if (clientAcceptsCompression) {
-                  console.log(
-                    `[${clientId}] Client supports compression, enabling deflate`
-                  );
-                }
-
-                // Create response headers with compression if client supports it
-                const responseHeaders = addCompressionHeaders(
-                  HEADERS,
-                  clientAcceptsCompression
-                );
-
-                send(createHandshakeOk(responseHeaders));
-                // Don't mark handshake complete yet - wait for client's final OK
-                console.log(
-                  `[${clientId}] Sent handshake OK, waiting for client's final OK`
-                );
-                break;
-              default:
-                send(
-                  createHandshakeError(503, "Service Unavailable", {
-                    "X-Try": "gnutella.com:6346",
-                  })
-                );
-                console.log(
-                  `[${clientId}] Handshake rejected - unsupported version`
-                );
-                break;
-            }
-            break;
-
-          case "handshake_ok":
-            // This is the client's final OK after our OK - handshake is now complete
-            console.log(`[${clientId}] ⭐⭐⭐ handshake complete ⭐⭐⭐`);
-            server.setClientHandshake(clientId, "0.6");
-
-            // Now it's safe to send QRP table
-            sendQrpTable(send, SHARED_FILES);
-            console.log(
-              `[${clientId}] Handshake complete, QRP table sent (${SHARED_FILES.length} files)`
-            );
-            break;
-
-          case "ping":
-            const isHandshakeComplete =
-              server.getClients().find((c) => c.id === clientId)?.handshake ||
-              false;
-            handlePing(
-              msg,
-              {
-                localPort: LOCAL_PORT,
-                localIp: LOCAL_IP,
-                send,
-              },
-              isHandshakeComplete
-            );
-            if (isHandshakeComplete) {
-              console.log(`[${clientId}] Responded to ping`);
-            }
-            break;
-
-          case "pong":
-            console.log(`[${clientId}] Pong from ${msg.ipAddress}:${msg.port}`);
-            cache.addPeer(msg.ipAddress, msg.port);
-            break;
-
-          case "query":
-            console.log(`[${clientId}] Query: "${msg.searchCriteria}"`);
-            break;
-
-          case "queryhits":
-            console.log(`[${clientId}] QueryHits: ${msg.numberOfHits} results`);
-            break;
-
-          case "push":
-            console.log(`[${clientId}] Push request`);
-            break;
-
-          case "bye":
-            console.log(`[${clientId}] Bye: ${msg.code} ${msg.message}`);
-            break;
-
-          case "qrp_reset":
-            console.log(
-              `[${clientId}] QRP RESET: table length ${msg.tableLength}`
-            );
-            break;
-
-          case "qrp_patch":
-            console.log(
-              `[${clientId}] QRP PATCH: seq ${msg.seqNo}/${msg.seqCount}`
-            );
-            break;
-        }
-      },
-
-      onError: (clientId, _, error) => {
-        console.error(`[${clientId}] Error:`, error.message);
-      },
-
-      onClose: (clientId) => {
-        console.log(`[${clientId}] Disconnected`);
-      },
-    },
-  });
-
-  // Start server
-  await server.start();
-  console.log(`Gnutella server listening on ${LOCAL_IP}:${LOCAL_PORT}`);
-  console.log(`Max connections: ${MAX_CONNECTIONS}`);
-
-  // Push IP to all GWebCaches
-  console.log("Pushing IP to GWebCaches...");
-  let successCount = 0;
-  const cacheUrls = cache.getCacheUrls();
-
-  for (const url of cacheUrls) {
-    if (cache.canPushToCache(url)) {
-      try {
-        await cachePut({
-          url,
-          network: "Gnutella",
-          ip: LOCAL_IP,
-        });
-        cache.updateCachePushTime(url);
-        successCount++;
-        console.log(`✓ Pushed to ${url}`);
-      } catch (error) {
-        console.error(`✗ Failed to push to ${url}:`, error);
-      }
+  const handleMessage = (conn: Connection, msg: Message) => {
+    log(`[MAIN] Processing ${msg.type} from ${conn.id}`);
+    // Log all messages with details
+    if (msg.type === "query") {
+      log(
+        `[DEBUG] Query: "${msg.searchCriteria}" MinSpeed: ${msg.minimumSpeed}`
+      );
     }
-  }
 
-  console.log(`Pushed IP to ${successCount} caches`);
-  await cache.store();
-
-  // Start connection manager for outbound connections
-  const connectionManager = createConnectionManager({
-    targetConnections: TARGET_OUTBOUND_CONNECTIONS,
-    checkInterval: CONNECTION_CHECK_INTERVAL,
-    handshakeTimeout: HANDSHAKE_TIMEOUT,
-    localIp: LOCAL_IP,
-    localPort: LOCAL_PORT,
-    headers: HEADERS,
-    sharedFiles: SHARED_FILES,
-    onConnectionsChanged: (activeCount) => {
-      console.log(
-        `[Outbound] Active connections: ${activeCount}/${TARGET_OUTBOUND_CONNECTIONS}`
-      );
-    },
-  });
-
-  await connectionManager.start();
-  console.log("Connection manager started");
-
-  // Status monitoring
-  const statusInterval = setInterval(() => {
-    const inboundClients = server.getClients();
-    const outboundConnections = connectionManager.getConnections();
-
-    console.log(`\n=== Connection Status ===`);
-    console.log(`Inbound connections: ${inboundClients.length}`);
-    inboundClients.forEach((client) => {
-      console.log(
-        `  [IN]  ${client.handshake ? "✓" : "…"} ${client.id}${
-          client.version ? ` (v${client.version})` : ""
-        }`
-      );
-    });
-
-    console.log(`\nOutbound connections: ${outboundConnections.length}`);
-    outboundConnections.forEach((conn) => {
-      const duration = Math.floor(conn.duration / 1000);
-      console.log(
-        `  [OUT] ${conn.handshake ? "✓" : "…"} ${conn.address}${
-          conn.version ? ` (v${conn.version})` : ""
-        } (${duration}s)`
-      );
-    });
-  }, 30000); // Every 30 seconds
-
-  // Periodic cache update (every hour)
-  const cacheUpdateInterval = setInterval(async () => {
-    console.log("\nUpdating caches...");
-
-    for (const url of cache.getCacheUrls()) {
-      if (cache.canPushToCache(url)) {
-        try {
-          await cachePut({
-            url,
-            network: "Gnutella",
-            ip: LOCAL_IP,
-          });
-          cache.updateCachePushTime(url);
-          console.log(`✓ Updated cache: ${url}`);
-        } catch (error) {
-          console.error(`✗ Failed to update cache ${url}:`, error);
-        }
+    // Handle duplicate detection and hop accounting for routable messages
+    if (
+      msg.header &&
+      ["pong", "query", "queryhits", "push"].includes(msg.type)
+    ) {
+      // Don't forward if TTL exhausted
+      if (!adjustHopsAndTtl(msg.header)) {
+        log(`[MAIN] Dropping ${msg.type} from ${conn.id} - TTL exhausted`);
+        return;
       }
     }
 
-    await cache.store();
-  }, 60 * 60 * 1000); // Every hour
+    switch (msg.type) {
+      case "ping":
+        if (conn.handshake) {
+          log(`[MAIN] Responding to PING from ${conn.id} with PONG`);
+          // Use ping.hops + 1 as TTL for the pong
+          const pongTtl = Math.max(msg.header!.hops + 1, 7);
+          conn.send(
+            buildPong(
+              msg.header!.descriptorId,
+              localPort,
+              localIp,
+              0,
+              0,
+              pongTtl
+            )
+          );
+        } else {
+          log(`[MAIN] Ignoring PING from ${conn.id} - handshake not complete`);
+        }
+        break;
 
-  // Periodic peer discovery (every 2 hours)
-  const peerDiscoveryInterval = setInterval(async () => {
-    console.log("\nDiscovering new peers...");
-    await cache.pullHostsFromCache();
-    await cache.evictHosts(); // Remove stale hosts
-    await cache.store();
-    const hosts = cache.getHosts();
-    console.log(`Active peers: ${hosts.length}`);
-  }, 1.01 * 60 * 60 * 1000); // Every hour
+      case "pong":
+        log(
+          `[MAIN] Received PONG from ${conn.id}: ${msg.ipAddress}:${msg.port}`
+        );
+        peerStore.add(msg.ipAddress, msg.port);
+        log(`[MAIN] Added peer ${msg.ipAddress}:${msg.port} to store`);
+        break;
 
-  // Graceful shutdown
+      case "query":
+        log(`[MAIN] Query from ${conn.id}: "${msg.searchCriteria}"`);
+        if (msg.extensions) {
+          log(`[MAIN] Query has extensions (GGEP/HUGE)`);
+        }
+
+        // Always try to search even if QRP might filter it
+        log(`[MAIN] Bypassing QRP check - searching anyway`);
+
+        // Search our shared files
+        const matches = sharedFiles.searchFiles(msg.searchCriteria);
+        if (matches.length > 0) {
+          log(`[MAIN] Found ${matches.length} matches for query`);
+          const hits = matches.map((file) => ({
+            index: file.index,
+            size: file.size,
+            filename: file.filename,
+          }));
+
+          const queryHit = buildQueryHit(
+            msg.header!.descriptorId,
+            localPort,
+            localIp,
+            hits,
+            SERVENT_ID
+          );
+
+          conn.send(queryHit);
+          log(`[MAIN] Sent query hit with ${hits.length} results`);
+        } else {
+          log(`[MAIN] No matches found for query: "${msg.searchCriteria}"`);
+        }
+        break;
+
+      case "qrp_reset":
+        log(
+          `[MAIN] Received QRP RESET from ${conn.id}, table size: ${msg.tableLength}, infinity: ${msg.infinity}`
+        );
+        break;
+
+      case "qrp_patch":
+        log(
+          `[MAIN] Received QRP PATCH from ${conn.id}, seq ${msg.seqNo}/${msg.seqCount}, compression: ${msg.compression}, bits: ${msg.entryBits}`
+        );
+        break;
+
+      case "bye":
+        log(
+          `[MAIN] Received BYE from ${conn.id}: ${msg.code} - ${msg.message}`
+        );
+        break;
+
+      case "handshake_error":
+        log(
+          `[MAIN] Handshake error from ${conn.id}: ${msg.code} - ${msg.message}`
+        );
+        break;
+
+      case "handshake_ok":
+        log(`[MAIN] Handshake OK from ${conn.id}`);
+        break;
+
+      default:
+        log(`[MAIN] Unhandled message type: ${msg.type} from ${conn.id}`);
+    }
+  };
+
+  const sendQrpTable = (conn: Connection) => {
+    log(`[MAIN] Sending QRP table to ${conn.id}`);
+
+    // Send RESET
+    const reset = buildQrpReset(65536);
+    conn.send(reset);
+
+    // Send table as patches
+    const tableData = qrpTable.toBuffer();
+    const chunkSize = 1024; // Send 1KB chunks
+    const totalChunks = Math.ceil(tableData.length / chunkSize);
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, tableData.length);
+      const chunk = tableData.slice(start, end);
+
+      log(
+        `[MAIN] Sending QRP PATCH ${i + 1}/${totalChunks}, size: ${
+          chunk.length
+        } bytes`
+      );
+      const patch = buildQrpPatch(i + 1, totalChunks, 1, chunk);
+      conn.send(patch);
+    }
+
+    log(
+      `[MAIN] Sent QRP table (${tableData.length} bytes) in ${totalChunks} patches`
+    );
+  };
+
+  const server = new GnutellaServer({
+    onMessage: (conn, msg) => {
+      handleMessage(conn, msg);
+      // For server connections, send QRP after they complete handshake
+      if (
+        msg.type === "handshake_ok" &&
+        conn.isServer &&
+        conn.handshake &&
+        !activeConnections.has(conn)
+      ) {
+        activeConnections.add(conn);
+        sendQrpTable(conn);
+      }
+    },
+    headers,
+  });
+  await server.start(localPort);
+  log(`[MAIN] Server listening on ${localIp}:${localPort}`);
+
+  setInterval(() => {
+    log("[MAIN] Saving peer store...");
+    peerStore.save();
+  }, 60000);
+  setInterval(() => {
+    log("[MAIN] Pruning old peers...");
+    peerStore.prune();
+  }, 3600000);
   process.on("SIGINT", async () => {
-    console.log("\nShutting down Gnutella node...");
-    clearInterval(statusInterval);
-    clearInterval(cacheUpdateInterval);
-    clearInterval(peerDiscoveryInterval);
-    connectionManager.stop();
+    log("\n[MAIN] Shutting down...");
+    log("[MAIN] Closing connection pool...");
+    log("[MAIN] Stopping server...");
     await server.stop();
-    await cache.store();
-    console.log("Goodbye!");
+    log("[MAIN] Saving peer store...");
+    await peerStore.save();
+    log("[MAIN] Shutdown complete");
     process.exit(0);
   });
-
-  console.log("\nGnutella node is running. Press Ctrl+C to stop.");
 }
 
-// Run the main function
-main().catch((error) => {
-  console.error("Failed to start Gnutella node:", error);
-  process.exit(1);
-});
+main().catch(log);

@@ -1,742 +1,895 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8">
-	 <meta name="viewport" content="width=device-width, initial-scale=1">
-	 <meta name="google-site-verification" content="Uu1C2AmKM0OQw2s7EClaWmoK6JTd3YQ12GFvNSv6QHc">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="google-site-verification"
+      content="Uu1C2AmKM0OQw2s7EClaWmoK6JTd3YQ12GFvNSv6QHc"
+    />
 
     <!-- $Id$ -->
-<title>gtk-gnutella - The Graphical Unix Gnutella Client</title>
+    <title>gtk-gnutella - The Graphical Unix Gnutella Client</title>
 
-    <link rel="icon" href="/images/favicon.png" type="image/png">
-    <link rel="bookmark" href="https://gtk-gnutella.sourceforge.io/">
-    <link rel="canonical" href="https://gtk-gnutella.sourceforge.io/">
-    <link rel="alternate"
-          type="text/html"
-          href="?lang=en&page=glossary"
-          hreflang="en"
-          title="English version">
-    <link rel="alternate"
-          href="?lang=de&page=glossary"
-          hreflang="de"
-          title="Deutsche &Uuml;bersetzung">
-    <link rel="alternate"
-          href="?lang=el&page=glossary"
-          hreflang="el"
-          title="Ελληνικά">
-    <link rel="alternate"
-          href="?lang=fr&page=glossary"
-          hreflang="fr"
-          title="Traduction fran&ccedil;aise">
-    <link rel="alternate"
-          href="?lang=it&page=glossary"
-          hreflang="it"
-          title="Traduction fran&ccedil;aise">
-    <link rel="alternate"
-          href="?lang=ja&page=glossary"
-          hreflang="ja"
-          title="日本語版">
-    <link rel="alternate"
-          href="?lang=nl&page=glossary"
-          hreflang="nl"
-          title="Nederlandse vertaling">
-    <link rel="alternate"
-          href="?lang=uk&page=glossary"
-          hreflang="uk"
-          title="Ukrainian version">
-    <link rel="alternate"
-          href="?lang=zh&page=glossary"
-          hreflang="zh"
-          title="中文">
+    <link rel="icon" href="/images/favicon.png" type="image/png" />
+    <link rel="bookmark" href="https://gtk-gnutella.sourceforge.io/" />
+    <link rel="canonical" href="https://gtk-gnutella.sourceforge.io/" />
+    <link
+      rel="alternate"
+      type="text/html"
+      href="?lang=en&page=glossary"
+      hreflang="en"
+      title="English version"
+    />
+    <link
+      rel="alternate"
+      href="?lang=de&page=glossary"
+      hreflang="de"
+      title="Deutsche &Uuml;bersetzung"
+    />
+    <link
+      rel="alternate"
+      href="?lang=el&page=glossary"
+      hreflang="el"
+      title="Ελληνικά"
+    />
+    <link
+      rel="alternate"
+      href="?lang=fr&page=glossary"
+      hreflang="fr"
+      title="Traduction fran&ccedil;aise"
+    />
+    <link
+      rel="alternate"
+      href="?lang=it&page=glossary"
+      hreflang="it"
+      title="Traduction fran&ccedil;aise"
+    />
+    <link
+      rel="alternate"
+      href="?lang=ja&page=glossary"
+      hreflang="ja"
+      title="日本語版"
+    />
+    <link
+      rel="alternate"
+      href="?lang=nl&page=glossary"
+      hreflang="nl"
+      title="Nederlandse vertaling"
+    />
+    <link
+      rel="alternate"
+      href="?lang=uk&page=glossary"
+      hreflang="uk"
+      title="Ukrainian version"
+    />
+    <link
+      rel="alternate"
+      href="?lang=zh&page=glossary"
+      hreflang="zh"
+      title="中文"
+    />
 
+    <style>
+      @media all {
+        a:link {
+          color: #4444bb;
+        }
+        a:visited {
+          color: #bb4444;
+        }
+        a:active {
+          color: #4444bb;
+        }
 
-<style>
-@media all {
+        body,
+        th,
+        td,
+        h3,
+        h4,
+        h5,
+        p,
+        ul {
+          font-family: helvetica, sans-serif;
+          color: #000000;
+          margin: 0px 0px 0px 0px;
+        }
 
-a:link    { color: #4444BB; }
-a:visited { color: #BB4444; }
-a:active  { color: #4444BB; }
+        p,
+        pre,
+        ul {
+          margin: 1em 2em;
+        }
 
-body,th,td,h3,h4,h5,p,ul {
-	font-family: helvetica, sans-serif;
-	color: #000000;
-	margin: 0px 0px 0px 0px;
-}
+        body {
+          background-color: #aaaaee;
+        }
 
-p,pre,ul {
-	margin: 1em 2em;
-}
+        h1 {
+          text-align: center;
+        }
 
-body {
-	background-color: #AAAAEE;
-}
+        h1.attention {
+          margin: 0 0;
+          border-style: solid;
+          border-color: black;
+          background: red;
+          color: white;
+          text-align: center;
+        }
 
-h1 {
-	text-align: center;
-}
+        h3,
+        h4,
+        h5 {
+          font-size: medium;
+        }
 
-h1.attention {
-	margin: 0 0;
-	border-style: solid;
-	border-color: black;
-	background: red;
-	color: white;
-	text-align: center;
-}
+        h5 {
+          font-size: 0.83em;
+        }
 
-h3,h4,h5 {
-	font-size: medium;
-}
+        code {
+          font-family: monospace;
+        }
 
-h5 { 	
-	font-size: 0.83em;
-}
+        .nav {
+          font-weight: bold;
+        }
 
-code {
-	font-family: monospace;
-}
+        a.navlink:link,
+        a.navlink:visited {
+          text-decoration: none;
+        }
 
-.nav {
-	font-weight: bold
-}
+        a.navlink:active,
+        a.navlink:hover {
+          text-decoration: underline;
+        }
 
-a.navlink:link,a.navlink:visited {
-	text-decoration: none
-}
-
-a.navlink:active,a.navlink:hover {
-	text-decoration: underline
-}
-
-div.sidebar {
-/*
+        div.sidebar {
+          /*
 	width: 14em;
 	float: left;
 */
-}
+        }
 
-div.content {
-	margin-left: 0em;
-}
+        div.content {
+          margin-left: 0em;
+        }
 
-div.boxed {
-	border-style: solid;
-	border-width: 2px;
-	border-color: #42a;
-	background-color: white;
-	margin-top: 10px;
-	margin-bottom: 10px;
-	margin-right: 1%;
-	margin-left: 1%;
-	padding: 1em;
-}
+        div.boxed {
+          border-style: solid;
+          border-width: 2px;
+          border-color: #42a;
+          background-color: white;
+          margin-top: 10px;
+          margin-bottom: 10px;
+          margin-right: 1%;
+          margin-left: 1%;
+          padding: 1em;
+        }
 
-div.indent {
-	margin-left: 1em;
-}
+        div.indent {
+          margin-left: 1em;
+        }
 
-div.warning {
-	background-color: #FFCCCC;
-	text-align: center;
-	border-style: outset;
-	border-color: red;
-	margin: 1em;
-	padding: 0.5em;
-	font-weight: bold;
-}
+        div.warning {
+          background-color: #ffcccc;
+          text-align: center;
+          border-style: outset;
+          border-color: red;
+          margin: 1em;
+          padding: 0.5em;
+          font-weight: bold;
+        }
 
-div.scroll {
-	overflow: auto;
-	max-height: 10em;
-}
+        div.scroll {
+          overflow: auto;
+          max-height: 10em;
+        }
 
-div.sb_section {
-	margin-top: 0.5em;
-	margin-bottom: 0.5em;
-	padding: 0.3em;
-	border-left: solid 2px #D3D3D3;
-	border-top: solid 2px #D3D3D3;
-	font-size: large;
-	font-weight: bold;
-	line-height: 1.5em;
-}
+        div.sb_section {
+          margin-top: 0.5em;
+          margin-bottom: 0.5em;
+          padding: 0.3em;
+          border-left: solid 2px #d3d3d3;
+          border-top: solid 2px #d3d3d3;
+          font-size: large;
+          font-weight: bold;
+          line-height: 1.5em;
+        }
 
-a.rss {
-	font-size: large;
-	font-weight: bold;
-	color: white;
-	background: #e60;
-	border: solid 2pt #f70;
-   text-decoration: none;
-}
+        a.rss {
+          font-size: large;
+          font-weight: bold;
+          color: white;
+          background: #e60;
+          border: solid 2pt #f70;
+          text-decoration: none;
+        }
 
-div.sb_section_content {
-	margin-left: 1em;
-}
+        div.sb_section_content {
+          margin-left: 1em;
+        }
 
-div.glossary_capital {
-	color: red;
-	font-size: 32px;
-	font-weight: bold;
-	margin-bottom: 0.5em;
-}
+        div.glossary_capital {
+          color: red;
+          font-size: 32px;
+          font-weight: bold;
+          margin-bottom: 0.5em;
+        }
 
-div.glossary_term {
-	font-weight: bold;
-	font-size: larger;
-}
+        div.glossary_term {
+          font-weight: bold;
+          font-size: larger;
+        }
 
-.hidden {
-	visibility: hidden;
-	width: 0;
-	height: 0;
-	font-size: 0pt;
-}
+        .hidden {
+          visibility: hidden;
+          width: 0;
+          height: 0;
+          font-size: 0pt;
+        }
 
-img {
-	border: 0;
-}
+        img {
+          border: 0;
+        }
 
-.image,.title_image {
-	text-align: center
-}
+        .image,
+        .title_image {
+          text-align: center;
+        }
 
-.image img {
-	margin: 0.5em;
-}
+        .image img {
+          margin: 0.5em;
+        }
+      }
 
-}
+      @media screen and (max-width: 440px) {
+        .title_image {
+          width: 100%;
+        }
 
-@media screen and (max-width: 440px) {
+        div.sb_section {
+          line-height: 2em;
+        }
 
-.title_image {
-	width: 100%;
-}
+        div.boxed {
+          padding: 0.5em;
+        }
 
-div.sb_section {
-	line-height: 2em;
-}
+        pre {
+          white-space: pre-wrap;
+        }
+      }
+    </style>
 
-div.boxed {
-	padding: 0.5em;
-}
-
-pre {
-	white-space: pre-wrap;
-}
-
-}
-</style>
-
-
-     <!-- Sponsors' CSS currently unused, disabling to enhance page speed -->
-
+    <!-- Sponsors' CSS currently unused, disabling to enhance page speed -->
   </head>
 
   <body>
     <div class="boxed" style="text-align: center">
       <div>
         <a href="/?page=index">
-          <img class="title_image" src="/images/gtk-gnutella.png" alt="gtk-gnutella logo"></a>
+          <img
+            class="title_image"
+            src="/images/gtk-gnutella.png"
+            alt="gtk-gnutella logo"
+        /></a>
       </div>
       <div>
         <!-- $Id$ -->
-Current version:
-1.2.3      </div>
+        Current version: 1.2.3
+      </div>
     </div>
 
-    <hr class="hidden">
+    <hr class="hidden" />
 
     <div class="sidebar">
       <div class="boxed">
         <form action="/" method="GET">
-
           <!-- $Id$ -->
 
-<div class="sb_section">
-<a href="?lang=en&page=news">News</a>&nbsp;|&nbsp;
-<a href="?lang=en&page=download">Download</a>&nbsp;|&nbsp;
-<a href="?lang=en&page=docs">Documentation</a>&nbsp;|&nbsp;
-<a href="?lang=en&page=faq">FAQ</a>&nbsp;|&nbsp;
-<a href="/manual/">Online Manual</a>&nbsp;|&nbsp;
-<a href="?lang=en&page=mailing">Contact</a>&nbsp;|&nbsp;
-<a href="?lang=en&page=devel">Developers</a>&nbsp;|&nbsp;
-<a href="?lang=en&page=links">Links</a>&nbsp;|&nbsp;
-<a href="?lang=en&page=donate">Donate</a>
-</div>
-<!-- end sidenav -->
+          <div class="sb_section">
+            <a href="?lang=en&page=news">News</a>&nbsp;|&nbsp;
+            <a href="?lang=en&page=download">Download</a>&nbsp;|&nbsp;
+            <a href="?lang=en&page=docs">Documentation</a>&nbsp;|&nbsp;
+            <a href="?lang=en&page=faq">FAQ</a>&nbsp;|&nbsp;
+            <a href="/manual/">Online Manual</a>&nbsp;|&nbsp;
+            <a href="?lang=en&page=mailing">Contact</a>&nbsp;|&nbsp;
+            <a href="?lang=en&page=devel">Developers</a>&nbsp;|&nbsp;
+            <a href="?lang=en&page=links">Links</a>&nbsp;|&nbsp;
+            <a href="?lang=en&page=donate">Donate</a>
+          </div>
+          <!-- end sidenav -->
 
-	  <div>
-	      <label for="lang">Page language</label>
-          <select aria-label="Page language" name="lang" id="lang" tabindex=1 onchange="submit();">
-            <option
-		selected		value="en">English</option>
-	    <option
-				value="de">Deutsch</option>
-            <option
-				value="el">Ελληνικά</option>
-            <option
-				value="fr">Fran&ccedil;ais</option>
-            <option
-				value="it">Italiano</option>
-            <option
-				value="ja">日本語</option>
-            <option
-				value="nl">Nederlands</option>
-            <option
-				value="uk">Українська</option>
-            <option
-				value="zh">中文</option>
-          </select>&nbsp;<input type="submit" value="Go"
-                                accesskey="G" tabindex="2">
-          <input type="hidden" name="page" value="glossary">
-	  </div>
+          <div>
+            <label for="lang">Page language</label>
+            <select
+              aria-label="Page language"
+              name="lang"
+              id="lang"
+              tabindex="1"
+              onchange="submit();"
+            >
+              <option selected value="en">English</option>
+              <option value="de">Deutsch</option>
+              <option value="el">Ελληνικά</option>
+              <option value="fr">Fran&ccedil;ais</option>
+              <option value="it">Italiano</option>
+              <option value="ja">日本語</option>
+              <option value="nl">Nederlands</option>
+              <option value="uk">Українська</option>
+              <option value="zh">中文</option></select
+            >&nbsp;<input type="submit" value="Go" accesskey="G" tabindex="2" />
+            <input type="hidden" name="page" value="glossary" />
+          </div>
         </form>
-
       </div>
-
     </div>
 
-    <hr class="hidden">
+    <hr class="hidden" />
 
     <div class="content">
       <!-- begin sponsors -->
-<!-- end sponsors -->
-
-<!-- content header -->
-<!-- $Id$ -->
-<div class="boxed">
-<!-- end cheader -->
-<!-- $Id$ -->
-
-<h1>Glossary</h1>
-
-<p>
-	This glossary derives from the old <a href="/manual/">Online Manual</a>. More terms are being included.
-	Some definitions derive from the <a href="http://rfc-gnutella.sourceforge.net/src/rfc-0_6-draft.html" target="_blank">
-	Gnutella Protocol Development draft</a>.
-</p>
-
-
-<div class="glossary_capital">B</div>
-
-<div class="glossary_term">Bandwidth <em>hint</em> for GUESS querying</div>
-
-<p>
-	This is termes <em>bandwidth hint</em> because GUESS uses UDP and cannot fraction large messages to emit just a few bytes. Therefore, the bandwidth is just a hint because it can be exceeded if a set of queries need to be made and their total amount exceeds the allocated bandwidth. Lower values means we can send less queries, and therefore the overall querying is slowed down (meaning the total querying will take longer) because each query is sent to <em>one</em> GUESS ultrapeer.
-</p>
-
-
-<div class="glossary_term">Bootstrap</div>
-
-<p>
-	The process of joining the Gnutella network by discovering peers is called bootstrapping. More informations <a href="?page=bootstrap">here</a>.
-</p>
-
-
-<div class="glossary_term">Bucket (of a routing table)</div>
-
-<p>
-	A <em>bucket</em> is a portion of the node ID space covered by the routing table. Each bucket can only hold K nodes, currently eight, before becoming &quot;full&quot;. When a bucket is full of known good nodes, no more nodes may be added unless our own node ID falls within the range of the bucket. In that case, the bucket is replaced by two new buckets each with half the range of the old bucket and the nodes from the old bucket are distributed among the two new ones. This is called &quot;bucket SPLIT&quot;. The opposite operation involving buckets is called MERGE.<br /> Every node maintains a routing table of known good nodes. The nodes in the routing table are used as starting points for queries in the DHT. Nodes from the routing table are returned in response to queries from other nodes. It is important that each node's routing table must contain only known good nodes. A good node is a node has responded to one of our queries within the last 15 minutes. A node is also good if it has ever responded to one of our queries and has sent us a query within the last 15 minutes. After 15 minutes of inactivity, a node becomes questionable. Nodes become bad when they fail to respond to multiple queries in a row. Nodes that we know are good are given priority over nodes with unknown status.<br />
-	
-	The above informations have been readapted from  <a href="http://www.bittorrent.org/beps/bep_0005.html" target="_blank">BitTorrent DHT protocol</a> where more details can be found. 
-</p>
-
-
-<div class="glossary_term">Bye</div>
-
-<p>
-	This is an optional message used to inform the remote host that the connection is being closed
-	and the reason for doing so.
-</p>
-
-
-<div class="glossary_capital">D</div>
-
-<div class="glossary_term">Descriptor</div>
-
-<p>
-	The entity in which information is transmitted over the network. Same as <em>message</em>.
-</p>
-
-<div class="glossary_term">DHT</div>
-
-<p>
-	Distributed Hash Table (DHT) is a <em>hash table</em> distributed among Gnutella network nodes. Gtk-Gnutella uses an implementation of Kademlia for its DHT. Kademlia is also used for other p2p networks (such as eDonkey) but storing different keys and values, therere preventing inter-operability between DHT of different p2p networks. In Gnutella, DHT is used for exact lookups, alternate locations, push-proxies, etc. but not for keywords search. Operations such as <em>lookup, publish, store, etc.</em> are typically performed in a DHT whose nodes can be either active or passive.
-</p>
-
-
-<div class="glossary_capital">E</div>
-
-<div class="glossary_term">EAR</div>
-
-<p>
-	<em>EAR</em> stands for &quot;Extra Acknowledgement Request&quot;.
-</p>
-
-
-<div class="glossary_capital">F</div>
-
-<div class="glossary_term">Flow Control (FC) mode</div>
-
-<p>
-	Servents pile outgoing packets in a queue where they are broadcasted in a first-in-first-out (FIFO) mode. If outgoing bandwidth is small and many packets need to be broadcasted, the queue gets overloaded and the servent enters in <em>Flow Control (FC) mode</em>. While in FC mode all incoming queries on the connection are dropped. Of course servents should avoid entering FC mode by being granted more bandwidth or reducing the number of connected nodes.
-</p>
-
-<div class="glossary_term">Flooding</div>
-
-<p>
-	<em>Flooding</em> is a simple but inefficient P2P routing algorithm which sends messages to all the connected nodes in order
-	to reach destination. The flooding algorithm have been replaced by the more efficient <em>GUESS</em> algorithm.
-</p>
-
-
-<div class="glossary_capital">G</div>
-
-<div class="glossary_term">G2 Hub</div>
-
-<p>
-	G2 Hubs in Gnutella2 network are equivalent to Ultrapeers in GnutellaNet. 
-	GTK-Gnutella usually connects to 2 G2 Hubs behaving as a leaf node on Gnutella2 network.
-</p>
-
-<div class="glossary_term">GGEP</div>
-
-<p>
-	Gnutella Generic Extension Protocol (GGEP) includes new functions added to the original Gnutella 0.4 protocol: more informations <a href="http://rfc-gnutella.sourceforge.net/src/GnutellaGenericExtensionProtocol.0.51.html" target="_blank">here</a>.
-</p>
-
-
-<div class="glossary_term">GIV</div>
-
-<p>
-	<em>GIV</em> is the message sent by the servent that is going to send a file in response to a request.
-</p>
-
-<div class="glossary_term">GnutellaNet</div>
-
-<p>
-	The GnutellaNet (or &quot;Gnutella&quot; in short) is an <em>overlay</em> network. This means it is a network that sits on top of the normal internet. 
-	GnutellaNet is <em>unstructured</em>. This just means that no particular computer or group of computers controls
-	GnutellaNet; it is probably more democratic than most governments.
-</p>
-<p>
-	As the GnutellaNet is an overlay network, it doesn't have to pay
-	attention to geography. It is likely that you will connect to
-	computers in other countries. Things might be faster if this was not
-	the case. However, they may also be more resilient in the current form.
-</p>
-
-<div class="glossary_term">GUESS (Gnutella UDP Extension for Scalable Searches)</div>
-
-<p>
-	As opposed to <em>flooding</em> algorithm, with GUESS routing nodes are queried one at a time. Each node must keep a
-	cache of known and trusted peers able to accept queries and the nodes are picked up randomly. This routing method is
-	considered more efficient and safe compared to flooding.
-</p>
-
-<div class="glossary_term">GUID (Global Unique IDentifier)</div>
-
-<p>
-	This is a 16-byte long value made of random bytes, whose purpose it is to identify servents and messages. This identification is not a signature, just a way to identify network entities in a unique manner.
-</p>
-
-
-<div class="glossary_capital">H</div>
-
-<div class="glossary_term">HSEP</div>
-
-<p>
-	The Horizon Size Estimation Protocol (HSEP) refers to the estimation of the number of reachable resources within the Gnutella network, e.g. the number of reachable Gnutella nodes, shared files and shared kibibytes. More informations <a href="http://www.schuerger.com/gnutella/hsep.html" target="_blank">here</a>.
-</p>
-
-
-<div class="glossary_capital">L</div>
-
-<div class="glossary_term">Leaf node</div>
-
-<p>
-	A leaf is the basic connection to the GnutellaNet. A leaf typically connects to three or four ultrapeers.
-	The ultrapeers route searches and keep their leaves connected to the GnutellaNet.
-</p>
-
-
-<div class="glossary_capital">M</div>
-
-<div class="glossary_term">Message</div>
-
-<p>
-	<em>Messages</em> are the entity in which information is transmitted over the network. Synonyms are <em>packet</em> and
-	<em>descriptor</em>.
-</p>
-
-<div class="glossary_term">MUID (Messages Unique IDentifier)</div>
-
-<p>
-	A <em>GUID</em> for network messages.
-</p>
-
-
-<div class="glossary_capital">P</div>
-
-<div class="glossary_term">PARQ (Passive/Active Remote Queuing)</div>
-<p>
-	When a servent asks for a file hosted by a servent having no free upload slots, the request enters a remote queue on the
-	hosting sevent. This remote queue is handled by <em>PARQ</em>.
-</p>
-
-<div class="glossary_term">Ping</div>
-
-<p>
-	A <em>Ping</em> is a message sent by a servent trying to actively discover hosts on the network.
-	A servent receiving a Ping message is expected to respond with one or more Pong messages.
-</p>
-
-<div class="glossary_term">Pong</div>
-
-<p>
-	A <em>Pong</em> is the response message to a Ping. It includes the address of a connected Gnutella servent, the listening port of
-   that servent, and information regarding the amount of data it is making available to the network.
-</p>
-
-<div class="glossary_term">Push</div>
-
-<p>
-	This is a mechanism that allows a firewalled servent to contribute file-based data to the network. For example a servent may send
-	a Push message if it receives a QueryHit message from a servent that doesn't support incoming connections. This might occur when
-	the servent sending the QueryHit message is behind a firewall.
-</p>
-
-<div class="glossary_term">Push-proxy</div>
-
-<p>
-	A <em>push-proxy</em> is a relaying node. If an ultrapeer is connected to the firewalled leaf, in order to send a <em>push</em>
-	to that firewalled leaf, a servent can send an UDP message to the ultrapeer who will then relay it to the leaf. So the ultrapeer
-	acts as the push-proxy: it is the relaying target to reach the leaf.
-</p>
-
-
-<div class="glossary_capital">Q</div>
-
-<div class="glossary_term">QRP</div>
-
-<p>
-	Query Routing Protocol (QRP) is a scheme for avoiding broadcast queries on the Gnutella network. In this scheme, hosts create query route tables by hashing file keywords and regularly exchange them with their neighbors. Standard compression techniques minimize the cost of exchanging tables. This scheme can dramatically reduce Gnutella's bandwidth requirements improving scalability and leaving more bandwidth for files exchange.
-</p>
-
-<div class="glossary_term">Query</div>
-
-<p>
-	Sending a <em>Query</em> is the primary mechanism for searching the distributed network.
-	A servent receiving a Query message will respond with a QueryHit if a match is found against its local data set.
-</p>
-
-<div class="glossary_term">QueryHit</div>
-
-<p>
-	A <em>QueryHit</em> is the response to a Query. This message provides the recipient with enough information to acquire the data
-	matching the corresponding Query.
-</p>
-
-
-<div class="glossary_capital">R</div>
-
-<div class="glossary_term">RUDP</div>
-
-<p>
-	The Reliable UDP (RUDP) protocol provides NAT-to-NAT transfers, sometimes called Firewall-to-Firewall or &quot;hole-punching&quot;, in those cases where port-forwarding is not or cannot be done by the user.
-</p>
-
-
-<div class="glossary_term">RX</div>
-
-<p>
-	RX stands for <em>Reception</em>, opposite of <em>Transmission</em>.
-</p>
-
-
-<div class="glossary_capital">S</div>
-
-<div class="glossary_term">search literals</div>
-
-<p>
-	Double and single quotes can be used so that an entire search term
-	will be matched instead of individual words.  Quoting maybe necessary
-	if you wish to search for a phrase with special characters such as the
-	plus and minus signs (see &quot;search requireds&quot;).
-</p>
-
-<div class="glossary_term">search prefixes</div>
-
-<ol>
-<li>
-	browse: List shared files on the specified host. The format is "browse:<em>ip_address:port</em>".
-	Many portions of the GUI have a menu option, available from a right
-	click, that will browser the specified computer.
-</li>
-<li>
-	http: Download the specified web page. This could be a zip file, a movie, large JPEG, etc.
-</li>
-<li>
-	local: Search results from the local host. Ie, your computer. A
-     regular expression may follow to filter the results. For
-     example, "local:manual" will show all files you share with
-     manual in the file name.
-</li>
-<li>
-	magnet: Search and download the magnet target.
-</li>
-<li>
-	push: The format of this search is "push:<em>guid:ip_address:port/path_to_file</em>".
-	The <em>guid</em> is the Gnutella ID of the computer that has the file of interest.
-	The <em>ip:port</em> is the push proxy that the <em>guid</em> is connected to. 
-	Typically this would be an ultrapeer that will allow a proxy download. 
-	The <em>guid</em> is a 32 hexadecimal characters.
-</li>
-<li>
-	sha1: A base64 SHA value to search for. It is not automatically downloaded.
-</li>
-<li>
-	urn: Similar to a sha1 search, but the hash value is specified. Ie, urn:sha1:<em>hash value</em>
-</li>
-</ol>
-
-<div class="glossary_term">search requireds</div>
-
-<p>
-	Mini filters are created with the '+' and '-' signs. The plus sign
-	requires that a word is part of the results. The minus sign doesn't
-	display any results with the given phrase. The plus and minus signs
-	can be used to select ambigious terms.
-</p>
-<p>
-	Suppose you wish to find information about apples. You might use a search like <em>apples -computers</em>. 
-	You may get even more relevant results by using <em>apples +fruit</em>.
-</p>
-
-<div class="glossary_term">Servent</div>
-
-<p>
-	&quot;Servent&quot; word derives from the fusion of server+client. A node in a P2P network is called <em>servent</em> because of the dual nature of both server and client. 
-</p>
-
-
-<div class="glossary_term">SOAP</div>
-
-<p>
-	Simple Object Access Protocol (SOAP) is a lightweight XML-based protocol for exchange of information in a decentralized, distributed environment like P2P networks. More informations <a href="https://www.w3.org/TR/2000/NOTE-SOAP-20000508/" target="_blank">here</a>.
-</p>
-
-
-<div class="glossary_capital">T</div>
-
-<div class="glossary_term">THEX</div>
-
-<p>
-	The Tree Hash EXchange (THEX) format is used for exchanging Merkle Hash Trees built up from the subrange hashes of discrete digital files. More informations <a href="http://adc.sourceforge.net/draft-jchapweske-thex-02.html" target="_blank">here</a>.
-</p>
-
-
-<div class="glossary_term">Time-To-Live (TTL)</div>
-
-<p>
-	TTL is the number of times a message will be forwarded by Gnutella servents before it is removed from the network.
-	Each servent will decrement the TTL value before passing it on to another servent.
-	When the TTL value reaches 0, the message will no longer be forwarded to avoid eccessive network traffic.
-</p>
-
-
-<div class="glossary_term">TX</div>
-
-<p>
-	TX stands for <em>Transmission</em>.
-</p>
-
-
-<div class="glossary_capital">U</div>
-
-<div class="glossary_term">Ultrapeer (UP)</div>
-
-<p>
-	An ultrapeer is well connected to the GnutellaNet.
-	As ultrapeers must have many connections and route search queries,
-	they require more resources than a leaf node. Ultrapeers will
-	typically be connected to 30+ other ultrapeers and connected to 70+ leaf nodes.
-</p>
-
-
-<div class="glossary_capital">V</div>
-
-<div class="glossary_term">Vendor Code</div>
-
-<p>
-	The Vendor Code is a conventional 4-letter code used in Query Hits to identify the software running the node that generated the hit. For gtk-gnutella the Vendor Code is <em>GTKG</em>.
-</p>
-
-<!-- end of glossary -->
-<!-- content footer -->
-<!-- $Id$ -->
-</div>
-<!-- end cfooter -->
-
+      <!-- end sponsors -->
+
+      <!-- content header -->
+      <!-- $Id$ -->
+      <div class="boxed">
+        <!-- end cheader -->
+        <!-- $Id$ -->
+
+        <h1>Glossary</h1>
+
+        <p>
+          This glossary derives from the old
+          <a href="/manual/">Online Manual</a>. More terms are being included.
+          Some definitions derive from the
+          <a
+            href="http://rfc-gnutella.sourceforge.net/src/rfc-0_6-draft.html"
+            target="_blank"
+          >
+            Gnutella Protocol Development draft</a
+          >.
+        </p>
+
+        <div class="glossary_capital">B</div>
+
+        <div class="glossary_term">
+          Bandwidth <em>hint</em> for GUESS querying
+        </div>
+
+        <p>
+          This is termes <em>bandwidth hint</em> because GUESS uses UDP and
+          cannot fraction large messages to emit just a few bytes. Therefore,
+          the bandwidth is just a hint because it can be exceeded if a set of
+          queries need to be made and their total amount exceeds the allocated
+          bandwidth. Lower values means we can send less queries, and therefore
+          the overall querying is slowed down (meaning the total querying will
+          take longer) because each query is sent to <em>one</em> GUESS
+          ultrapeer.
+        </p>
+
+        <div class="glossary_term">Bootstrap</div>
+
+        <p>
+          The process of joining the Gnutella network by discovering peers is
+          called bootstrapping. More informations
+          <a href="?page=bootstrap">here</a>.
+        </p>
+
+        <div class="glossary_term">Bucket (of a routing table)</div>
+
+        <p>
+          A <em>bucket</em> is a portion of the node ID space covered by the
+          routing table. Each bucket can only hold K nodes, currently eight,
+          before becoming &quot;full&quot;. When a bucket is full of known good
+          nodes, no more nodes may be added unless our own node ID falls within
+          the range of the bucket. In that case, the bucket is replaced by two
+          new buckets each with half the range of the old bucket and the nodes
+          from the old bucket are distributed among the two new ones. This is
+          called &quot;bucket SPLIT&quot;. The opposite operation involving
+          buckets is called MERGE.<br />
+          Every node maintains a routing table of known good nodes. The nodes in
+          the routing table are used as starting points for queries in the DHT.
+          Nodes from the routing table are returned in response to queries from
+          other nodes. It is important that each node's routing table must
+          contain only known good nodes. A good node is a node has responded to
+          one of our queries within the last 15 minutes. A node is also good if
+          it has ever responded to one of our queries and has sent us a query
+          within the last 15 minutes. After 15 minutes of inactivity, a node
+          becomes questionable. Nodes become bad when they fail to respond to
+          multiple queries in a row. Nodes that we know are good are given
+          priority over nodes with unknown status.<br />
+
+          The above informations have been readapted from
+          <a href="http://www.bittorrent.org/beps/bep_0005.html" target="_blank"
+            >BitTorrent DHT protocol</a
+          >
+          where more details can be found.
+        </p>
+
+        <div class="glossary_term">Bye</div>
+
+        <p>
+          This is an optional message used to inform the remote host that the
+          connection is being closed and the reason for doing so.
+        </p>
+
+        <div class="glossary_capital">D</div>
+
+        <div class="glossary_term">Descriptor</div>
+
+        <p>
+          The entity in which information is transmitted over the network. Same
+          as <em>message</em>.
+        </p>
+
+        <div class="glossary_term">DHT</div>
+
+        <p>
+          Distributed Hash Table (DHT) is a <em>hash table</em> distributed
+          among Gnutella network nodes. Gtk-Gnutella uses an implementation of
+          Kademlia for its DHT. Kademlia is also used for other p2p networks
+          (such as eDonkey) but storing different keys and values, therere
+          preventing inter-operability between DHT of different p2p networks. In
+          Gnutella, DHT is used for exact lookups, alternate locations,
+          push-proxies, etc. but not for keywords search. Operations such as
+          <em>lookup, publish, store, etc.</em> are typically performed in a DHT
+          whose nodes can be either active or passive.
+        </p>
+
+        <div class="glossary_capital">E</div>
+
+        <div class="glossary_term">EAR</div>
+
+        <p>
+          <em>EAR</em> stands for &quot;Extra Acknowledgement Request&quot;.
+        </p>
+
+        <div class="glossary_capital">F</div>
+
+        <div class="glossary_term">Flow Control (FC) mode</div>
+
+        <p>
+          Servents pile outgoing packets in a queue where they are broadcasted
+          in a first-in-first-out (FIFO) mode. If outgoing bandwidth is small
+          and many packets need to be broadcasted, the queue gets overloaded and
+          the servent enters in <em>Flow Control (FC) mode</em>. While in FC
+          mode all incoming queries on the connection are dropped. Of course
+          servents should avoid entering FC mode by being granted more bandwidth
+          or reducing the number of connected nodes.
+        </p>
+
+        <div class="glossary_term">Flooding</div>
+
+        <p>
+          <em>Flooding</em> is a simple but inefficient P2P routing algorithm
+          which sends messages to all the connected nodes in order to reach
+          destination. The flooding algorithm have been replaced by the more
+          efficient <em>GUESS</em> algorithm.
+        </p>
+
+        <div class="glossary_capital">G</div>
+
+        <div class="glossary_term">G2 Hub</div>
+
+        <p>
+          G2 Hubs in Gnutella2 network are equivalent to Ultrapeers in
+          GnutellaNet. GTK-Gnutella usually connects to 2 G2 Hubs behaving as a
+          leaf node on Gnutella2 network.
+        </p>
+
+        <div class="glossary_term">GGEP</div>
+
+        <p>
+          Gnutella Generic Extension Protocol (GGEP) includes new functions
+          added to the original Gnutella 0.4 protocol: more informations
+          <a
+            href="http://rfc-gnutella.sourceforge.net/src/GnutellaGenericExtensionProtocol.0.51.html"
+            target="_blank"
+            >here</a
+          >.
+        </p>
+
+        <div class="glossary_term">GIV</div>
+
+        <p>
+          <em>GIV</em> is the message sent by the servent that is going to send
+          a file in response to a request.
+        </p>
+
+        <div class="glossary_term">GnutellaNet</div>
+
+        <p>
+          The GnutellaNet (or &quot;Gnutella&quot; in short) is an
+          <em>overlay</em> network. This means it is a network that sits on top
+          of the normal internet. GnutellaNet is <em>unstructured</em>. This
+          just means that no particular computer or group of computers controls
+          GnutellaNet; it is probably more democratic than most governments.
+        </p>
+        <p>
+          As the GnutellaNet is an overlay network, it doesn't have to pay
+          attention to geography. It is likely that you will connect to
+          computers in other countries. Things might be faster if this was not
+          the case. However, they may also be more resilient in the current
+          form.
+        </p>
+
+        <div class="glossary_term">
+          GUESS (Gnutella UDP Extension for Scalable Searches)
+        </div>
+
+        <p>
+          As opposed to <em>flooding</em> algorithm, with GUESS routing nodes
+          are queried one at a time. Each node must keep a cache of known and
+          trusted peers able to accept queries and the nodes are picked up
+          randomly. This routing method is considered more efficient and safe
+          compared to flooding.
+        </p>
+
+        <div class="glossary_term">GUID (Global Unique IDentifier)</div>
+
+        <p>
+          This is a 16-byte long value made of random bytes, whose purpose it is
+          to identify servents and messages. This identification is not a
+          signature, just a way to identify network entities in a unique manner.
+        </p>
+
+        <div class="glossary_capital">H</div>
+
+        <div class="glossary_term">HSEP</div>
+
+        <p>
+          The Horizon Size Estimation Protocol (HSEP) refers to the estimation
+          of the number of reachable resources within the Gnutella network, e.g.
+          the number of reachable Gnutella nodes, shared files and shared
+          kibibytes. More informations
+          <a href="http://www.schuerger.com/gnutella/hsep.html" target="_blank"
+            >here</a
+          >.
+        </p>
+
+        <div class="glossary_capital">L</div>
+
+        <div class="glossary_term">Leaf node</div>
+
+        <p>
+          A leaf is the basic connection to the GnutellaNet. A leaf typically
+          connects to three or four ultrapeers. The ultrapeers route searches
+          and keep their leaves connected to the GnutellaNet.
+        </p>
+
+        <div class="glossary_capital">M</div>
+
+        <div class="glossary_term">Message</div>
+
+        <p>
+          <em>Messages</em> are the entity in which information is transmitted
+          over the network. Synonyms are <em>packet</em> and
+          <em>descriptor</em>.
+        </p>
+
+        <div class="glossary_term">MUID (Messages Unique IDentifier)</div>
+
+        <p>A <em>GUID</em> for network messages.</p>
+
+        <div class="glossary_capital">P</div>
+
+        <div class="glossary_term">PARQ (Passive/Active Remote Queuing)</div>
+        <p>
+          When a servent asks for a file hosted by a servent having no free
+          upload slots, the request enters a remote queue on the hosting sevent.
+          This remote queue is handled by <em>PARQ</em>.
+        </p>
+
+        <div class="glossary_term">Ping</div>
+
+        <p>
+          A <em>Ping</em> is a message sent by a servent trying to actively
+          discover hosts on the network. A servent receiving a Ping message is
+          expected to respond with one or more Pong messages.
+        </p>
+
+        <div class="glossary_term">Pong</div>
+
+        <p>
+          A <em>Pong</em> is the response message to a Ping. It includes the
+          address of a connected Gnutella servent, the listening port of that
+          servent, and information regarding the amount of data it is making
+          available to the network.
+        </p>
+
+        <div class="glossary_term">Push</div>
+
+        <p>
+          This is a mechanism that allows a firewalled servent to contribute
+          file-based data to the network. For example a servent may send a Push
+          message if it receives a QueryHit message from a servent that doesn't
+          support incoming connections. This might occur when the servent
+          sending the QueryHit message is behind a firewall.
+        </p>
+
+        <div class="glossary_term">Push-proxy</div>
+
+        <p>
+          A <em>push-proxy</em> is a relaying node. If an ultrapeer is connected
+          to the firewalled leaf, in order to send a <em>push</em>
+          to that firewalled leaf, a servent can send an UDP message to the
+          ultrapeer who will then relay it to the leaf. So the ultrapeer acts as
+          the push-proxy: it is the relaying target to reach the leaf.
+        </p>
+
+        <div class="glossary_capital">Q</div>
+
+        <div class="glossary_term">QRP</div>
+
+        <p>
+          Query Routing Protocol (QRP) is a scheme for avoiding broadcast
+          queries on the Gnutella network. In this scheme, hosts create query
+          route tables by hashing file keywords and regularly exchange them with
+          their neighbors. Standard compression techniques minimize the cost of
+          exchanging tables. This scheme can dramatically reduce Gnutella's
+          bandwidth requirements improving scalability and leaving more
+          bandwidth for files exchange.
+        </p>
+
+        <div class="glossary_term">Query</div>
+
+        <p>
+          Sending a <em>Query</em> is the primary mechanism for searching the
+          distributed network. A servent receiving a Query message will respond
+          with a QueryHit if a match is found against its local data set.
+        </p>
+
+        <div class="glossary_term">QueryHit</div>
+
+        <p>
+          A <em>QueryHit</em> is the response to a Query. This message provides
+          the recipient with enough information to acquire the data matching the
+          corresponding Query.
+        </p>
+
+        <div class="glossary_capital">R</div>
+
+        <div class="glossary_term">RUDP</div>
+
+        <p>
+          The Reliable UDP (RUDP) protocol provides NAT-to-NAT transfers,
+          sometimes called Firewall-to-Firewall or &quot;hole-punching&quot;, in
+          those cases where port-forwarding is not or cannot be done by the
+          user.
+        </p>
+
+        <div class="glossary_term">RX</div>
+
+        <p>
+          RX stands for <em>Reception</em>, opposite of <em>Transmission</em>.
+        </p>
+
+        <div class="glossary_capital">S</div>
+
+        <div class="glossary_term">search literals</div>
+
+        <p>
+          Double and single quotes can be used so that an entire search term
+          will be matched instead of individual words. Quoting maybe necessary
+          if you wish to search for a phrase with special characters such as the
+          plus and minus signs (see &quot;search requireds&quot;).
+        </p>
+
+        <div class="glossary_term">search prefixes</div>
+
+        <ol>
+          <li>
+            browse: List shared files on the specified host. The format is
+            "browse:<em>ip_address:port</em>". Many portions of the GUI have a
+            menu option, available from a right click, that will browser the
+            specified computer.
+          </li>
+          <li>
+            http: Download the specified web page. This could be a zip file, a
+            movie, large JPEG, etc.
+          </li>
+          <li>
+            local: Search results from the local host. Ie, your computer. A
+            regular expression may follow to filter the results. For example,
+            "local:manual" will show all files you share with manual in the file
+            name.
+          </li>
+          <li>magnet: Search and download the magnet target.</li>
+          <li>
+            push: The format of this search is
+            "push:<em>guid:ip_address:port/path_to_file</em>". The
+            <em>guid</em> is the Gnutella ID of the computer that has the file
+            of interest. The <em>ip:port</em> is the push proxy that the
+            <em>guid</em> is connected to. Typically this would be an ultrapeer
+            that will allow a proxy download. The <em>guid</em> is a 32
+            hexadecimal characters.
+          </li>
+          <li>
+            sha1: A base64 SHA value to search for. It is not automatically
+            downloaded.
+          </li>
+          <li>
+            urn: Similar to a sha1 search, but the hash value is specified. Ie,
+            urn:sha1:<em>hash value</em>
+          </li>
+        </ol>
+
+        <div class="glossary_term">search requireds</div>
+
+        <p>
+          Mini filters are created with the '+' and '-' signs. The plus sign
+          requires that a word is part of the results. The minus sign doesn't
+          display any results with the given phrase. The plus and minus signs
+          can be used to select ambigious terms.
+        </p>
+        <p>
+          Suppose you wish to find information about apples. You might use a
+          search like <em>apples -computers</em>. You may get even more relevant
+          results by using <em>apples +fruit</em>.
+        </p>
+
+        <div class="glossary_term">Servent</div>
+
+        <p>
+          &quot;Servent&quot; word derives from the fusion of server+client. A
+          node in a P2P network is called <em>servent</em> because of the dual
+          nature of both server and client.
+        </p>
+
+        <div class="glossary_term">SOAP</div>
+
+        <p>
+          Simple Object Access Protocol (SOAP) is a lightweight XML-based
+          protocol for exchange of information in a decentralized, distributed
+          environment like P2P networks. More informations
+          <a
+            href="https://www.w3.org/TR/2000/NOTE-SOAP-20000508/"
+            target="_blank"
+            >here</a
+          >.
+        </p>
+
+        <div class="glossary_capital">T</div>
+
+        <div class="glossary_term">THEX</div>
+
+        <p>
+          The Tree Hash EXchange (THEX) format is used for exchanging Merkle
+          Hash Trees built up from the subrange hashes of discrete digital
+          files. More informations
+          <a
+            href="http://adc.sourceforge.net/draft-jchapweske-thex-02.html"
+            target="_blank"
+            >here</a
+          >.
+        </p>
+
+        <div class="glossary_term">Time-To-Live (TTL)</div>
+
+        <p>
+          TTL is the number of times a message will be forwarded by Gnutella
+          servents before it is removed from the network. Each servent will
+          decrement the TTL value before passing it on to another servent. When
+          the TTL value reaches 0, the message will no longer be forwarded to
+          avoid eccessive network traffic.
+        </p>
+
+        <div class="glossary_term">TX</div>
+
+        <p>TX stands for <em>Transmission</em>.</p>
+
+        <div class="glossary_capital">U</div>
+
+        <div class="glossary_term">Ultrapeer (UP)</div>
+
+        <p>
+          An ultrapeer is well connected to the GnutellaNet. As ultrapeers must
+          have many connections and route search queries, they require more
+          resources than a leaf node. Ultrapeers will typically be connected to
+          30+ other ultrapeers and connected to 70+ leaf nodes.
+        </p>
+
+        <div class="glossary_capital">V</div>
+
+        <div class="glossary_term">Vendor Code</div>
+
+        <p>
+          The Vendor Code is a conventional 4-letter code used in Query Hits to
+          identify the software running the node that generated the hit. For
+          gtk-gnutella the Vendor Code is <em>GTKG</em>.
+        </p>
+
+        <!-- end of glossary -->
+        <!-- content footer -->
+        <!-- $Id$ -->
+      </div>
+      <!-- end cfooter -->
     </div>
 
-<hr class="hidden">
+    <hr class="hidden" />
 
-<div class="boxed" style="text-align: center">
+    <div class="boxed" style="text-align: center">
+      <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
+        <img
+          src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-users-love-us-white"
+          alt="Users Love Us"
+          width="125"
+      /></a>
 
-    <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
-      <img src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-users-love-us-white"
-      alt="Users Love Us" width="125"></a>
+      <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
+        <img
+          src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-community-choice-white"
+          alt="Community Choice"
+          width="125"
+      /></a>
 
-    <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
-      <img src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-community-choice-white"
-      alt="Community Choice" width="125"></a>
+      <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
+        <img
+          src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-sf-favorite-white"
+          alt="SF Favourite"
+          width="125"
+      /></a>
 
-    <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
-      <img src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-sf-favorite-white"
-      alt="SF Favourite" width="125"></a>
+      <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
+        <img
+          src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-community-leader-white"
+          alt="Community Leader"
+          width="125"
+      /></a>
 
-    <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
-      <img src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-community-leader-white"
-      alt="Community Leader" width="125"></a>
+      <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
+        <img
+          src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-open-source-excellence-white"
+          alt="Open Source Excellence"
+          width="125"
+      /></a>
 
-    <a class="image" href="https://sourceforge.net/projects/gtk-gnutella/">
-      <img src="https://sourceforge.net/cdn/syndication/badge_img/4467/oss-open-source-excellence-white"
-      alt="Open Source Excellence" width="125"></a>
+      <a class="image" href="https://sourceforge.net">
+        <img
+          src="https://sourceforge.net/sflogo.php?group_id=4467&amp;type=1"
+          alt="SourceForge.net Logo"
+          width="88"
+          height="31"
+      /></a>
 
-    <a class="image" href="https://sourceforge.net">
-      <img src="https://sourceforge.net/sflogo.php?group_id=4467&amp;type=1"
-      alt="SourceForge.net Logo" width="88" height="31"></a>
+      <a
+        class="image"
+        href="http://sourceforge.net/export/rss2_projfiles.php?group_id=4467"
+        ><img
+          src="/images/feed-icon-28x28.png"
+          alt="RSS Feed Available"
+          title="RSS Feed Available"
+      /></a>
 
- 	<a class="image"
-		href="http://sourceforge.net/export/rss2_projfiles.php?group_id=4467"><img
-		src="/images/feed-icon-28x28.png"
-		alt="RSS Feed Available"
-		title="RSS Feed Available"></a>
+      <a class="image" href="https://www.openhub.net/p/gtk-gnutella"
+        >Open Hub metrics</a
+      >
 
-	<a class="image"
-		href="https://www.openhub.net/p/gtk-gnutella">Open Hub metrics</a>
+      <a class="image" href="https://scan.coverity.com/projects/2178"
+        ><img
+          alt="Coverity Scan Build Status"
+          width="95"
+          height="18"
+          src="https://scan.coverity.com/projects/2178/badge.svg"
+      /></a>
 
-	<a class="image"
-		href="https://scan.coverity.com/projects/2178"><img
-		alt="Coverity Scan Build Status"
-	  	width="95" height="18"
-		src="https://scan.coverity.com/projects/2178/badge.svg"></a>
+      <a class="image" href="https://github.com/gtk-gnutella/gtk-gnutella"
+        ><img
+          alt="gtk-gnutella at GitHub"
+          width="32"
+          height="32"
+          src="/images/GitHub-Mark-32px.png"
+      /></a>
 
-	<a class="image"
-		href="https://github.com/gtk-gnutella/gtk-gnutella"><img
-		alt="gtk-gnutella at GitHub"
-	  	width="32" height="32"
-		src="/images/GitHub-Mark-32px.png"></a>
-
-   <div style="text-align: center;">
-	<!-- $Id$ -->
-gtk-gnutella &copy;&nbsp;2000-2014 by Yann Grossel, Rapha&euml;l Manfredi and various contributors.
-	</div>
-
-</div>
-
+      <div style="text-align: center">
+        <!-- $Id$ -->
+        gtk-gnutella &copy;&nbsp;2000-2014 by Yann Grossel, Rapha&euml;l
+        Manfredi and various contributors.
+      </div>
+    </div>
   </body>
 </html>
-
