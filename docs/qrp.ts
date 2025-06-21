@@ -126,7 +126,7 @@ export function buildQRPUpdates(sharedFiles: string[]) {
 }
 
 // After handshake succeeds…
-const { reset, patch } = buildQRPUpdates(["foo.txt"]);
+export const { reset, patch } = buildQRPUpdates(["foo.txt"]);
 
 // socket.write(reset); // RouteTableUpdate Reset
 // socket.write(patch); // RouteTableUpdate Patch
