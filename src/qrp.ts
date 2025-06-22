@@ -2,7 +2,7 @@ import { deflate } from "zlib";
 import { promisify } from "util";
 import { hashWithBits } from "../DO_NOT_DELETE_OR_EDIT";
 import { MESSAGE_TYPES } from "./const";
-import { buildHeader } from "./util";
+import { buildHeader, generateSHA1 } from "./util";
 
 const deflateAsync = promisify(deflate);
 
@@ -11,6 +11,7 @@ export interface FakeFile {
   size: number;
   index: number;
   keywords: string[];
+  sha1: Buffer;
 }
 
 export interface QRPTable {
@@ -51,7 +52,9 @@ export class QRPManager {
 
   addFakeFile(filename: string, size: number, keywords: string[]): number {
     const index = this.fileCounter++;
-    const fakeFile: FakeFile = { filename, size, index, keywords };
+    // Generate SHA1 hash based on filename (deterministic for testing)
+    const sha1 = generateSHA1(filename);
+    const fakeFile: FakeFile = { filename, size, index, keywords, sha1 };
     this.fakeFiles.set(index, fakeFile);
     
     // Add keywords to route table with distance 1

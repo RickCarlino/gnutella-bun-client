@@ -110,6 +110,7 @@ async function main() {
               index: f.index,
               size: f.size,
               filename: f.filename,
+              sha1: f.sha1,
             }));
 
             const queryHit = buildQueryHit(

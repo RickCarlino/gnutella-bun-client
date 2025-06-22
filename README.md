@@ -23,27 +23,20 @@ bun main.ts
 This will:
 
 - Automatically discover and store peers from GWebCaches
-- Start a server listening on port 6346
-- Push your IP to all known GWebCaches
+- Start a leaf node listening for inbound connections on port 6346
 - Accept incoming Gnutella connections
-- Periodically update caches and discover new peers
 
 ## Limitations
 
  * Leaf only - This node does not have ultra peer capabilities
- * Sharing WIP - The client follows the QRP spec and is able to properly handle inbound queries. The client currently only shares hardcoded fake files for the sake of testing.
-
-## A Note About Protocol Extensions
-
-It is nearly impossible to connect to a Gnutella peer in 2025 without a client that supports "Query Routing Protocol" and "Compressed Connections". If you run GTK-Gnutella locally, you can turn compression off (on by default) and peer with `localhost` for testing. Enable LAN connections, run `bun main.ts` and manually add `127.0.0.1:6346`
-
-Although this is mostly complete, I don't think it is usable as a real gnutella client without these additions since it will be difficult to find peers without these extensions.
+ * Sharing WIP - The client has the ability to offer files and respond to query hits (QRP support and all!) but there is no way to actually send the file to a requester yet.
 
 ## TODO
 
-- Attach SHA1 checksums to QUERY HIT messages. By default, many clients discard non-SHA1 results.
 - Ability to share a directory
 - Re-add outbound peering (disabled during QRP debugging)
+- Push IP to all known GWebCaches
+- Periodically update caches and discover new peers
 
 ### GWebCache Server
 

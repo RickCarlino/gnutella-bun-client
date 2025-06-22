@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { createInflate, createDeflate } from "zlib";
 import * as net from "net";
 import { MESSAGE_TYPES } from "./const";
@@ -381,12 +381,49 @@ export async function getPublicIp(): Promise<string> {
   const response = await fetch("https://wtfismyip.com/text");
   return (await response.text()).trim();
 }
+
+// SHA1 utilities
+export function generateSHA1(data: string | Buffer): Buffer {
+  return createHash("sha1").update(data).digest();
+}
+
+export function sha1ToBase32(sha1: Buffer): string {
+  const base32Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let result = "";
+  let bits = 0;
+  let value = 0;
+
+  for (let i = 0; i < sha1.length; i++) {
+    value = (value << 8) | sha1[i];
+    bits += 8;
+
+    while (bits >= 5) {
+      result += base32Chars[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+
+  if (bits > 0) {
+    result += base32Chars[(value << (5 - bits)) & 31];
+  }
+
+  // Pad to 32 characters for SHA1
+  while (result.length < 32) {
+    result += "=";
+  }
+
+  return result;
+}
+
+export function sha1ToUrn(sha1: Buffer): string {
+  return `urn:sha1:${sha1ToBase32(sha1)}`;
+}
 // spec-compliant QUERY HITS builder ------------------------------------------
 export function buildQueryHit(
   queryId: Buffer,
   port: number,
   ip: string,
-  files: Array<{ index: number; size: number; filename: string }>,
+  files: Array<{ index: number; size: number; filename: string; sha1?: Buffer }>,
   serventId: Buffer
 ): Buffer {
   // --- payload size ---------------------------------------------------------
@@ -395,12 +432,42 @@ export function buildQueryHit(
   const fileBuffers: Buffer[] = [];
   for (const file of files) {
     const nameBuf = Buffer.from(file.filename, "utf8");
-    const entry = Buffer.alloc(8 + nameBuf.length + 2); // index + size + name + 2×NUL
-    writeUInt32LE(entry, file.index, 0);
-    writeUInt32LE(entry, file.size, 4);
-    nameBuf.copy(entry, 8);
-    entry[8 + nameBuf.length] = 0; // filename-terminator
-    entry[8 + nameBuf.length + 1] = 0; // extensions-terminator
+    
+    // Calculate size based on whether we have SHA1
+    let entrySize = 8 + nameBuf.length + 1; // index + size + name + filename-terminator
+    
+    // Add SHA1 URN if available
+    let sha1Urn: Buffer | null = null;
+    if (file.sha1) {
+      sha1Urn = Buffer.from(sha1ToUrn(file.sha1), "utf8");
+      entrySize += sha1Urn.length + 1; // SHA1 URN + terminator
+    } else {
+      entrySize += 1; // Just the extensions terminator
+    }
+    
+    const entry = Buffer.alloc(entrySize);
+    let offset = 0;
+    
+    // Write file index and size
+    writeUInt32LE(entry, file.index, offset);
+    offset += 4;
+    writeUInt32LE(entry, file.size, offset);
+    offset += 4;
+    
+    // Write filename
+    nameBuf.copy(entry, offset);
+    offset += nameBuf.length;
+    entry[offset++] = 0; // filename-terminator
+    
+    // Write SHA1 URN if available
+    if (sha1Urn) {
+      sha1Urn.copy(entry, offset);
+      offset += sha1Urn.length;
+      entry[offset++] = 0; // extensions-terminator
+    } else {
+      entry[offset++] = 0; // extensions-terminator (no extensions)
+    }
+    
     fileBuffers.push(entry);
     payloadSize += entry.length;
   }
