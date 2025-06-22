@@ -47,7 +47,7 @@ export class MessageRouter {
         console.log(`PING <- ${conn.socket.remoteAddress}`);
         break;
       case "pong":
-        console.log(`PONG -> ${conn.socket.remoteAddress}`);
+        console.log(`PONG -> ${msg.ipAddress}:${msg.port}`);
         break;
       default:
         console.log(msg);
