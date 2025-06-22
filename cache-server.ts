@@ -33,7 +33,7 @@ const CONFIG = {
   HOST_EXPIRY_SECONDS: 3 * 24 * 60 * 60,
   CACHE_EXPIRY_SECONDS: 14 * 24 * 60 * 60,
   RATE_LIMIT_SECONDS: 1,
-  CACHE_NAME: "GnutellaBunWebCache",
+  CACHE_NAME: "GBunWebCache",
   CACHE_VERSION: "1.0",
   SUPPORTED_NETWORKS: ["gnutella", "gnutella2"],
   TEXT_PLAIN: { "Content-Type": "text/plain" },

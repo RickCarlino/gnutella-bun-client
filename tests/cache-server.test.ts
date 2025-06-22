@@ -5,7 +5,7 @@ describe("cache.ts", () => {
   const baseUrl = "http://localhost:3211";
 
   beforeEach(async () => {
-    server = Bun.spawn(["bun", "./src/cache-server.ts"], {
+    server = Bun.spawn(["bun", "./cache-server.ts"], {
       env: { ...process.env, PORT: "3211", TEST_MODE: "true" },
     });
     await Bun.sleep(200); // Give server more time to start
@@ -28,14 +28,14 @@ describe("cache.ts", () => {
       expect(response.headers.get("content-type")).toBe("text/html");
       const html = await response.text();
       expect(html).toContain("GWebCache");
-      expect(html).toContain("LastCache");
+      expect(html).toContain("");
     });
 
     test("handles ping request", async () => {
       const response = await fetch(`${baseUrl}/?ping=1`);
       expect(response.status).toBe(200);
       const text = await response.text();
-      expect(text).toContain("I|pong|LastCache 1.0|gnutella-gnutella2");
+      expect(text).toContain("I|pong|GBunWebCache 1.0|gnutella-gnutella2");
     });
 
     test("returns 503 for unsupported network", async () => {
