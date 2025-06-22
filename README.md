@@ -28,9 +28,10 @@ This will:
 - Accept incoming Gnutella connections
 - Periodically update caches and discover new peers
 
-## Peering Only
+## Limitations
 
-**Most Important:** It does not actually share files! My main interest is learning the protocol and becoming a network participant (bootstrap peers, reply to PING/QUERY messages, etc..). I don't have any actual interest in doing file sharing, so there's that. PRs welcome, though.
+ * Leaf only - This node does not have ultra peer capabilities
+ * Sharing WIP - The client follows the QRP spec and is able to properly handle inbound queries. The client currently only shares hardcoded fake files for the sake of testing.
 
 ## A Note About Protocol Extensions
 
@@ -40,9 +41,9 @@ Although this is mostly complete, I don't think it is usable as a real gnutella 
 
 ## TODO
 
-- QRP works for the sake of fixing 503 errors from peers, but does not actually do any QRP'ing
-- (See above) Need to actually send a search table, get queries.
-- Send PING messages
+- Attach SHA1 checksums to QUERY HIT messages. By default, many clients discard non-SHA1 results.
+- Ability to share a directory
+- Re-add outbound peering (disabled during QRP debugging)
 
 ### GWebCache Server
 
