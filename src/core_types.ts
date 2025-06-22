@@ -1,3 +1,14 @@
+import { type QRPManager } from "./qrp_manager";
+import { type PeerStore } from "./peer_store";
+
+export interface NodeContext {
+  localIp: string;
+  localPort: number;
+  qrpManager: QRPManager;
+  peerStore: PeerStore;
+  serventId: Buffer;
+}
+
 export interface MessageHeader {
   descriptorId: Buffer;
   payloadDescriptor: number;

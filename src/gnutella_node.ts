@@ -3,7 +3,7 @@ import { GnutellaServer } from "./gnutella_server";
 import { PeerStore } from "./peer_store";
 import { QRPManager } from "./qrp_manager";
 import { IDGenerator } from "./id_generator";
-import { NodeContext } from "./context";
+import { NodeContext } from "./core_types";
 
 export class GnutellaNode {
   private server: GnutellaServer | null = null;

@@ -1,7 +1,6 @@
 import { Protocol } from "./constants";
 import { MessageBuilder } from "./message_builder";
 import { QRPManager } from "./qrp_manager";
-import { NodeContext } from "./context";
 import {
   Connection,
   Message,
@@ -11,6 +10,7 @@ import {
   PingMessage,
   PongMessage,
   QueryMessage,
+  NodeContext,
 } from "./core_types";
 
 export class MessageRouter {

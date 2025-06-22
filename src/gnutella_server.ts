@@ -1,8 +1,7 @@
-import { Connection, Message } from "./core_types";
+import { Connection, Message, NodeContext } from "./core_types";
 import { SocketHandler } from "./socket_handler";
 import { MessageRouter } from "./message_router";
 import type { Server as NetServer, Socket } from "net";
-import { NodeContext } from "./context";
 
 export class GnutellaServer {
   private server: NetServer | null = null;
