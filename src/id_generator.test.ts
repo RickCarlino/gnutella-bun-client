@@ -9,10 +9,16 @@ describe("IDGenerator", () => {
     expect(id[15]).toBe(0x00);
   });
 
-  test("servent returns deterministic id", () => {
-    const expected = [
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-    ];
-    expect(Array.from(IDGenerator.servent())).toEqual(expected);
+  test("servent returns random id with flags", () => {
+    const id1 = IDGenerator.servent();
+    const id2 = IDGenerator.servent();
+    expect(id1.length).toBe(16);
+    expect(id1[8]).toBe(0xff);
+    expect(id1[15]).toBe(0x00);
+    expect(id2.length).toBe(16);
+    expect(id2[8]).toBe(0xff);
+    expect(id2[15]).toBe(0x00);
+    // extremely unlikely to be equal if properly random
+    expect(id1.equals(id2)).toBe(false);
   });
 });
