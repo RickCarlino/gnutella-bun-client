@@ -1,6 +1,7 @@
 import { Protocol } from "./constants";
 import { MessageBuilder } from "./message_builder";
 import { QRPManager } from "./qrp_manager";
+import { buildBaseHeaders } from "./handshake";
 import {
   Connection,
   Message,
@@ -149,14 +150,7 @@ export class MessageRouter {
     context: NodeContext,
     clientAcceptsDeflate: boolean,
   ): Record<string, string> {
-    const headers: Record<string, string> = {
-      "User-Agent": "GnutellaBun/0.1",
-      "X-Ultrapeer": "False",
-      "X-Query-Routing": "0.2",
-      "Accept-Encoding": "deflate",
-      "Listen-IP": `${context.localIp}:${context.localPort}`,
-      "Bye-Packet": "0.1",
-    };
+    const headers = buildBaseHeaders(context);
 
     if (clientAcceptsDeflate) {
       headers["Content-Encoding"] = "deflate";
