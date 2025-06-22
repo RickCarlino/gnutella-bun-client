@@ -1,6 +1,9 @@
 import { Connection, Message, NodeContext } from "./core_types";
 import { SocketHandler } from "./socket_handler";
 import { MessageRouter } from "./message_router";
+import { MessageBuilder } from "./message_builder";
+import { Protocol } from "./constants";
+import { buildBaseHeaders } from "./handshake";
 import type { Server as NetServer, Socket } from "net";
 import net from "net";
 
@@ -33,7 +36,32 @@ export class GnutellaServer {
     });
   }
 
-  private handleConnection(socket: Socket): void {
+  connectPeer(host: string, port: number): Promise<Connection> {
+    return new Promise((resolve, reject) => {
+      const socket = net.createConnection({ host, port });
+
+      socket.once("connect", () => {
+        this.handleConnection(socket, true);
+        const id = `${socket.remoteAddress}:${socket.remotePort}`;
+        const conn = this.connections.get(id)!;
+        const headers = buildBaseHeaders(this.context);
+        conn.send(
+          MessageBuilder.handshake(
+            `GNUTELLA CONNECT/${Protocol.VERSION}`,
+            headers,
+          ),
+        );
+        resolve(conn);
+      });
+
+      socket.once("error", (err) => {
+        socket.destroy();
+        reject(err);
+      });
+    });
+  }
+
+  private handleConnection(socket: Socket, isOutbound: boolean = false): void {
     const id = `${socket.remoteAddress}:${socket.remotePort}`;
 
     const handler = new SocketHandler(
@@ -50,6 +78,7 @@ export class GnutellaServer {
       handshake: false,
       compressed: false,
       enableCompression: () => handler.enableCompression(),
+      isOutbound,
     };
 
     this.connections.set(id, connection);

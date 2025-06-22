@@ -1,20 +1,14 @@
-# Gnutella Bun Experiments
+# Gnutella Client for Bun Runtime
 
-This repository contains a variety of tools related to [Gnutella 0.6](https://en.wikipedia.org/wiki/Gnutella). It is the result of a Gnutella deep-dive I did for fun in 2025.
+A TypeScript implementation of the Gnutella 0.6 P2P protocol using the Bun runtime. This project provides a Gnutella leaf node supporting compression, query routing protocol and other modern features (goal: full GTK-Gnutella interop).
 
-## Components
+## Requirements
 
-- **[Gnutella Leaf Node](main.ts)** - Run `bun main.ts` to start a complete Gnutella node with automatic peer discovery and connection management
-- **[GWebCache Server](src/cache-server.ts)** - Run `bun src/cache-server.ts` to host a GWebCache for peer discovery. This is complete, but you should probably just use the GWebCache servers in `KNOWN_CACHE_LIST`.
-- **[Local Cache Client](src/cache-client.ts)** - Store peer IPs to disk. Fetch peers from PONG messages, `X-Try-*` headers and GWebCache. Built-in re-fetch throttling.
-- **[Connection Manager](src/connection-manager.ts)** - (rarely works due to QRP/Compression issues noted below) Automatic outbound connection management with configurable targets.
-- **[Message Parser](src/parser.ts)** - Parser and builder for Gnutella protocol messages
+- [Bun](https://bun.sh/docs/installation) runtime
 
-## Running the Gnutella Node
+## Quick Start
 
-You will need to [install Bun](https://bun.sh/docs/installation) before proceeding. Bun supports single-file executables, so I could probably provide binary releases if people asked (raise an issue).
-
-To start a full Gnutella node that automatically bootstraps peers, accepts connections, and maintains cache updates:
+Start a Gnutella node that automatically discovers peers and listens for connections:
 
 ```bash
 bun main.ts
@@ -22,40 +16,120 @@ bun main.ts
 
 This will:
 
-- Automatically discover and store peers from GWebCaches
-- Start a leaf node listening for inbound connections on port 6346
+- Start a Gnutella leaf node on port 6346
+- Automatically discover peers from stored peer list
 - Accept incoming Gnutella connections
+- Implement Query Routing Protocol (QRP) for efficient query routing
 
-## Limitations
+## Project Structure
 
-- Leaf only - This node does not have ultra peer capabilities
-- Sharing WIP - The client has the ability to offer files and respond to query hits (QRP support and all!) but there is no way to actually send the file to a requester yet.
+### Core Components
 
-## Goals
+- **[main.ts](main.ts)** - Entry point that starts a GnutellaNode
+- **[src/gnutella_node.ts](src/gnutella_node.ts)** - Main Gnutella node implementation
+- **[src/gnutella_server.ts](src/gnutella_server.ts)** - Server for accepting incoming connections
+- **[src/socket_handler.ts](src/socket_handler.ts)** - Handles individual socket connections
+- **[src/message_router.ts](src/message_router.ts)** - Routes messages between connections
+- **[src/peer_store.ts](src/peer_store.ts)** - Manages persistent peer storage
 
-- Use Bun standard lib as much as possible. Make exceptions only for security reasons.
-- Maintain reference compatibility with GTK-Gnutella v1.2.3, eg: it should aspire to maintain a featureset that is interoperable with GTK Gnutella.
+### Protocol Implementation
 
-## TODO
+- **[src/message_parser.ts](src/message_parser.ts)** - Parses Gnutella protocol messages
+- **[src/message_builder.ts](src/message_builder.ts)** - Constructs Gnutella protocol messages
+- **[src/qrp_manager.ts](src/qrp_manager.ts)** - Query Routing Protocol implementation
+- **[src/constants.ts](src/constants.ts)** - Protocol constants and configuration
+- **[src/core_types.ts](src/core_types.ts)** - TypeScript type definitions
 
-- Ability to share a directory
-- Re-add outbound peering (disabled during QRP debugging)
-- Push IP to all known GWebCaches
-- Periodically update caches and discover new peers
+### Utilities
+
+- **[src/binary.ts](src/binary.ts)** - Binary data handling utilities
+- **[src/hash.ts](src/hash.ts)** - Hashing utilities for QRP
+- **[src/id_generator.ts](src/id_generator.ts)** - Generates unique message IDs
 
 ### GWebCache Server
 
-Optional. You can host a GWebCache to help clients bootstrap. I don't know if its any good.
+Optional component for hosting your own peer discovery server:
 
 ```bash
 bun cache-server.ts
 ```
 
+Learn more about GWebCache in [these docs](./docs/gwebcache-spec.md).
+
+## Testing
+
+Run all tests:
+
+```bash
+bun test
+```
+
+Run specific test file:
+
+```bash
+bun test src/message_parser.test.ts
+```
+
+## Configuration
+
+- **settings.json** - Stores peer and cache data with timestamps
+
+## Current Features
+
+- ✅ Gnutella 0.6 protocol implementation
+- ✅ Query Routing Protocol (QRP) support
+- ✅ Message parsing and routing
+- ✅ Persistent peer storage
+- ✅ Incoming connection handling
+- ✅ GWebCache server implementation
+
+## Limitations
+
+- **Leaf node only** - No ultrapeer capabilities
+- **Querying only, No file sharing (yet!)** - Will serve the contents of `gnutella-library/` but does not yet offer downloads to peers.
+- **No outbound connections** - Currently only accepts incoming connections
+- **No compression** - Gnutella compression not implemented
+- **No automatic bootstrapping** - Relies on existing peer list
+
+## Protocol Specifications
+
+The `/docs` directory contains the protocol specifications this implementation follows:
+
+- [Gnutella 0.6 Specification](docs/Gnutella-0.6-spec.txt)
+- [GWebCache Specification](docs/gwebcache-spec.md)
+- [Query Routing Protocol Specification](docs/qrp-pseudospec.md)
+- [Compression Specification](docs/compression-pseudospec.md)
+
+## Development
+
+### Code Style
+
+- No class keyword (use functions and interfaces)
+- No else-if statements (use switch statements)
+- TypeScript strict mode enabled
+- Unix timestamps for all time tracking
+
+### Architecture Notes
+
+The implementation uses a class-based architecture with:
+
+- `GnutellaNode` as the main coordinator
+- `GnutellaServer` handling incoming connections
+- `SocketHandler` managing individual peer connections
+- `MessageRouter` for message distribution
+- `QRPManager` for query routing optimization
+
+## Future Work
+
+- [ ] Outbound connection support
+- [ ] File sharing capabilities
+- [ ] Automatic GWebCache bootstrapping
+- [ ] Connection compression
+- [ ] Ultrapeer promotion
+- [ ] Push proxy support
+
 ## Resources
 
-- [Gnutella spec](./docs/Gnutella-0.6-spec.txt)
-- [WebCache Spec](https://shareaza.sourceforge.net/mediawiki/GWC_specs)
-- [GTKGnutella Network Pane Docs](https://gtk-gnutella.sourceforge.io/manual/gnutellanet.html) - My main network debugger for ensuring protocol compliance.
-- [WebCache Pseudopec, by DeepResearchTM](./docs/gwebcache-spec.md)
-- [QRP Pseudospec, by DeepResearchTM](./docs/qrp-pseudospec.md)
-- Gnutella example clients I found while researching this: [1](https://github.com/comick/mini-gnutella), [2](https://github.com/advait/crepe), [3](https://github.com/thapam/gnutella-client). The clients I tried, like my client, struggle to connect to real world Gnutella nodes due to missing QRP and compression.
+- [Gnutella Protocol on Wikipedia](https://en.wikipedia.org/wiki/Gnutella)
+- [GTK-Gnutella](https://gtk-gnutella.sourceforge.io/) - Reference implementation for testing
+- [Shareaza GWebCache Specs](https://shareaza.sourceforge.net/mediawiki/GWC_specs)

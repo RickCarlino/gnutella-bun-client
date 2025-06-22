@@ -34,6 +34,10 @@ export class MessageBuilder {
     return Buffer.from(lines.join("\r\n"), "ascii");
   }
 
+  static handshakeOk(headers: Record<string, string>): Buffer {
+    return this.handshake(`GNUTELLA/${Protocol.VERSION} 200 OK`, headers);
+  }
+
   static ping(id?: Buffer, ttl: number = Protocol.TTL): Buffer {
     return this.header(MessageType.PING, 0, ttl, id);
   }

@@ -37,7 +37,7 @@ There are no lint or typecheck commands configured. TypeScript is set to noEmit 
 
 - **cache-server.ts**: GWebCache server implementation (tested)
 - **cache-client.ts**: GWebCache client for discovering initial peers
-- **peers.json**: Stores peer information persistently
+- **settings.json**: Stores peer information persistently
 
 ### Protocol Specifications
 

@@ -16,6 +16,20 @@ describe("MessageBuilder", () => {
     expect(parsed.headers.Foo).toBe("Bar");
   });
 
+  test("handshakeOk", () => {
+    const buf = MessageBuilder.handshakeOk({
+      "User-Agent": "TestServent/1.0",
+      "X-Ultrapeer": "False",
+    });
+    const parsed =
+      MessageParser.parse(buf) as import("./core_types").HandshakeOkMessage;
+    expect(parsed.type).toBe("handshake_ok");
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.message).toBe("OK");
+    expect(parsed.headers["User-Agent"]).toBe("TestServent/1.0");
+    expect(parsed.headers["X-Ultrapeer"]).toBe("False");
+  });
+
   test("ping and pong", () => {
     const ping = MessageBuilder.ping();
     const pingMsg = MessageParser.parse(ping)!;
