@@ -2,6 +2,7 @@ import { Connection, Message, NodeContext } from "./core_types";
 import { SocketHandler } from "./socket_handler";
 import { MessageRouter } from "./message_router";
 import type { Server as NetServer, Socket } from "net";
+import net from "net";
 
 export class GnutellaServer {
   private server: NetServer | null = null;
@@ -16,8 +17,6 @@ export class GnutellaServer {
   }
 
   async start(port: number): Promise<void> {
-    const net = await import("net");
-
     this.server = net.createServer((socket) => this.handleConnection(socket));
 
     return new Promise((resolve, reject) => {

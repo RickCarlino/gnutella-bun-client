@@ -4,6 +4,8 @@ import { PeerStore } from "./peer_store";
 import { QRPManager } from "./qrp_manager";
 import { IDGenerator } from "./id_generator";
 import { NodeContext } from "./core_types";
+import { promises as fs } from "fs";
+import path from "path";
 
 export class GnutellaNode {
   private server: GnutellaServer | null = null;
@@ -30,7 +32,7 @@ export class GnutellaNode {
     };
 
     await this.peerStore.load();
-    this.setupFakeFiles();
+    await this.loadSharedFiles();
 
     this.server = new GnutellaServer(this.context);
     await this.server.start(localPort);
@@ -44,20 +46,38 @@ export class GnutellaNode {
     return (await response.text()).trim();
   }
 
-  private setupFakeFiles(): void {
-    this.qrpManager.addFile("01jyasqdtf0rq0q6wh2ns90ems.mp3", 5000000, [
-      "01jyasqdtf0rq0q6wh2ns90ems",
-      "mp3",
-    ]);
+  async loadSharedFiles(): Promise<void> {
 
-    this.qrpManager.addFile("music.mp3", 3000000, ["music", "song", "mp3"]);
+    const dir = path.join(process.cwd(), "gnutella-library");
+    await fs.mkdir(dir, { recursive: true });
 
-    this.qrpManager.addFile("movie.avi", 700000000, [
-      "movie",
-      "film",
-      "video",
-      "avi",
-    ]);
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+
+      const filePath = path.join(dir, entry.name);
+      const stat = await fs.stat(filePath);
+      const parsed = path.parse(entry.name);
+      const keywords = new Set<string>();
+
+      keywords.add(entry.name.toLowerCase());
+      if (parsed.name) {
+        parsed.name
+          .split(/[^a-zA-Z0-9]+/)
+          .filter(Boolean)
+          .forEach((k) => keywords.add(k.toLowerCase()));
+      }
+      if (parsed.ext) {
+        keywords.add(parsed.ext.replace(/^\./, "").toLowerCase());
+      }
+
+      this.qrpManager.addFile(entry.name, stat.size, Array.from(keywords));
+    }
+  }
+
+  getSharedFiles(): ReturnType<QRPManager["getFiles"]> {
+    return this.qrpManager.getFiles();
   }
 
   private setupPeriodicTasks(): void {

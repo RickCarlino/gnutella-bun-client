@@ -79,7 +79,7 @@ export interface QueryHitsMessage extends BaseMessage {
   port: number;
   ipAddress: string;
   speed: number;
-  results: FakeFile[];
+  results: SharedFile[];
   vendorCode: Buffer;
   serventId: Buffer;
 }
@@ -123,7 +123,7 @@ export interface Peer {
   lastSeen: number;
 }
 
-export interface FakeFile {
+export interface SharedFile {
   filename: string;
   size: number;
   index: number;
