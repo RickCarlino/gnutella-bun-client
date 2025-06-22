@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import type { Server } from "bun";
+
 interface Host {
   ip: string;
   port: number;
@@ -111,7 +113,7 @@ function cleanupOldEntries() {
   removeExpired(caches, CONFIG.CACHE_EXPIRY_SECONDS);
 }
 
-function validateAndAdd<T>({
+function validateAndAdd<T extends { addedAt: number }>({
   item,
   collection,
   validator,
@@ -131,14 +133,14 @@ function validateAndAdd<T>({
 
   const existingIndex = finder(collection);
   if (existingIndex !== -1) {
-    (collection[existingIndex] as any).addedAt = Date.now();
+    collection[existingIndex].addedAt = Date.now();
     return `OK|${updateMessage}`;
   }
 
   collection.push(item);
 
   if (collection.length > maxSize) {
-    collection.sort((a: any, b: any) => a.addedAt - b.addedAt);
+    collection.sort((a, b) => a.addedAt - b.addedAt);
     collection.shift();
   }
 
@@ -256,7 +258,7 @@ function formatSpec2Response(params: URLSearchParams, network: string): string {
   return lines.join("\n");
 }
 
-let server: any;
+let server: Server;
 
 export function startServer() {
   server = Bun.serve({
