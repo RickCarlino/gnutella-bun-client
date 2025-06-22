@@ -10,9 +10,10 @@ describe("MessageBuilder", () => {
     const buf = MessageBuilder.handshake("GNUTELLA CONNECT/0.6", {
       Foo: "Bar",
     });
-    const parsed = MessageParser.parse(buf)!;
+    const parsed =
+      MessageParser.parse(buf) as import("./core_types").HandshakeConnectMessage;
     expect(parsed.type).toBe("handshake_connect");
-    expect((parsed as any).headers.Foo).toBe("Bar");
+    expect(parsed.headers.Foo).toBe("Bar");
   });
 
   test("ping and pong", () => {
