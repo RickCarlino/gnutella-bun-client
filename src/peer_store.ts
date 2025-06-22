@@ -1,4 +1,5 @@
 import { Peer } from "./core_types";
+import { readFile, writeFile } from "fs/promises";
 
 export class PeerStore {
   private peers: Map<string, Peer>;
@@ -11,7 +12,6 @@ export class PeerStore {
 
   async load(): Promise<void> {
     try {
-      const { readFile } = await import("fs/promises");
       const data = await readFile(this.filename, "utf8");
       const parsed = JSON.parse(data);
 
@@ -23,8 +23,6 @@ export class PeerStore {
 
   async save(): Promise<void> {
     try {
-      const { readFile, writeFile } = await import("fs/promises");
-
       let existingData: Record<string, unknown> = {};
       try {
         const content = await readFile(this.filename, "utf8");

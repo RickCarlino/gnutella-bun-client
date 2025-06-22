@@ -9,9 +9,10 @@ describe("MessageParser", () => {
     const buf = MessageBuilder.handshake("GNUTELLA CONNECT/0.6", {
       Foo: "Bar",
     });
-    const msg = MessageParser.parse(buf)!;
+    const msg =
+      MessageParser.parse(buf) as import("./core_types").HandshakeConnectMessage;
     expect(msg.type).toBe("handshake_connect");
-    expect((msg as any).headers.Foo).toBe("Bar");
+    expect(msg.headers.Foo).toBe("Bar");
     expect(MessageParser.getMessageSize(msg, buf)).toBe(buf.length);
   });
 
@@ -38,8 +39,9 @@ describe("MessageParser", () => {
 
   test("parses route table reset", () => {
     const buf = new QRPManager(32, 7).buildResetMessage();
-    const msg = MessageParser.parse(buf)!;
+    const msg =
+      MessageParser.parse(buf) as import("./core_types").RouteTableUpdateMessage;
     expect(msg.type).toBe("route_table_update");
-    expect((msg as any).variant).toBe("reset");
+    expect(msg.variant).toBe("reset");
   });
 });

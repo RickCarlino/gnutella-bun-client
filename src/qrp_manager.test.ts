@@ -16,9 +16,10 @@ describe("QRPManager", () => {
   test("build reset message", () => {
     const qrp = new QRPManager(32, 7);
     const buf = qrp.buildResetMessage();
-    const parsed = MessageParser.parse(buf)!;
+    const parsed =
+      MessageParser.parse(buf) as import("./core_types").RouteTableUpdateMessage;
     expect(parsed.type).toBe("route_table_update");
-    expect((parsed as any).variant).toBe("reset");
+    expect(parsed.variant).toBe("reset");
   });
 
   test("build patch message", async () => {
@@ -27,9 +28,10 @@ describe("QRPManager", () => {
     const msgs = await qrp.buildPatchMessage();
     expect(msgs.length).toBeGreaterThan(0);
     for (const m of msgs) {
-      const parsed = MessageParser.parse(m)!;
+      const parsed =
+        MessageParser.parse(m) as import("./core_types").RouteTableUpdateMessage;
       expect(parsed.type).toBe("route_table_update");
-      expect((parsed as any).variant).toBe("patch");
+      expect(parsed.variant).toBe("patch");
     }
   });
 });

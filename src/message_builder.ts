@@ -2,7 +2,7 @@ import { Protocol, MessageType } from "./constants";
 import { Binary } from "./binary";
 import { IDGenerator } from "./id_generator";
 import { Hash } from "./hash";
-import { FakeFile } from "./core_types";
+import { SharedFile } from "./core_types";
 
 export class MessageBuilder {
   static header(
@@ -63,7 +63,7 @@ export class MessageBuilder {
     queryId: Buffer,
     port: number,
     ip: string,
-    files: FakeFile[],
+    files: SharedFile[],
     serventId: Buffer,
   ): Buffer {
     const fileEntries = files.map((file) => this.fileEntry(file));
@@ -91,7 +91,7 @@ export class MessageBuilder {
     ]);
   }
 
-  private static fileEntry(file: FakeFile): Buffer {
+  private static fileEntry(file: SharedFile): Buffer {
     const nameBuf = Buffer.from(file.filename, "utf8");
     const sha1Urn = file.sha1
       ? Buffer.from(Hash.sha1ToUrn(file.sha1), "utf8")

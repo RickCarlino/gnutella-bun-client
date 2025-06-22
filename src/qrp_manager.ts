@@ -1,13 +1,15 @@
 import { Protocol, QRPVariant, MessageType } from "./constants";
 import { Hash } from "./hash";
-import { FakeFile } from "./core_types";
+import { SharedFile } from "./core_types";
 import { MessageBuilder } from "./message_builder";
+import zlib from "zlib";
+import { promisify } from "util";
 
 export class QRPManager {
   private table: number[];
   private tableSize: number;
   private infinity: number;
-  private fakeFiles: Map<number, FakeFile>;
+  private sharedFiles: Map<number, SharedFile>;
   private fileCounter: number;
 
   constructor(
@@ -17,7 +19,7 @@ export class QRPManager {
     this.tableSize = tableSize;
     this.infinity = infinity;
     this.table = new Array(tableSize).fill(infinity);
-    this.fakeFiles = new Map();
+    this.sharedFiles = new Map();
     this.fileCounter = 1;
   }
 
@@ -25,27 +27,27 @@ export class QRPManager {
     const index = this.fileCounter++;
     const sha1 = Hash.sha1(filename);
 
-    this.fakeFiles.set(index, { filename, size, index, keywords, sha1 });
+    this.sharedFiles.set(index, { filename, size, index, keywords, sha1 });
     this.updateTableForKeywords(keywords);
 
     return index;
   }
 
   removeFile(index: number): boolean {
-    if (!this.fakeFiles.has(index)) return false;
+    if (!this.sharedFiles.has(index)) return false;
 
-    this.fakeFiles.delete(index);
+    this.sharedFiles.delete(index);
     this.rebuildTable();
 
     return true;
   }
 
-  getFiles(): FakeFile[] {
-    return Array.from(this.fakeFiles.values());
+  getFiles(): SharedFile[] {
+    return Array.from(this.sharedFiles.values());
   }
 
-  getFile(index: number): FakeFile | undefined {
-    return this.fakeFiles.get(index);
+  getFile(index: number): SharedFile | undefined {
+    return this.sharedFiles.get(index);
   }
 
   matchesQuery(searchCriteria: string): boolean {
@@ -56,7 +58,7 @@ export class QRPManager {
     });
   }
 
-  getMatchingFiles(searchCriteria: string): FakeFile[] {
+  getMatchingFiles(searchCriteria: string): SharedFile[] {
     const queryKeywords = this.extractKeywords(searchCriteria);
 
     return this.getFiles().filter((file) =>
@@ -83,8 +85,6 @@ export class QRPManager {
   }
 
   async buildPatchMessage(): Promise<Buffer[]> {
-    const zlib = await import("zlib");
-    const { promisify } = await import("util");
     const deflate = promisify(zlib.deflate);
 
     const patchData = this.createPatchData();
@@ -103,7 +103,7 @@ export class QRPManager {
   private rebuildTable(): void {
     this.table.fill(this.infinity);
 
-    this.fakeFiles.forEach((file) => {
+    this.sharedFiles.forEach((file) => {
       this.updateTableForKeywords(file.keywords);
     });
   }
