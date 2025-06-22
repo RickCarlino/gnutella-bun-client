@@ -42,11 +42,18 @@ export class MessageRouter {
       route_table_update: () => {},
     };
 
-    if (msg.type === "pong") {
-      console.log(`PONG received from ${msg.ipAddress}:${msg.port}`);
-    } else {
-      console.log(msg);
+    switch (msg.type) {
+      case "ping":
+        console.log(`PING <- ${conn.socket.remoteAddress}`);
+        break;
+      case "pong":
+        console.log(`PONG -> ${conn.socket.remoteAddress}`);
+        break;
+      default:
+        console.log(msg);
+        break;
     }
+
     const handler = handlers[msg.type];
     if (handler) {
       handler();
