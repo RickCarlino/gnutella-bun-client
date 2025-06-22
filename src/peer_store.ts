@@ -1,47 +1,39 @@
-import { log } from "node:console";
-import { Peer } from "./interfaces";
+import { Peer } from "./core_types";
 
 export class PeerStore {
-  private peers: Map<string, Peer> = new Map();
-  private filename: string = "settings.json";
+  private peers: Map<string, Peer>;
+  private filename: string;
+
+  constructor(filename: string = "settings.json") {
+    this.peers = new Map();
+    this.filename = filename;
+  }
 
   async load(): Promise<void> {
     try {
-      const { readFile } = await import("node:fs/promises");
+      const { readFile } = await import("fs/promises");
       const data = await readFile(this.filename, "utf8");
       const parsed = JSON.parse(data);
-      parsed.peers?.forEach((p: Peer) => this.add(p.ip, p.port, p.lastSeen));
-      log(
-        `[PEERSTORE] Loaded ${parsed.peers?.length || 0} peers from ${
-          this.filename
-        }`,
-      );
-    } catch (error) {
-      log(`[PEERSTORE] Failed to load peers:`, error);
-    }
+
+      if (parsed.peers) {
+        parsed.peers.forEach((p: Peer) => this.add(p.ip, p.port, p.lastSeen));
+      }
+    } catch {}
   }
 
   async save(): Promise<void> {
     try {
-      const { readFile, writeFile } = await import("node:fs/promises");
+      const { readFile, writeFile } = await import("fs/promises");
 
-      // Read existing data to preserve caches
       let existingData: any = {};
       try {
-        const fileContent = await readFile(this.filename, "utf8");
-        existingData = JSON.parse(fileContent);
-      } catch {
-        // File might not exist yet
-      }
+        const content = await readFile(this.filename, "utf8");
+        existingData = JSON.parse(content);
+      } catch {}
 
-      // Update only the peers section
       existingData.peers = Array.from(this.peers.values());
-
       await writeFile(this.filename, JSON.stringify(existingData, null, 2));
-      log(`[PEERSTORE] Saved ${this.peers.size} peers to ${this.filename}`);
-    } catch (error) {
-      log(`[PEERSTORE] Failed to save peers:`, error);
-    }
+    } catch {}
   }
 
   add(ip: string, port: number, lastSeen: number = Date.now()): void {
@@ -60,6 +52,7 @@ export class PeerStore {
 
   prune(maxAge: number = 3600000): void {
     const cutoff = Date.now() - maxAge;
+
     Array.from(this.peers.entries()).forEach(([key, peer]) => {
       if (peer.lastSeen < cutoff) {
         this.peers.delete(key);
