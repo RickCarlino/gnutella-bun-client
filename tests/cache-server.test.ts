@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 
 describe("cache.ts", () => {
-  let server: any;
+  let server: Bun.Subprocess;
   const baseUrl = "http://localhost:3211";
 
   beforeEach(async () => {

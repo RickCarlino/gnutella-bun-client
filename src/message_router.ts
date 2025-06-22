@@ -1,7 +1,7 @@
 import { Protocol } from "./constants";
 import { MessageBuilder } from "./message_builder";
 import { QRPManager } from "./qrp_manager";
-import { PeerStore } from "./peer_store";
+import { NodeContext } from "./context";
 import {
   Connection,
   Message,
@@ -23,17 +23,7 @@ export class MessageRouter {
     return header.ttl >= 0;
   }
 
-  route(
-    conn: Connection,
-    msg: Message,
-    context: {
-      localIp: string;
-      localPort: number;
-      qrpManager: QRPManager;
-      peerStore: PeerStore;
-      serventId: Buffer;
-    },
-  ): void {
+  route(conn: Connection, msg: Message, context: NodeContext): void {
     const handlers: Record<string, () => void> = {
       handshake_connect: () =>
         this.handleHandshakeConnect(
@@ -58,7 +48,7 @@ export class MessageRouter {
   private handleHandshakeConnect(
     conn: Connection,
     msg: HandshakeConnectMessage,
-    context: any,
+    context: NodeContext,
   ): void {
     const clientAcceptsDeflate =
       msg.headers["Accept-Encoding"]?.includes("deflate");
@@ -78,7 +68,7 @@ export class MessageRouter {
   private handleHandshakeOk(
     conn: Connection,
     msg: HandshakeOkMessage,
-    context: any,
+    context: NodeContext,
   ): void {
     if (!conn.handshake) {
       conn.handshake = true;
@@ -101,7 +91,11 @@ export class MessageRouter {
     }
   }
 
-  private handlePing(conn: Connection, msg: PingMessage, context: any): void {
+  private handlePing(
+    conn: Connection,
+    msg: PingMessage,
+    context: NodeContext,
+  ): void {
     if (!conn.handshake) return;
 
     const pongTtl = Math.max(msg.header.hops + 1, Protocol.TTL);
@@ -117,11 +111,19 @@ export class MessageRouter {
     );
   }
 
-  private handlePong(_conn: Connection, msg: PongMessage, context: any): void {
+  private handlePong(
+    _conn: Connection,
+    msg: PongMessage,
+    context: NodeContext,
+  ): void {
     context.peerStore.add(msg.ipAddress, msg.port);
   }
 
-  private handleQuery(conn: Connection, msg: QueryMessage, context: any): void {
+  private handleQuery(
+    conn: Connection,
+    msg: QueryMessage,
+    context: NodeContext,
+  ): void {
     if (!this.ttlCheck(msg.header)) return;
 
     if (context.qrpManager.matchesQuery(msg.searchCriteria)) {
@@ -144,7 +146,7 @@ export class MessageRouter {
   }
 
   private buildResponseHeaders(
-    context: any,
+    context: NodeContext,
     clientAcceptsDeflate: boolean,
   ): Record<string, string> {
     const headers: Record<string, string> = {

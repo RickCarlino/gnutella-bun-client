@@ -25,7 +25,7 @@ export class PeerStore {
     try {
       const { readFile, writeFile } = await import("fs/promises");
 
-      let existingData: any = {};
+      let existingData: Record<string, unknown> = {};
       try {
         const content = await readFile(this.filename, "utf8");
         existingData = JSON.parse(content);

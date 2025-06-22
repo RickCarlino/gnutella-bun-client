@@ -3,12 +3,13 @@ import { GnutellaServer } from "./gnutella_server";
 import { PeerStore } from "./peer_store";
 import { QRPManager } from "./qrp_manager";
 import { IDGenerator } from "./id_generator";
+import { NodeContext } from "./context";
 
 export class GnutellaNode {
   private server: GnutellaServer | null = null;
   private peerStore: PeerStore;
   private qrpManager: QRPManager;
-  private context: any;
+  private context: NodeContext | null = null;
 
   constructor() {
     this.peerStore = new PeerStore();

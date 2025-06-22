@@ -1,14 +1,16 @@
 import { Connection, Message } from "./core_types";
 import { SocketHandler } from "./socket_handler";
 import { MessageRouter } from "./message_router";
+import type { Server as NetServer, Socket } from "net";
+import { NodeContext } from "./context";
 
 export class GnutellaServer {
-  private server: any;
+  private server: NetServer | null = null;
   private connections: Map<string, Connection>;
   private router: MessageRouter;
-  private context: any;
+  private context: NodeContext;
 
-  constructor(context: any) {
+  constructor(context: NodeContext) {
     this.connections = new Map();
     this.router = new MessageRouter();
     this.context = context;
@@ -20,8 +22,8 @@ export class GnutellaServer {
     this.server = net.createServer((socket) => this.handleConnection(socket));
 
     return new Promise((resolve, reject) => {
-      this.server.listen(port, "0.0.0.0", resolve);
-      this.server.once("error", reject);
+      this.server!.listen(port, "0.0.0.0", resolve);
+      this.server!.once("error", reject);
     });
   }
 
@@ -29,11 +31,11 @@ export class GnutellaServer {
     return new Promise((resolve) => {
       this.connections.forEach((conn) => conn.socket.destroy());
       this.connections.clear();
-      this.server.close(resolve);
+      this.server!.close(() => resolve());
     });
   }
 
-  private handleConnection(socket: any): void {
+  private handleConnection(socket: Socket): void {
     const id = `${socket.remoteAddress}:${socket.remotePort}`;
 
     const handler = new SocketHandler(

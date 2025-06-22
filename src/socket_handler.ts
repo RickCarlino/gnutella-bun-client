@@ -1,18 +1,20 @@
 import { Message } from "./core_types";
 import { MessageParser } from "./message_parser";
+import type { Socket } from "net";
+import type { Inflate, Deflate } from "zlib";
 
 export class SocketHandler {
-  private socket: any;
+  private socket: Socket;
   private buffer: Buffer;
-  private inflater: any;
-  private deflater: any;
+  private inflater?: Inflate;
+  private deflater?: Deflate;
   private compressionEnabled: boolean;
   private onMessage: (msg: Message) => void;
   private onError: (err: Error) => void;
   private onClose: () => void;
 
   constructor(
-    socket: any,
+    socket: Socket,
     onMessage: (msg: Message) => void,
     onError: (err: Error) => void,
     onClose: () => void,
@@ -65,12 +67,12 @@ export class SocketHandler {
     const zlib = require("zlib");
 
     this.inflater = zlib.createInflate();
-    this.inflater.on("data", (chunk: Buffer) => this.handleData(chunk));
-    this.inflater.on("error", this.onError);
+    this.inflater!.on("data", (chunk: Buffer) => this.handleData(chunk));
+    this.inflater!.on("error", this.onError);
 
     this.deflater = zlib.createDeflate({ flush: zlib.Z_SYNC_FLUSH });
-    this.deflater.on("data", (chunk: Buffer) => this.socket.write(chunk));
-    this.deflater.on("error", this.onError);
+    this.deflater!.on("data", (chunk: Buffer) => this.socket.write(chunk));
+    this.deflater!.on("error", this.onError);
   }
 
   private handleData(chunk: Buffer): void {

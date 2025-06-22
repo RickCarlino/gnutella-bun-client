@@ -68,7 +68,7 @@ export interface QueryHitsMessage extends BaseMessage {
   port: number;
   ipAddress: string;
   speed: number;
-  results: any[];
+  results: FakeFile[];
   vendorCode: Buffer;
   serventId: Buffer;
 }
@@ -99,7 +99,7 @@ export type Message =
 
 export interface Connection {
   id: string;
-  socket: any;
+  socket: import("net").Socket;
   send: (data: Buffer) => void;
   handshake: boolean;
   compressed: boolean;
