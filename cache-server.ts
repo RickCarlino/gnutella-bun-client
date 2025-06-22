@@ -31,7 +31,7 @@ const CONFIG = {
   HOST_EXPIRY_SECONDS: 3 * 24 * 60 * 60,
   CACHE_EXPIRY_SECONDS: 14 * 24 * 60 * 60,
   RATE_LIMIT_SECONDS: 1,
-  CACHE_NAME: "LastCache",
+  CACHE_NAME: "GnutellaBunWebCache",
   CACHE_VERSION: "1.0",
   SUPPORTED_NETWORKS: ["gnutella", "gnutella2"],
   TEXT_PLAIN: { "Content-Type": "text/plain" },
@@ -98,7 +98,7 @@ function cleanupOldEntries() {
 
   const removeExpired = <T extends { addedAt: number }>(
     arr: T[],
-    expirySeconds: number
+    expirySeconds: number,
   ) => {
     for (let i = arr.length - 1; i >= 0; i--) {
       if ((now - arr[i].addedAt) / 1000 > expirySeconds) {
@@ -149,7 +149,7 @@ export function addPeer(
   ip: string,
   port: number,
   network: string,
-  cluster?: string
+  cluster?: string,
 ): string {
   const newHost: Host = { ip, port, network, addedAt: Date.now() };
   if (cluster) newHost.cluster = cluster;
@@ -166,7 +166,7 @@ export function addPeer(
     },
     finder: (items) =>
       items.findIndex(
-        (h) => h.ip === ip && h.port === port && h.network === network
+        (h) => h.ip === ip && h.port === port && h.network === network,
       ),
     maxSize: CONFIG.MAX_HOSTS,
     updateMessage: "Host updated",
@@ -213,14 +213,14 @@ function getRandomItems<T>(items: T[], limit: number): T[] {
 function getHostsForNetwork(network: string, limit: number): Host[] {
   return getRandomItems(
     hosts.filter((h) => h.network === network),
-    limit
+    limit,
   );
 }
 
 function getCachesForNetwork(network: string, limit: number): Cache[] {
   return getRandomItems(
     caches.filter((c) => c.network === network),
-    limit
+    limit,
   );
 }
 
@@ -231,14 +231,14 @@ function formatSpec2Response(params: URLSearchParams, network: string): string {
   if (params.has("ping")) {
     const networks = CONFIG.SUPPORTED_NETWORKS.join("-");
     lines.push(
-      `I|pong|${CONFIG.CACHE_NAME} ${CONFIG.CACHE_VERSION}|${networks}`
+      `I|pong|${CONFIG.CACHE_NAME} ${CONFIG.CACHE_VERSION}|${networks}`,
     );
   }
 
   const hostList = getHostsForNetwork(network, CONFIG.MAX_HOSTS_PER_RESPONSE);
   const cacheList = getCachesForNetwork(
     network,
-    CONFIG.MAX_CACHES_PER_RESPONSE
+    CONFIG.MAX_CACHES_PER_RESPONSE,
   );
 
   hostList.forEach((host) => {
@@ -272,71 +272,71 @@ export function startServer() {
 
       cleanupOldEntries();
 
-    const rateCheck = checkRateLimit(clientIP);
-    const hasUpdate =
-      params.has("ip") || params.has("url") || params.has("update");
-    const network = params.get("net") || "gnutella";
+      const rateCheck = checkRateLimit(clientIP);
+      const hasUpdate =
+        params.has("ip") || params.has("url") || params.has("update");
+      const network = params.get("net") || "gnutella";
 
-    if (!CONFIG.SUPPORTED_NETWORKS.includes(network)) {
-      return new Response("Required network not accepted", { status: 503 });
-    }
-
-    const responseLines: string[] = [];
-
-    if (!rateCheck.allowed && !hasUpdate) {
-      return new Response(`I|WARNING|${rateCheck.warning}\n`, {
-        headers: CONFIG.TEXT_PLAIN,
-      });
-    }
-
-    if (hasUpdate) {
-      const updateResults: string[] = [];
-
-      if (params.has("ip")) {
-        const ipParam = params.get("ip")!;
-        const [ip, portStr] = ipParam.split(":");
-        const port = parseInt(portStr);
-
-        updateResults.push(
-          ip && !isNaN(port)
-            ? addPeer(ip, port, network, params.get("cluster") || undefined)
-            : "WARNING|Invalid IP format"
-        );
+      if (!CONFIG.SUPPORTED_NETWORKS.includes(network)) {
+        return new Response("Required network not accepted", { status: 503 });
       }
 
-      if (params.has("url")) {
-        updateResults.push(addCache(params.get("url")!, network));
-      }
+      const responseLines: string[] = [];
 
-      updateResults.forEach((result) => {
-        const formattedResult = result.startsWith("OK")
-          ? `I|update|OK`
-          : `I|update|${result}`;
-        responseLines.push(formattedResult);
-      });
-
-      if (!params.has("get")) {
-        return new Response(responseLines.join("\n") + "\n", {
+      if (!rateCheck.allowed && !hasUpdate) {
+        return new Response(`I|WARNING|${rateCheck.warning}\n`, {
           headers: CONFIG.TEXT_PLAIN,
         });
       }
-    }
 
-    if (params.toString() === "") {
-      return new Response(generateIndexHTML(), {
-        headers: { "Content-Type": "text/html" },
-      });
-    }
+      if (hasUpdate) {
+        const updateResults: string[] = [];
 
-    const spec2Response = formatSpec2Response(params, network);
-    const fullResponse =
-      responseLines.length > 0
-        ? `${responseLines.join("\n")}\n${spec2Response}\n`
-        : `${spec2Response}\n`;
+        if (params.has("ip")) {
+          const ipParam = params.get("ip")!;
+          const [ip, portStr] = ipParam.split(":");
+          const port = parseInt(portStr);
 
-    return new Response(fullResponse, { headers: CONFIG.TEXT_PLAIN });
-  },
-});
+          updateResults.push(
+            ip && !isNaN(port)
+              ? addPeer(ip, port, network, params.get("cluster") || undefined)
+              : "WARNING|Invalid IP format",
+          );
+        }
+
+        if (params.has("url")) {
+          updateResults.push(addCache(params.get("url")!, network));
+        }
+
+        updateResults.forEach((result) => {
+          const formattedResult = result.startsWith("OK")
+            ? `I|update|OK`
+            : `I|update|${result}`;
+          responseLines.push(formattedResult);
+        });
+
+        if (!params.has("get")) {
+          return new Response(responseLines.join("\n") + "\n", {
+            headers: CONFIG.TEXT_PLAIN,
+          });
+        }
+      }
+
+      if (params.toString() === "") {
+        return new Response(generateIndexHTML(), {
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+
+      const spec2Response = formatSpec2Response(params, network);
+      const fullResponse =
+        responseLines.length > 0
+          ? `${responseLines.join("\n")}\n${spec2Response}\n`
+          : `${spec2Response}\n`;
+
+      return new Response(fullResponse, { headers: CONFIG.TEXT_PLAIN });
+    },
+  });
   return server;
 }
 

@@ -80,12 +80,12 @@ for (const [word, bits, expected] of testVectors) {
   const actual = hashWithBits(word, bits);
   console.assert(
     actual === expected,
-    `qrpHash(\"${word}\", ${bits}) => ${actual}, expected ${expected}`
+    `qrpHash(\"${word}\", ${bits}) => ${actual}, expected ${expected}`,
   );
 }
 
 if (typeof require !== "undefined" && require.main === module) {
   console.log(
-    "All qrpHash reference tests passed (" + testVectors.length + " cases)."
+    "All qrpHash reference tests passed (" + testVectors.length + " cases).",
   );
 }

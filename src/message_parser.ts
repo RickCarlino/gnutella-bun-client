@@ -116,7 +116,7 @@ export class MessageParser {
     payload: Buffer,
   ): Message | null {
     const parsers: Record<number, () => Message | null> = {
-      [MessageType.PING]: () => ({ type: "ping", header } as PingMessage),
+      [MessageType.PING]: () => ({ type: "ping", header }) as PingMessage,
 
       [MessageType.PONG]: () => {
         if (payload.length < Protocol.PONG_SIZE) return null;
