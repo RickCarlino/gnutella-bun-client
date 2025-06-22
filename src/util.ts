@@ -3,7 +3,6 @@ import { createInflate, createDeflate } from "zlib";
 import * as net from "net";
 import {
   MESSAGE_TYPES,
-  QRP_VARIANTS,
 } from "./const";
 import { Message, MessageHeader } from "./interfaces";
 
@@ -97,33 +96,6 @@ export function buildBye(code: number, message: string = ""): Buffer {
   return Buffer.concat([header, payload]);
 }
 
-export function buildQrpReset(tableSize: number = 65536): Buffer {
-  const payload = Buffer.alloc(6);
-  payload[0] = QRP_VARIANTS.RESET;
-  writeUInt32LE(payload, tableSize, 1);
-  payload[5] = 1; // infinity flag must be 1 (0x01)
-
-  const header = buildHeader(MESSAGE_TYPES.QRP, 6, 1);
-  return Buffer.concat([header, payload]);
-}
-
-export function buildQrpPatch(
-  seq: number,
-  total: number,
-  bits: number,
-  data: Buffer
-): Buffer {
-  const payload = Buffer.alloc(5 + data.length);
-  payload[0] = QRP_VARIANTS.PATCH;
-  payload[1] = seq;
-  payload[2] = total;
-  payload[3] = 0;
-  payload[4] = bits;
-  data.copy(payload, 5);
-
-  const header = buildHeader(MESSAGE_TYPES.QRP, payload.length, 1);
-  return Buffer.concat([header, payload]);
-}
 
 export function parseMessage(buffer: Buffer): Message | null {
   const handshake = tryParseHandshake(buffer);
@@ -246,31 +218,6 @@ export function parsePayload(
         extensions,
       };
 
-    case MESSAGE_TYPES.QRP:
-      if (payload.length < 6) return null;
-      const variant = payload[0];
-      if (variant === QRP_VARIANTS.RESET) {
-        return {
-          type: "qrp_reset",
-          header,
-          variant,
-          tableLength: readUInt32LE(payload, 1),
-          infinity: payload[5],
-        };
-      }
-      if (variant === QRP_VARIANTS.PATCH) {
-        return {
-          type: "qrp_patch",
-          header,
-          variant,
-          seqNo: payload[1],
-          seqCount: payload[2],
-          compression: payload[3],
-          entryBits: payload[4],
-          data: payload.slice(5),
-        };
-      }
-      return null;
 
     case MESSAGE_TYPES.QUERY_HITS:
       if (payload.length < 11) return null;

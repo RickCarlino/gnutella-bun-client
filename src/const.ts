@@ -6,14 +6,9 @@ export const MESSAGE_TYPES = {
   PING: 0x00,
   PONG: 0x01,
   BYE: 0x02,
-  QRP: 0x30,
   PUSH: 0x40,
   QUERY: 0x80,
   QUERY_HITS: 0x81,
-};
-export const QRP_VARIANTS = {
-  RESET: 0,
-  PATCH: 1,
 };
 export const SERVENT_ID = Buffer.from([
   0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,

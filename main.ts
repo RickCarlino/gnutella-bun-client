@@ -1,16 +1,11 @@
-import { DEFAULT_PORT, SERVENT_ID } from "./src/const";
+import { DEFAULT_PORT } from "./src/const";
 import { Message, Connection } from "./src/interfaces";
 import { PeerStore } from "./src/peer_store";
 import { GnutellaServer } from "./src/gnutella_server";
-import { SharedFileManager } from "./src/shared_files";
-import { QrpTable } from "./src/qrp_table";
 import {
   log,
   adjustHopsAndTtl,
   buildPong,
-  buildQueryHit,
-  buildQrpReset,
-  buildQrpPatch,
   getPublicIp,
 } from "./src/util";
 
@@ -31,29 +26,7 @@ async function main() {
 
   const peerStore = new PeerStore();
   await peerStore.load();
-
-  // Set up shared files
-  const sharedFiles = new SharedFileManager();
-  const targetFile = "bird watchers handbook audio 01jy9ysw 2.mp3";
-  const fileSize = 1 * 1024 * 1024; // 1MB dummy size
-  sharedFiles.addFile(targetFile, fileSize);
-  log(`[MAIN] Sharing file: ${targetFile}`);
-  // Also add some common test files for easier searching
-  sharedFiles.addFile("test.mp3", 2 * 1024 * 1024);
-  sharedFiles.addFile("music.mp3", 3 * 1024 * 1024);
   log(`[MAIN] Also sharing test.mp3 and music.mp3 for testing`);
-
-  // Test QRP hash function
-  log("[MAIN] Testing QRP hash function...");
-  QrpTable.testHash();
-  // Initialize QRP table
-  const qrpTable = new QrpTable();
-  const keywords = sharedFiles.getKeywords();
-  qrpTable.addKeywords(keywords);
-  log(`[MAIN] QRP table initialized with keywords: ${keywords.join(", ")}`);
-
-  // Track connections for QRP updates
-  const activeConnections = new Set<Connection>();
 
   const handleMessage = (conn: Connection, msg: Message) => {
     log(`[MAIN] Processing ${msg.type} from ${conn.id}`);
@@ -107,48 +80,6 @@ async function main() {
 
       case "query":
         log(`[MAIN] Query from ${conn.id}: "${msg.searchCriteria}"`);
-        if (msg.extensions) {
-          log(`[MAIN] Query has extensions (GGEP/HUGE)`);
-        }
-
-        // Always try to search even if QRP might filter it
-        log(`[MAIN] Bypassing QRP check - searching anyway`);
-
-        // Search our shared files
-        const matches = sharedFiles.searchFiles(msg.searchCriteria);
-        if (matches.length > 0) {
-          log(`[MAIN] Found ${matches.length} matches for query`);
-          const hits = matches.map((file) => ({
-            index: file.index,
-            size: file.size,
-            filename: file.filename,
-          }));
-
-          const queryHit = buildQueryHit(
-            msg.header!.descriptorId,
-            localPort,
-            localIp,
-            hits,
-            SERVENT_ID
-          );
-
-          conn.send(queryHit);
-          log(`[MAIN] Sent query hit with ${hits.length} results`);
-        } else {
-          log(`[MAIN] No matches found for query: "${msg.searchCriteria}"`);
-        }
-        break;
-
-      case "qrp_reset":
-        log(
-          `[MAIN] Received QRP RESET from ${conn.id}, table size: ${msg.tableLength}, infinity: ${msg.infinity}`
-        );
-        break;
-
-      case "qrp_patch":
-        log(
-          `[MAIN] Received QRP PATCH from ${conn.id}, seq ${msg.seqNo}/${msg.seqCount}, compression: ${msg.compression}, bits: ${msg.entryBits}`
-        );
         break;
 
       case "bye":
@@ -172,50 +103,9 @@ async function main() {
     }
   };
 
-  const sendQrpTable = (conn: Connection) => {
-    log(`[MAIN] Sending QRP table to ${conn.id}`);
-
-    // Send RESET
-    const reset = buildQrpReset(65536);
-    conn.send(reset);
-
-    // Send table as patches
-    const tableData = qrpTable.toBuffer();
-    const chunkSize = 1024; // Send 1KB chunks
-    const totalChunks = Math.ceil(tableData.length / chunkSize);
-
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, tableData.length);
-      const chunk = tableData.slice(start, end);
-
-      log(
-        `[MAIN] Sending QRP PATCH ${i + 1}/${totalChunks}, size: ${
-          chunk.length
-        } bytes`
-      );
-      const patch = buildQrpPatch(i + 1, totalChunks, 1, chunk);
-      conn.send(patch);
-    }
-
-    log(
-      `[MAIN] Sent QRP table (${tableData.length} bytes) in ${totalChunks} patches`
-    );
-  };
-
   const server = new GnutellaServer({
     onMessage: (conn, msg) => {
       handleMessage(conn, msg);
-      // For server connections, send QRP after they complete handshake
-      if (
-        msg.type === "handshake_ok" &&
-        conn.isServer &&
-        conn.handshake &&
-        !activeConnections.has(conn)
-      ) {
-        activeConnections.add(conn);
-        sendQrpTable(conn);
-      }
     },
     headers,
   });

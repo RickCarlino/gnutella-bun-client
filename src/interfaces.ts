@@ -7,8 +7,6 @@ export interface Message {
     | "ping"
     | "pong"
     | "push"
-    | "qrp_patch"
-    | "qrp_reset"
     | "query"
     | "query_hits";
   header?: MessageHeader;
