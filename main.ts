@@ -213,3 +213,18 @@ async function main() {
 }
 
 main().catch(log);
+
+export const KNOWN_CACHE_LIST = [
+  "http://cache.jayl.de/g2/gwc.php",
+  "http://cache.jayl.de/g2/gwc.php/",
+  "http://gweb.4octets.co.uk/skulls.php",
+  "http://gweb3.4octets.co.uk/gwc.php",
+  "http://gweb4.4octets.co.uk/",
+  "http://midian.jayl.de/g2/bazooka.php",
+  "http://midian.jayl.de/g2/gwc.php",
+  "http://p2p.findclan.net/skulls.php",
+  "http://paper.gwc.dyslexicfish.net:3709/",
+  "http://rock.gwc.dyslexicfish.net:3709/",
+  "http://scissors.gwc.dyslexicfish.net:3709/",
+  "http://skulls.gwc.dyslexicfish.net/skulls.php",
+];
