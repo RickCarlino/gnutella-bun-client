@@ -47,7 +47,6 @@ export class GnutellaNode {
   }
 
   async loadSharedFiles(): Promise<void> {
-
     const dir = path.join(process.cwd(), "gnutella-library");
     await fs.mkdir(dir, { recursive: true });
 
@@ -81,8 +80,22 @@ export class GnutellaNode {
   }
 
   private setupPeriodicTasks(): void {
+    const server = this.server;
     setInterval(() => this.peerStore.save(), 60000);
     setInterval(() => this.peerStore.prune(), 3600000);
+    setTimeout(() => {
+      const host = "127.0.0.1";
+      const port = "57713";
+      console.log(`Attempting to connect to peer ${host}:${port}`);
+      server
+        ?.connectPeer(host, parseInt(port, 10))
+        .then((_conn) => {
+          console.log(`Connected to peer ${host}:${port}`);
+        })
+        .catch((err) => {
+          console.error(`Failed to connect to peer ${host}:${port}`, err);
+        });
+    }, 5000);
   }
 
   private setupShutdownHandler(): void {

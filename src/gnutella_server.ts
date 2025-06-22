@@ -41,7 +41,7 @@ export class GnutellaServer {
       const socket = net.createConnection({ host, port });
 
       socket.once("connect", () => {
-        this.handleConnection(socket);
+        this.handleConnection(socket, true);
         const id = `${socket.remoteAddress}:${socket.remotePort}`;
         const conn = this.connections.get(id)!;
         const headers = buildBaseHeaders(this.context);
@@ -61,7 +61,7 @@ export class GnutellaServer {
     });
   }
 
-  private handleConnection(socket: Socket): void {
+  private handleConnection(socket: Socket, isOutbound: boolean = false): void {
     const id = `${socket.remoteAddress}:${socket.remotePort}`;
 
     const handler = new SocketHandler(
@@ -78,6 +78,7 @@ export class GnutellaServer {
       handshake: false,
       compressed: false,
       enableCompression: () => handler.enableCompression(),
+      isOutbound,
     };
 
     this.connections.set(id, connection);

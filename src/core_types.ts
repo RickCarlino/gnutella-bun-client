@@ -115,6 +115,7 @@ export interface Connection {
   handshake: boolean;
   compressed: boolean;
   enableCompression?: () => void;
+  isOutbound?: boolean;
 }
 
 export interface Peer {

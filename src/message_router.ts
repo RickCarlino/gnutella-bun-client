@@ -30,7 +30,7 @@ export class MessageRouter {
         this.handleHandshakeConnect(
           conn,
           msg as HandshakeConnectMessage,
-          context,
+          context
         ),
       handshake_ok: () =>
         this.handleHandshakeOk(conn, msg as HandshakeOkMessage, context),
@@ -42,42 +42,57 @@ export class MessageRouter {
       route_table_update: () => {},
     };
 
+    if (msg.type === "pong") {
+      console.log(`PONG received from ${msg.ipAddress}:${msg.port}`);
+    } else {
+      console.log(msg);
+    }
     const handler = handlers[msg.type];
-    if (handler) handler();
+    if (handler) {
+      handler();
+    } else {
+      console.warn(`No handler for message type: ${msg.type}`);
+    }
   }
 
   private handleHandshakeConnect(
     conn: Connection,
     msg: HandshakeConnectMessage,
-    context: NodeContext,
+    context: NodeContext
   ): void {
     const clientAcceptsDeflate =
       msg.headers["Accept-Encoding"]?.includes("deflate");
     const responseHeaders = this.buildResponseHeaders(
       context,
-      clientAcceptsDeflate,
+      clientAcceptsDeflate
     );
 
-    conn.send(
-      MessageBuilder.handshake(
-        `GNUTELLA/${Protocol.VERSION} 200 OK`,
-        responseHeaders,
-      ),
-    );
+    conn.send(MessageBuilder.handshakeOk(responseHeaders));
   }
 
   private handleHandshakeOk(
     conn: Connection,
     msg: HandshakeOkMessage,
-    context: NodeContext,
+    context: NodeContext
   ): void {
     if (!conn.handshake) {
+      // For outbound connections, we need to send our final OK response
+      if (conn.isOutbound) {
+        const clientAcceptsDeflate =
+          msg.headers["Accept-Encoding"]?.includes("deflate");
+        const responseHeaders = this.buildResponseHeaders(
+          context,
+          clientAcceptsDeflate
+        );
+        conn.send(MessageBuilder.handshakeOk(responseHeaders));
+      }
+
       conn.handshake = true;
 
       const shouldCompress =
         msg.headers["Content-Encoding"]?.includes("deflate") &&
         this.buildResponseHeaders(context, false)["Accept-Encoding"]?.includes(
-          "deflate",
+          "deflate"
         );
 
       if (shouldCompress && conn.enableCompression) {
@@ -88,14 +103,14 @@ export class MessageRouter {
 
       setTimeout(async () => {
         await this.sendQRPTable(conn, context.qrpManager);
-      }, 1000);
+      }, 1);
     }
   }
 
   private handlePing(
     conn: Connection,
     msg: PingMessage,
-    context: NodeContext,
+    context: NodeContext
   ): void {
     if (!conn.handshake) return;
 
@@ -107,15 +122,15 @@ export class MessageRouter {
         context.localIp,
         0,
         0,
-        pongTtl,
-      ),
+        pongTtl
+      )
     );
   }
 
   private handlePong(
     _conn: Connection,
     msg: PongMessage,
-    context: NodeContext,
+    context: NodeContext
   ): void {
     context.peerStore.add(msg.ipAddress, msg.port);
   }
@@ -123,13 +138,13 @@ export class MessageRouter {
   private handleQuery(
     conn: Connection,
     msg: QueryMessage,
-    context: NodeContext,
+    context: NodeContext
   ): void {
     if (!this.ttlCheck(msg.header)) return;
 
     if (context.qrpManager.matchesQuery(msg.searchCriteria)) {
       const matchingFiles = context.qrpManager.getMatchingFiles(
-        msg.searchCriteria,
+        msg.searchCriteria
       );
 
       if (matchingFiles.length > 0) {
@@ -138,7 +153,7 @@ export class MessageRouter {
           context.localPort,
           context.localIp,
           matchingFiles,
-          context.serventId,
+          context.serventId
         );
 
         conn.send(queryHit);
@@ -148,7 +163,7 @@ export class MessageRouter {
 
   private buildResponseHeaders(
     context: NodeContext,
-    clientAcceptsDeflate: boolean,
+    clientAcceptsDeflate: boolean
   ): Record<string, string> {
     const headers = buildBaseHeaders(context);
 
@@ -161,7 +176,7 @@ export class MessageRouter {
 
   private async sendQRPTable(
     conn: Connection,
-    qrpManager: QRPManager,
+    qrpManager: QRPManager
   ): Promise<void> {
     try {
       conn.send(qrpManager.buildResetMessage());
