@@ -1,11 +1,13 @@
-import { DEFAULT_PORT } from "./src/const";
+import { DEFAULT_PORT, SERVENT_ID } from "./src/const";
 import { Message, Connection } from "./src/interfaces";
 import { PeerStore } from "./src/peer_store";
 import { GnutellaServer } from "./src/gnutella_server";
+import { QRPManager } from "./src/qrp";
 import {
   log,
   adjustHopsAndTtl,
   buildPong,
+  buildQueryHit,
   getPublicIp,
 } from "./src/util";
 
@@ -26,7 +28,21 @@ async function main() {
 
   const peerStore = new PeerStore();
   await peerStore.load();
-  log(`[MAIN] Also sharing test.mp3 and music.mp3 for testing`);
+
+  // Initialize QRP with fake files
+  const qrpManager = new QRPManager();
+  qrpManager.addFakeFile("01jyasqdtf0rq0q6wh2ns90ems.mp3", 5000000, [
+    "01jyasqdtf0rq0q6wh2ns90ems",
+    "mp3",
+  ]);
+  qrpManager.addFakeFile("music.mp3", 3000000, ["music", "song", "mp3"]);
+  qrpManager.addFakeFile("movie.avi", 700000000, [
+    "movie",
+    "film",
+    "video",
+    "avi",
+  ]);
+  log(`[MAIN] Added fake files to QRP table`);
 
   const handleMessage = (conn: Connection, msg: Message) => {
     log(`[MAIN] Processing ${msg.type} from ${conn.id}`);
@@ -80,6 +96,41 @@ async function main() {
 
       case "query":
         log(`[MAIN] Query from ${conn.id}: "${msg.searchCriteria}"`);
+
+        // Check if we have matching files in QRP table
+        if (qrpManager.matchesQuery(msg.searchCriteria)) {
+          const matchingFiles = qrpManager.getMatchingFiles(msg.searchCriteria);
+          if (matchingFiles.length > 0) {
+            log(
+              `[MAIN] Found ${matchingFiles.length} matching files for query`
+            );
+
+            // Build query hit response
+            const files = matchingFiles.map((f) => ({
+              index: f.index,
+              size: f.size,
+              filename: f.filename,
+            }));
+
+            const queryHit = buildQueryHit(
+              msg.header!.descriptorId,
+              localPort,
+              localIp,
+              files,
+              SERVENT_ID
+            );
+
+            // Log the query hit details for debugging
+            log(`[MAIN] Sending QueryHit with ${files.length} files:`);
+            files.forEach((f) =>
+              log(`  - ${f.filename} (${f.size} bytes, index ${f.index})`)
+            );
+            log(`[MAIN] QueryHit payload size: ${queryHit.length} bytes`);
+
+            conn.send(queryHit);
+            log(`[MAIN] Sent QueryHit response to ${conn.id}`);
+          }
+        }
         break;
 
       case "bye":
@@ -96,6 +147,35 @@ async function main() {
 
       case "handshake_ok":
         log(`[MAIN] Handshake OK from ${conn.id}`);
+
+        // Send QRP table after handshake
+        setTimeout(async () => {
+          try {
+            log(`[MAIN] Sending QRP table to ${conn.id}`);
+
+            // Send RESET message
+            const resetMsg = qrpManager.buildResetMessage();
+            conn.send(resetMsg);
+            log(`[MAIN] Sent QRP RESET to ${conn.id}`);
+
+            // Send PATCH messages
+            const patchMsgs = await qrpManager.buildPatchMessage();
+            patchMsgs.forEach((patchMsg, i) => {
+              conn.send(patchMsg);
+              log(
+                `[MAIN] Sent QRP PATCH ${i + 1}/${patchMsgs.length} to ${
+                  conn.id
+                }`
+              );
+            });
+          } catch (err) {
+            log(`[MAIN] Error sending QRP table to ${conn.id}:`, err);
+          }
+        }, 1000);
+        break;
+
+      case "route_table_update":
+        log(`[MAIN] Received QRP ${msg.variant} from ${conn.id}`);
         break;
 
       default:

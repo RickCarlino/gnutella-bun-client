@@ -8,7 +8,8 @@ export interface Message {
     | "pong"
     | "push"
     | "query"
-    | "query_hits";
+    | "query_hits"
+    | "route_table_update";
   header?: MessageHeader;
   [key: string]: any;
 }

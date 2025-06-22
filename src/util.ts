@@ -1,10 +1,9 @@
 import { randomBytes } from "crypto";
 import { createInflate, createDeflate } from "zlib";
 import * as net from "net";
-import {
-  MESSAGE_TYPES,
-} from "./const";
+import { MESSAGE_TYPES } from "./const";
 import { Message, MessageHeader } from "./interfaces";
+import { parseQRPMessage } from "./qrp";
 
 export const log = (...msgs: any[]) => console.log(...msgs);
 
@@ -95,7 +94,6 @@ export function buildBye(code: number, message: string = ""): Buffer {
   const header = buildHeader(MESSAGE_TYPES.BYE, payload.length, 1);
   return Buffer.concat([header, payload]);
 }
-
 
 export function parseMessage(buffer: Buffer): Message | null {
   const handshake = tryParseHandshake(buffer);
@@ -218,7 +216,6 @@ export function parsePayload(
         extensions,
       };
 
-
     case MESSAGE_TYPES.QUERY_HITS:
       if (payload.length < 11) return null;
       return {
@@ -232,6 +229,12 @@ export function parsePayload(
         vendorCode: payload.slice(payload.length - 20, payload.length - 16),
         serventId: payload.slice(payload.length - 16),
       };
+
+    case MESSAGE_TYPES.ROUTE_TABLE_UPDATE: {
+      const qrpMessage = parseQRPMessage(payload);
+      if (!qrpMessage) return null;
+      return { ...qrpMessage, header };
+    }
 
     default:
       return null;
@@ -378,7 +381,7 @@ export async function getPublicIp(): Promise<string> {
   const response = await fetch("https://wtfismyip.com/text");
   return (await response.text()).trim();
 }
-
+// spec-compliant QUERY HITS builder ------------------------------------------
 export function buildQueryHit(
   queryId: Buffer,
   port: number,
@@ -386,41 +389,53 @@ export function buildQueryHit(
   files: Array<{ index: number; size: number; filename: string }>,
   serventId: Buffer
 ): Buffer {
-  // Calculate total payload size
-  let payloadSize = 11; // Header size
+  // --- payload size ---------------------------------------------------------
+  let payloadSize = 11; // fixed QH payload header (11 bytes)
 
-  // Calculate size for each file result
   const fileBuffers: Buffer[] = [];
   for (const file of files) {
-    const nameBuffer = Buffer.from(file.filename + "\0", "utf8");
-    const fileSize = 8 + nameBuffer.length; // index(4) + size(4) + name + null
-    fileBuffers.push(Buffer.concat([Buffer.alloc(8), nameBuffer]));
-    // Write file data
-    const fb = fileBuffers[fileBuffers.length - 1];
-    writeUInt32LE(fb, file.index, 0);
-    writeUInt32LE(fb, file.size, 4);
-    payloadSize += fileSize;
+    const nameBuf = Buffer.from(file.filename, "utf8");
+    const entry = Buffer.alloc(8 + nameBuf.length + 2); // index + size + name + 2×NUL
+    writeUInt32LE(entry, file.index, 0);
+    writeUInt32LE(entry, file.size, 4);
+    nameBuf.copy(entry, 8);
+    entry[8 + nameBuf.length] = 0; // filename-terminator
+    entry[8 + nameBuf.length + 1] = 0; // extensions-terminator
+    fileBuffers.push(entry);
+    payloadSize += entry.length;
   }
 
-  // Add trailer size: vendor(4) + open_data(1) + trailer_mask(2) + servent_id(16)
-  payloadSize += 23;
+  // EQHD (7 bytes) + serventId (16 bytes) sit at the tail
+  payloadSize += 7 + 16;
 
-  // Build header
-  const header = buildHeader(MESSAGE_TYPES.QUERY_HITS, payloadSize, 7, queryId);
+  // --- GNUTELLA message header ---------------------------------------------
+  const header = buildHeader(
+    MESSAGE_TYPES.QUERY_HITS,
+    payloadSize,
+    7, // TTL
+    queryId
+  );
 
-  // Build payload header
+  // --- 11-byte QUERY HIT payload header -------------------------------------
   const payloadHeader = Buffer.alloc(11);
-  payloadHeader[0] = files.length; // number of hits
-  payloadHeader.writeUInt16LE(port, 1);
-  ipToBuffer(ip).copy(payloadHeader, 3);
-  writeUInt32LE(payloadHeader, 1000, 7); // speed in kb/s
+  payloadHeader[0] = files.length; // hit count
+  payloadHeader.writeUInt16LE(port, 1); // little-endian port
+  ipToBuffer(ip).copy(payloadHeader, 3); // IP
+  writeUInt32LE(payloadHeader, 1000, 7); // speed (kB/s)
 
-  // Build trailer
-  const trailer = Buffer.alloc(23);
-  trailer.write("GTBN", 0, 4, "ascii"); // Vendor code for GnutellaBun
-  trailer[4] = 0x01; // Open data (push flag)
-  trailer.writeUInt16LE(0, 5); // No trailer mask
-  serventId.copy(trailer, 7);
+  // --- minimal EQHD block ---------------------------------------------------
+  const eqhd = Buffer.alloc(7);
+  eqhd.write("GBUN", 0, 4, "ascii"); // vendor code
+  eqhd[4] = 0x02; // open-data length (2 bytes)
+  eqhd[5] = 0x00; // flagPush value  (0 = not fire-walled)
+  eqhd[6] = 0x01; // flagPush enable bit
 
-  return Buffer.concat([header, payloadHeader, ...fileBuffers, trailer]);
+  // --- final buffer ---------------------------------------------------------
+  return Buffer.concat([
+    header,
+    payloadHeader,
+    ...fileBuffers,
+    eqhd,
+    serventId, // MUST be the last 16 bytes
+  ]);
 }
