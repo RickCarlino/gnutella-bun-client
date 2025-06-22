@@ -28,8 +28,13 @@ This will:
 
 ## Limitations
 
- * Leaf only - This node does not have ultra peer capabilities
- * Sharing WIP - The client has the ability to offer files and respond to query hits (QRP support and all!) but there is no way to actually send the file to a requester yet.
+- Leaf only - This node does not have ultra peer capabilities
+- Sharing WIP - The client has the ability to offer files and respond to query hits (QRP support and all!) but there is no way to actually send the file to a requester yet.
+
+## Goals
+
+- Use Bun standard lib as much as possible. Make exceptions only for security reasons.
+- Maintain reference compatibility with GTK-Gnutella v1.2.3, eg: it should aspire to maintain a featureset that is interoperable with GTK Gnutella.
 
 ## TODO
 
