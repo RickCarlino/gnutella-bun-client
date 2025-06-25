@@ -122,13 +122,21 @@ export class MessageRouter {
     if (!conn.handshake) return;
 
     const pongTtl = Math.max(msg.header.hops + 1, Protocol.TTL);
+    
+    // Get shared files info from QRP Manager
+    const sharedFiles = context.qrpManager.getFiles();
+    const fileCount = sharedFiles.length;
+    const totalSizeKb = Math.floor(
+      sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024
+    );
+    
     conn.send(
       MessageBuilder.pong(
         msg.header.descriptorId,
         context.localPort,
         context.localIp,
-        0,
-        0,
+        fileCount,
+        totalSizeKb,
         pongTtl
       )
     );
