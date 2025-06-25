@@ -645,6 +645,18 @@ class MessageBuilder {
     code[6] = 1;
     return code;
   }
+
+  static bye(code: number = 200, message: string = "Closing connection"): Buffer {
+    const messageBytes = Buffer.from(message + "\r\n", "utf8");
+    const payloadSize = 2 + messageBytes.length;
+    const header = this.header(MessageType.BYE, payloadSize, 1); // TTL=1 as per spec
+    const payload = Buffer.alloc(payloadSize);
+    
+    payload.writeUInt16LE(code, 0);
+    messageBytes.copy(payload, 2);
+    
+    return Buffer.concat([header, payload]);
+  }
 }
 
 interface Context {
@@ -677,14 +689,53 @@ interface Connection {
 }
 
 class MessageRouter {
+  private messageCache: Map<string, number> = new Map();
+  private readonly CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
   ttlCheck(header: MessageHeader): boolean {
-    if (!header || header.ttl === 0) return false;
+    // Check if TTL is 0 BEFORE decrementing
+    if (!header || header.ttl === 0) {
+      return false;
+    }
+    
+    // Decrement TTL and increment hops
     header.ttl--;
     header.hops++;
+    
+    // After decrement, TTL should still be >= 0 to forward
     return header.ttl >= 0;
   }
 
+  private isMessageSeen(messageId: Buffer): boolean {
+    const idString = messageId.toString('hex');
+    const now = Date.now();
+    
+    // Clean expired entries
+    for (const [id, timestamp] of this.messageCache.entries()) {
+      if (now - timestamp > this.CACHE_EXPIRY) {
+        this.messageCache.delete(id);
+      }
+    }
+    
+    // Check if message was seen
+    if (this.messageCache.has(idString)) {
+      return true;
+    }
+    
+    // Mark as seen
+    this.messageCache.set(idString, now);
+    return false;
+  }
+
   route(conn: Connection, msg: GnutellaMessage, context: Context): void {
+    // Check for duplicate messages (only for messages with headers)
+    if ('header' in msg && msg.header) {
+      if (this.isMessageSeen(msg.header.descriptorId)) {
+        // Drop duplicate message
+        return;
+      }
+    }
+
     const handlers: Record<string, () => void> = {
       handshake_connect: () =>
         this.handleHandshakeConnect(
@@ -697,7 +748,7 @@ class MessageRouter {
       ping: () => this.handlePing(conn, msg as PingMessage, context),
       pong: () => this.handlePong(conn, msg as PongMessage, context),
       query: () => this.handleQuery(conn, msg as QueryMessage, context),
-      bye: () => {},
+      bye: () => this.handleBye(conn, msg as ByeMessage),
       handshake_error: () => {},
       route_table_update: () => {},
     };
@@ -834,6 +885,12 @@ class MessageRouter {
       patchMessages.forEach((msg) => conn.send(msg));
     } catch {}
   }
+
+  private handleBye(conn: Connection, msg: ByeMessage): void {
+    // According to spec: "A servent receiving a Bye message MUST close the connection immediately"
+    console.log(`Received Bye message (code: ${msg.code}): ${msg.message}`);
+    conn.socket.destroy();
+  }
 }
 
 class GnutellaServer {
@@ -859,7 +916,20 @@ class GnutellaServer {
 
   stop(): Promise<void> {
     return new Promise((resolve) => {
-      this.connections.forEach((conn) => conn.socket.destroy());
+      // Send Bye messages to all connections that support it
+      this.connections.forEach((conn) => {
+        if (conn.handshake) {
+          try {
+            conn.send(MessageBuilder.bye(200, "Server shutting down"));
+            // Give a brief moment for the Bye message to be sent
+            setTimeout(() => conn.socket.destroy(), 100);
+          } catch {
+            conn.socket.destroy();
+          }
+        } else {
+          conn.socket.destroy();
+        }
+      });
       this.connections.clear();
       this.server!.close(() => resolve());
     });
@@ -927,6 +997,28 @@ class GnutellaServer {
 
   private handleClose(id: string): void {
     this.connections.delete(id);
+  }
+
+  closeConnection(id: string, code: number = 200, reason: string = "Closing connection"): void {
+    const conn = this.connections.get(id);
+    if (!conn) return;
+    
+    if (conn.handshake) {
+      try {
+        conn.send(MessageBuilder.bye(code, reason));
+        // Wait briefly for Bye to send, then close
+        setTimeout(() => {
+          conn.socket.destroy();
+          this.connections.delete(id);
+        }, 100);
+      } catch {
+        conn.socket.destroy();
+        this.connections.delete(id);
+      }
+    } else {
+      conn.socket.destroy();
+      this.connections.delete(id);
+    }
   }
 }
 
