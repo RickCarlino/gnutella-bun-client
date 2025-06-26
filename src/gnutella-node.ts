@@ -73,6 +73,15 @@ interface ByeMessage {
   message: string;
 }
 
+interface PushMessage {
+  type: "push";
+  header: MessageHeader;
+  serventId: Buffer;
+  fileIndex: number;
+  ipAddress: string;
+  port: number;
+}
+
 interface QueryMessage {
   type: "query";
   header: MessageHeader;
@@ -113,6 +122,7 @@ type GnutellaMessage =
   | PingMessage
   | PongMessage
   | ByeMessage
+  | PushMessage
   | QueryMessage
   | QueryHitsMessage
   | RouteTableUpdateMessage;
@@ -226,6 +236,7 @@ class MessageParser {
       [MessageType.PING]: () => ({ type: "ping", header }),
       [MessageType.PONG]: () => this.parsePong(header, payload),
       [MessageType.BYE]: () => this.parseBye(header, payload),
+      [MessageType.PUSH]: () => this.parsePush(header, payload),
       [MessageType.QUERY]: () => this.parseQuery(header, payload),
       [MessageType.QUERY_HITS]: () => this.parseQueryHits(header, payload),
       [MessageType.ROUTE_TABLE_UPDATE]: () =>
@@ -255,6 +266,18 @@ class MessageParser {
       header,
       code: payload.readUInt16LE(0),
       message: payload.length > 2 ? payload.slice(2).toString("utf8") : "",
+    };
+  }
+
+  static parsePush(header: MessageHeader, payload: Buffer): PushMessage | null {
+    if (payload.length < 26) return null; // 16 (servent ID) + 4 (file index) + 4 (IP) + 2 (port)
+    return {
+      type: "push",
+      header,
+      serventId: payload.slice(0, 16),
+      fileIndex: Binary.readUInt32LE(payload, 16),
+      ipAddress: Binary.bufferToIp(payload, 20),
+      port: payload.readUInt16LE(24),
     };
   }
 
@@ -633,6 +656,25 @@ class MessageBuilder {
 
     return Buffer.concat([header, payload]);
   }
+
+  static push(
+    serventId: Buffer,
+    fileIndex: number,
+    ipAddress: string,
+    port: number,
+    ttl: number = Protocol.TTL
+  ): Buffer {
+    const payloadSize = 26; // 16 (servent ID) + 4 (file index) + 4 (IP) + 2 (port)
+    const header = this.header(MessageType.PUSH, payloadSize, ttl);
+    const payload = Buffer.alloc(payloadSize);
+
+    serventId.copy(payload, 0);
+    Binary.writeUInt32LE(payload, fileIndex, 16);
+    Binary.ipToBuffer(ipAddress).copy(payload, 20);
+    payload.writeUInt16LE(port, 24);
+
+    return Buffer.concat([header, payload]);
+  }
 }
 
 interface Context {
@@ -723,6 +765,7 @@ class MessageRouter {
         this.handleHandshakeOk(conn, msg as HandshakeOkMessage, context),
       ping: () => this.handlePing(conn, msg as PingMessage, context),
       pong: () => this.handlePong(conn, msg as PongMessage, context),
+      push: () => this.handlePush(conn, msg as PushMessage, context),
       query: () => this.handleQuery(conn, msg as QueryMessage, context),
       bye: () => this.handleBye(conn, msg as ByeMessage),
       handshake_error: () => {},
@@ -776,7 +819,7 @@ class MessageRouter {
       conn.enableCompression();
     }
 
-    conn.send(MessageBuilder.ping());
+    conn.send(MessageBuilder.ping(IDGenerator.generate(), Protocol.TTL));
     setTimeout(async () => {
       await this.sendQRPTable(conn, context.qrpManager);
     }, 1);
@@ -796,6 +839,7 @@ class MessageRouter {
       sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024
     );
 
+    console.log(`Received PING from ${context.localIp}:${context.localPort} - Files: ${fileCount}, Size: ${totalSizeKb} KB`);
     conn.send(
       MessageBuilder.pong(
         msg.header.descriptorId,
@@ -813,6 +857,9 @@ class MessageRouter {
     msg: PongMessage,
     context: Context
   ): void {
+    console.log(
+      `Received PONG from ${msg.ipAddress}:${msg.port} - Files: ${msg.filesShared}, Size: ${msg.kilobytesShared} KB`
+    );
     context.peerStore.add(msg.ipAddress, msg.port);
   }
 
@@ -867,6 +914,192 @@ class MessageRouter {
     console.log(`Received Bye message (code: ${msg.code}): ${msg.message}`);
     conn.socket.destroy();
   }
+
+  private handlePush(
+    conn: Connection,
+    msg: PushMessage,
+    context: Context
+  ): void {
+    // Check if the push request is for us
+    if (!msg.serventId.equals(context.serventId)) {
+      // Forward the PUSH message if it's not for us and TTL allows
+      if (this.ttlCheck(msg.header)) {
+        // TODO: Implement forwarding logic based on servent ID routing
+      }
+      return;
+    }
+
+    // This PUSH is for us - initiate a push connection
+    console.log(
+      `Received PUSH request for file ${msg.fileIndex} to ${msg.ipAddress}:${msg.port}`
+    );
+
+    // Create a new connection to the requester
+    const pushSocket = net.createConnection({
+      host: msg.ipAddress,
+      port: msg.port,
+    });
+
+    pushSocket.once("connect", () => {
+      // Send GIV message according to spec
+      const givMessage = this.buildGivMessage(
+        msg.fileIndex,
+        context.serventId,
+        context.qrpManager.getFile(msg.fileIndex)?.filename || ""
+      );
+      pushSocket.write(givMessage);
+
+      // The socket is now ready for the requester to send HTTP GET
+      // Hand off to HTTP handling logic
+      this.handlePushConnection(pushSocket, msg.fileIndex, context).catch(
+        (err) => {
+          console.error("Error in push connection handler:", err);
+          pushSocket.destroy();
+        }
+      );
+    });
+
+    pushSocket.once("error", (err) => {
+      console.error(
+        `Failed to establish push connection to ${msg.ipAddress}:${msg.port}:`,
+        err
+      );
+      pushSocket.destroy();
+    });
+  }
+
+  private buildGivMessage(
+    fileIndex: number,
+    serventId: Buffer,
+    filename: string
+  ): Buffer {
+    // Format: GIV <file_index>:<servent_id>/<file_name>\n\n
+    const serventIdHex = serventId.toString("hex").toUpperCase();
+    const givString = `GIV ${fileIndex}:${serventIdHex}/${filename}\n\n`;
+    return Buffer.from(givString, "ascii");
+  }
+
+  private async handlePushConnection(
+    socket: net.Socket,
+    fileIndex: number,
+    context: Context
+  ): Promise<void> {
+    // After sending GIV, the socket will receive HTTP requests
+    let buffer = Buffer.alloc(0);
+
+    socket.on("data", async (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      const requestStr = buffer.toString("ascii");
+
+      // Check if we have a complete HTTP request
+      if (requestStr.includes("\r\n\r\n")) {
+        // Extract the request line
+        const lines = requestStr.split("\r\n");
+        const requestLine = lines[0];
+
+        if (requestLine.startsWith("GET ")) {
+          // Parse the GET request
+          const urlMatch = requestLine.match(/^GET\s+(\S+)\s+HTTP/);
+          if (!urlMatch) {
+            socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+            socket.end();
+            return;
+          }
+
+          const file = context.qrpManager.getFile(fileIndex);
+          if (!file) {
+            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+            socket.end();
+            return;
+          }
+
+          try {
+            // Construct file path
+            const filePath = path.join(
+              process.cwd(),
+              "gnutella-library",
+              file.filename
+            );
+            const stat = await fs.stat(filePath);
+
+            // Parse Range header if present
+            const rangeHeader = lines.find((line) =>
+              line.toLowerCase().startsWith("range:")
+            );
+            let start = 0;
+            let end = stat.size - 1;
+            let status = 200;
+            let statusText = "OK";
+
+            if (rangeHeader) {
+              const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+              if (rangeMatch) {
+                start = parseInt(rangeMatch[1]);
+                if (rangeMatch[2]) {
+                  end = parseInt(rangeMatch[2]);
+                }
+                status = 206;
+                statusText = "Partial Content";
+              }
+            }
+
+            const contentLength = end - start + 1;
+
+            // Send HTTP response headers
+            const headers = [
+              `HTTP/1.1 ${status} ${statusText}`,
+              "Server: GnutellaBun/0.1",
+              "Content-Type: application/octet-stream",
+              `Content-Length: ${contentLength}`,
+              "Accept-Ranges: bytes",
+            ];
+
+            if (status === 206) {
+              headers.push(`Content-Range: bytes ${start}-${end}/${stat.size}`);
+            }
+
+            headers.push("", ""); // Empty line to end headers
+            socket.write(headers.join("\r\n"));
+
+            // Stream file content
+            const readStream = require("fs").createReadStream(filePath, {
+              start,
+              end,
+            });
+            readStream.pipe(socket);
+
+            readStream.on("end", () => {
+              // Keep connection open for HTTP/1.1 keep-alive
+              const connectionHeader = lines.find((line) =>
+                line.toLowerCase().startsWith("connection:")
+              );
+              if (
+                connectionHeader &&
+                connectionHeader.toLowerCase().includes("close")
+              ) {
+                socket.end();
+              }
+            });
+
+            readStream.on("error", (err) => {
+              console.error("Error reading file for PUSH:", err);
+              socket.destroy();
+            });
+          } catch (err) {
+            console.error("Error handling PUSH file request:", err);
+            socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
+            socket.end();
+          }
+        } else {
+          socket.write("HTTP/1.1 405 Method Not Allowed\r\n\r\n");
+          socket.end();
+        }
+      }
+    });
+
+    socket.on("error", () => socket.destroy());
+    socket.setTimeout(30000, () => socket.destroy()); // 30 second timeout
+  }
 }
 
 class GnutellaServer {
@@ -884,7 +1117,7 @@ class GnutellaServer {
   async pingPeers(): Promise<void> {
     this.connections.forEach((conn) => {
       if (conn.handshake) {
-        conn.send(MessageBuilder.ping());
+        conn.send(MessageBuilder.ping(IDGenerator.generate(), Protocol.TTL));
       }
     });
   }
@@ -1005,6 +1238,32 @@ class GnutellaServer {
       conn.socket.destroy();
       this.connections.delete(id);
     }
+  }
+
+  sendPush(
+    targetServentId: Buffer,
+    fileIndex: number,
+    requesterIp: string,
+    requesterPort: number
+  ): void {
+    // Send PUSH message to all connected nodes
+    // The PUSH will be routed based on servent ID
+    const pushMessage = MessageBuilder.push(
+      targetServentId,
+      fileIndex,
+      requesterIp,
+      requesterPort
+    );
+
+    this.connections.forEach((conn) => {
+      if (conn.handshake) {
+        try {
+          conn.send(pushMessage);
+        } catch (err) {
+          console.error(`Failed to send PUSH to ${conn.id}:`, err);
+        }
+      }
+    });
   }
 }
 
@@ -1303,6 +1562,23 @@ export class GnutellaNode {
 
   getSharedFiles(): SharedFile[] {
     return this.qrpManager.getFiles();
+  }
+
+  sendPush(
+    targetServentId: Buffer,
+    fileIndex: number,
+    requesterPort: number
+  ): void {
+    if (!this.server || !this.context) {
+      throw new Error("GnutellaNode not started");
+    }
+
+    this.server.sendPush(
+      targetServentId,
+      fileIndex,
+      this.context.localIp,
+      requesterPort
+    );
   }
 
   private setupPeriodicTasks(): void {

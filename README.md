@@ -82,6 +82,8 @@ bun test src/message_parser.test.ts
 - ✅ Persistent peer storage
 - ✅ Incoming connection handling
 - ✅ GWebCache server implementation
+- ✅ PUSH downloads for firewalled hosts
+- ✅ HTTP file serving with range support
 
 ## Limitations
 
@@ -118,6 +120,17 @@ The implementation uses a class-based architecture with:
 - `SocketHandler` managing individual peer connections
 - `MessageRouter` for message distribution
 - `QRPManager` for query routing optimization
+
+## PUSH Downloads
+
+PUSH downloads are used when the file-serving host is behind a firewall and cannot accept incoming connections. The implementation supports:
+
+- Parsing and routing PUSH messages through the Gnutella network
+- Initiating outbound connections when receiving PUSH requests
+- GIV protocol handshake for pushed connections
+- HTTP file serving over pushed connections with range support
+
+See [push-download-example.ts](push-download-example.ts) for usage examples.
 
 ## Future Work
 
