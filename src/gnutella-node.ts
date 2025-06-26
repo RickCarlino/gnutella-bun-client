@@ -832,14 +832,13 @@ class MessageRouter {
   ): void {
     if (!conn.handshake) return;
 
-    const pongTtl = Math.max(msg.header.hops + 1, Protocol.TTL);
+    const pongTtl = Math.max(msg.header.hops, 1);
     const sharedFiles = context.qrpManager.getFiles();
     const fileCount = sharedFiles.length;
     const totalSizeKb = Math.floor(
       sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024
     );
 
-    console.log(`Received PING from ${context.localIp}:${context.localPort} - Files: ${fileCount}, Size: ${totalSizeKb} KB`);
     conn.send(
       MessageBuilder.pong(
         msg.header.descriptorId,
@@ -857,9 +856,6 @@ class MessageRouter {
     msg: PongMessage,
     context: Context
   ): void {
-    console.log(
-      `Received PONG from ${msg.ipAddress}:${msg.port} - Files: ${msg.filesShared}, Size: ${msg.kilobytesShared} KB`
-    );
     context.peerStore.add(msg.ipAddress, msg.port);
   }
 
@@ -916,7 +912,7 @@ class MessageRouter {
   }
 
   private handlePush(
-    conn: Connection,
+    _conn: Connection,
     msg: PushMessage,
     context: Context
   ): void {
@@ -1081,7 +1077,7 @@ class MessageRouter {
               }
             });
 
-            readStream.on("error", (err) => {
+            readStream.on("error", (err: Error) => {
               console.error("Error reading file for PUSH:", err);
               socket.destroy();
             });
@@ -1114,10 +1110,10 @@ class GnutellaServer {
     this.router = new MessageRouter();
     this.context = context;
   }
-  async pingPeers(): Promise<void> {
+  async pingPeers(ttl: number = Protocol.TTL): Promise<void> {
     this.connections.forEach((conn) => {
       if (conn.handshake) {
-        conn.send(MessageBuilder.ping(IDGenerator.generate(), Protocol.TTL));
+        conn.send(MessageBuilder.ping(IDGenerator.generate(), ttl));
       }
     });
   }
@@ -1584,7 +1580,10 @@ export class GnutellaNode {
   private setupPeriodicTasks(): void {
     setInterval(() => this.peerStore.save(), 60000);
     setInterval(() => this.peerStore.prune(), HOUR);
-    setInterval(() => this.server?.pingPeers(), 4 * 1000 * 60);
+    // Send regular pings (TTL=7) every 3 seconds for fresh pong cache
+    setInterval(() => this.server?.pingPeers(Protocol.TTL), 3 * 1000);
+    // Send alive pings (TTL=1) every 30 seconds to keep connections alive
+    setInterval(() => this.server?.pingPeers(1), 30 * 1000);
   }
 
   private setupShutdownHandler(): void {
