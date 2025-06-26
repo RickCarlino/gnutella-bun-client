@@ -5,7 +5,7 @@ import net from "net";
 import path from "path";
 import { promisify } from "util";
 import zlib from "zlib";
-import { GnutellaConfig } from "./config";
+import { CONFIG, GnutellaConfig } from "./config";
 
 enum MessageType {
   PING = 0,
@@ -850,8 +850,8 @@ class MessageRouter {
 
     const queryHit = MessageBuilder.queryHit(
       msg.header.descriptorId,
-      context.localPort,
-      context.localIp,
+      CONFIG.httpPort,
+      "127.0.0.1", // context.localIp,
       matchingFiles,
       context.serventId
     );

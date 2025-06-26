@@ -20,8 +20,10 @@
     "allowSyntheticDefaultImports": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "jsx": "preserve",
+    "jsxImportSource": "hono/jsx"
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "src/http.tsx"],
   "exclude": ["node_modules"]
 }

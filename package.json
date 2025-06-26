@@ -16,6 +16,6 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "coffeescript": "^2.7.0"
+    "hono": "^4.8.3"
   }
 }
