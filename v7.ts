@@ -646,15 +646,18 @@ class MessageBuilder {
     return code;
   }
 
-  static bye(code: number = 200, message: string = "Closing connection"): Buffer {
+  static bye(
+    code: number = 200,
+    message: string = "Closing connection"
+  ): Buffer {
     const messageBytes = Buffer.from(message + "\r\n", "utf8");
     const payloadSize = 2 + messageBytes.length;
     const header = this.header(MessageType.BYE, payloadSize, 1); // TTL=1 as per spec
     const payload = Buffer.alloc(payloadSize);
-    
+
     payload.writeUInt16LE(code, 0);
     messageBytes.copy(payload, 2);
-    
+
     return Buffer.concat([header, payload]);
   }
 }
@@ -697,31 +700,31 @@ class MessageRouter {
     if (!header || header.ttl === 0) {
       return false;
     }
-    
+
     // Decrement TTL and increment hops
     header.ttl--;
     header.hops++;
-    
+
     // After decrement, TTL should still be >= 0 to forward
     return header.ttl >= 0;
   }
 
   private isMessageSeen(messageId: Buffer): boolean {
-    const idString = messageId.toString('hex');
+    const idString = messageId.toString("hex");
     const now = Date.now();
-    
+
     // Clean expired entries
     for (const [id, timestamp] of this.messageCache.entries()) {
       if (now - timestamp > this.CACHE_EXPIRY) {
         this.messageCache.delete(id);
       }
     }
-    
+
     // Check if message was seen
     if (this.messageCache.has(idString)) {
       return true;
     }
-    
+
     // Mark as seen
     this.messageCache.set(idString, now);
     return false;
@@ -729,7 +732,7 @@ class MessageRouter {
 
   route(conn: Connection, msg: GnutellaMessage, context: Context): void {
     // Check for duplicate messages (only for messages with headers)
-    if ('header' in msg && msg.header) {
+    if ("header" in msg && msg.header) {
       if (this.isMessageSeen(msg.header.descriptorId)) {
         // Drop duplicate message
         return;
@@ -905,7 +908,13 @@ class GnutellaServer {
     this.router = new MessageRouter();
     this.context = context;
   }
-
+  async pingPeers(): Promise<void> {
+    this.connections.forEach((conn) => {
+      if (conn.handshake) {
+        conn.send(MessageBuilder.ping());
+      }
+    });
+  }
   async start(port: number): Promise<void> {
     this.server = net.createServer((socket) => this.handleConnection(socket));
     return new Promise((resolve, reject) => {
@@ -999,10 +1008,14 @@ class GnutellaServer {
     this.connections.delete(id);
   }
 
-  closeConnection(id: string, code: number = 200, reason: string = "Closing connection"): void {
+  closeConnection(
+    id: string,
+    code: number = 200,
+    reason: string = "Closing connection"
+  ): void {
     const conn = this.connections.get(id);
     if (!conn) return;
-    
+
     if (conn.handshake) {
       try {
         conn.send(MessageBuilder.bye(code, reason));
@@ -1319,6 +1332,7 @@ class GnutellaNode {
   private setupPeriodicTasks(): void {
     setInterval(() => this.peerStore.save(), 60000);
     setInterval(() => this.peerStore.prune(), 3600000);
+    setInterval(() => this.server?.pingPeers(), 4 * 1000 * 60);
   }
 
   private setupShutdownHandler(): void {
