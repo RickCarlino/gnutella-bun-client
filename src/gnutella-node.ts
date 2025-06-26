@@ -6,6 +6,7 @@ import path from "path";
 import { promisify } from "util";
 import zlib from "zlib";
 import { CONFIG, GnutellaConfig } from "./config";
+import { Binary } from "./binary";
 
 enum MessageType {
   PING = 0,
@@ -129,25 +130,6 @@ const Protocol = {
   QRP_INFINITY: 7,
   HANDSHAKE_END: `\r\n\r\n`,
 };
-
-class Binary {
-  static readUInt32LE(buffer: Buffer, offset: number): number {
-    return buffer.readUInt32LE(offset);
-  }
-
-  static writeUInt32LE(buffer: Buffer, value: number, offset: number): void {
-    buffer.writeUInt32LE(value, offset);
-  }
-
-  static ipToBuffer(ip: string): Buffer {
-    const parts = ip.split(".");
-    return Buffer.from(parts.map((p) => parseInt(p)));
-  }
-
-  static bufferToIp(buffer: Buffer, offset: number): string {
-    return Array.from(buffer.slice(offset, offset + 4)).join(".");
-  }
-}
 
 class MessageParser {
   static parse(buffer: Buffer): GnutellaMessage | null {
@@ -851,7 +833,7 @@ class MessageRouter {
     const queryHit = MessageBuilder.queryHit(
       msg.header.descriptorId,
       CONFIG.httpPort,
-      "127.0.0.1", // context.localIp,
+      context.localIp,
       matchingFiles,
       context.serventId
     );
