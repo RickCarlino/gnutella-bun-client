@@ -5,30 +5,7 @@ import net from "net";
 import path from "path";
 import { promisify } from "util";
 import zlib from "zlib";
-
-interface ProtocolConstants {
-  PORT: number;
-  VERSION: string;
-  TTL: number;
-  HEADER_SIZE: number;
-  PONG_SIZE: number;
-  QUERY_HITS_FOOTER: number;
-  QRP_TABLE_SIZE: number;
-  QRP_INFINITY: number;
-  HANDSHAKE_END: string;
-}
-
-const Protocol: ProtocolConstants = {
-  PORT: 6346,
-  VERSION: "0.6",
-  TTL: 7,
-  HEADER_SIZE: 23,
-  PONG_SIZE: 14,
-  QUERY_HITS_FOOTER: 23,
-  QRP_TABLE_SIZE: 8192,
-  QRP_INFINITY: 7,
-  HANDSHAKE_END: `\r\n\r\n`,
-};
+import { GnutellaConfig } from "./config";
 
 enum MessageType {
   PING = 0,
@@ -138,6 +115,20 @@ type GnutellaMessage =
   | QueryMessage
   | QueryHitsMessage
   | RouteTableUpdateMessage;
+
+const HOUR = 60 * 60 * 1000; // 1 hour
+
+const Protocol = {
+  PORT: 6346,
+  VERSION: "0.6",
+  TTL: 7,
+  HEADER_SIZE: 23,
+  PONG_SIZE: 14,
+  QUERY_HITS_FOOTER: 23,
+  QRP_TABLE_SIZE: 8192,
+  QRP_INFINITY: 7,
+  HANDSHAKE_END: `\r\n\r\n`,
+};
 
 class Binary {
   static readUInt32LE(buffer: Buffer, offset: number): number {
@@ -1053,9 +1044,12 @@ class PeerStore {
   async load(): Promise<void> {
     try {
       const data = await readFile(this.filename, "utf8");
-      const parsed = JSON.parse(data);
+      const parsed: GnutellaConfig = JSON.parse(data);
       if (parsed.peers) {
-        parsed.peers.forEach((p: Peer) => this.add(p.ip, p.port, p.lastSeen));
+        Object.keys(parsed.peers).forEach((key) => {
+          const p = parsed.peers[key];
+          this.add(p.ip, p.port, p.lastSeen);
+        });
       }
     } catch {}
   }
@@ -1086,7 +1080,7 @@ class PeerStore {
       .slice(0, count);
   }
 
-  prune(maxAge: number = 3600000): void {
+  prune(maxAge: number = HOUR): void {
     const cutoff = Date.now() - maxAge;
     Array.from(this.peers.entries()).forEach(([key, peer]) => {
       if (peer.lastSeen < cutoff) {
@@ -1254,7 +1248,7 @@ class QRPManager {
   }
 }
 
-class GnutellaNode {
+export class GnutellaNode {
   private server: GnutellaServer | null;
   private peerStore: PeerStore;
   private qrpManager: QRPManager;
@@ -1331,7 +1325,7 @@ class GnutellaNode {
 
   private setupPeriodicTasks(): void {
     setInterval(() => this.peerStore.save(), 60000);
-    setInterval(() => this.peerStore.prune(), 3600000);
+    setInterval(() => this.peerStore.prune(), HOUR);
     setInterval(() => this.server?.pingPeers(), 4 * 1000 * 60);
   }
 
@@ -1343,10 +1337,3 @@ class GnutellaNode {
     });
   }
 }
-
-async function main(): Promise<void> {
-  const node = new GnutellaNode();
-  await node.start();
-}
-
-main().catch(console.error);
