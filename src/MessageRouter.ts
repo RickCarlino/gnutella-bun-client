@@ -84,10 +84,8 @@ export class MessageRouter {
       push: () => this.handlePush(conn, msg as PushMessage, context),
       query: () => this.handleQuery(conn, msg as QueryMessage, context),
       bye: () => this.handleBye(conn, msg as ByeMessage),
-      handshake_error: () => {
-        console.error(`Handshake error from ${conn.socket.remoteAddress}`);
-        console.log((msg as HandshakeErrorMessage).message);
-      },
+      handshake_error: () =>
+        this.handleHandshakeError(conn, msg as HandshakeErrorMessage, context),
       route_table_update: () => {},
     };
 
@@ -248,6 +246,100 @@ export class MessageRouter {
     // According to spec: "A servent receiving a Bye message MUST close the connection immediately"
     console.log(`Received Bye message (code: ${msg.code}): ${msg.message}`);
     conn.socket.destroy();
+  }
+
+  private handleHandshakeError(
+    conn: Connection,
+    msg: HandshakeErrorMessage,
+    context: Context,
+  ): void {
+    console.error(
+      `Handshake error from ${conn.socket.remoteAddress} (${msg.code}): ${msg.message}`,
+    );
+
+    // Extract X-Try and X-Try-Ultrapeers headers if present
+    const xTry = msg.headers["X-Try"];
+    const xTryUltrapeers = msg.headers["X-Try-Ultrapeers"];
+
+    // Parse and store alternative hosts from X-Try header
+    if (xTry) {
+      const hosts = this.parseXTryHeader(xTry);
+      console.log(`Received ${hosts.length} alternative hosts from X-Try`);
+      hosts.forEach((host) => {
+        context.peerStore.addPeer(host.ip, host.port, "pong");
+      });
+    }
+
+    // Parse and store ultrapeer hosts from X-Try-Ultrapeers header
+    if (xTryUltrapeers) {
+      const ultrapeers = this.parseXTryHeader(xTryUltrapeers);
+      console.log(
+        `Received ${ultrapeers.length} ultrapeer hosts from X-Try-Ultrapeers`,
+      );
+      // For now, treat ultrapeers the same as regular peers
+      // In the future, these could be marked with a special flag
+      ultrapeers.forEach((host) => {
+        context.peerStore.addPeer(host.ip, host.port, "pong");
+      });
+    }
+
+    // Save any newly discovered peers
+    if (xTry || xTryUltrapeers) {
+      context.peerStore.save().catch((err) => {
+        console.error("Failed to save discovered peers:", err);
+      });
+    }
+
+    // Close the connection
+    conn.socket.destroy();
+  }
+
+  /**
+   * Parse X-Try header value into host:port pairs
+   */
+  private parseXTryHeader(header: string): Array<{ ip: string; port: number }> {
+    const hosts: Array<{ ip: string; port: number }> = [];
+
+    // Split by comma and parse each host:port pair
+    const entries = header.split(",");
+    for (const entry of entries) {
+      const trimmed = entry.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const colonIndex = trimmed.lastIndexOf(":");
+      if (colonIndex === -1) {
+        continue;
+      }
+
+      const ip = trimmed.substring(0, colonIndex);
+      const portStr = trimmed.substring(colonIndex + 1);
+      const port = parseInt(portStr, 10);
+
+      // Validate IP and port
+      if (port > 0 && port <= 65535 && this.isValidIP(ip)) {
+        hosts.push({ ip, port });
+      }
+    }
+
+    return hosts;
+  }
+
+  /**
+   * Basic IP validation
+   */
+  private isValidIP(ip: string): boolean {
+    // Simple IPv4 validation
+    const parts = ip.split(".");
+    if (parts.length !== 4) {
+      return false;
+    }
+
+    return parts.every((part) => {
+      const num = parseInt(part, 10);
+      return num >= 0 && num <= 255 && part === num.toString();
+    });
   }
 
   private handlePush(

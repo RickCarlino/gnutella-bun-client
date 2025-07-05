@@ -34,6 +34,17 @@ export class MessageBuilder {
     return this.handshake(`GNUTELLA/${Protocol.VERSION} 200 OK`, headers);
   }
 
+  static handshakeReject(
+    code: number,
+    message: string,
+    headers: Record<string, string>,
+  ): Buffer {
+    return this.handshake(
+      `GNUTELLA/${Protocol.VERSION} ${code} ${message}`,
+      headers,
+    );
+  }
+
   static ping(id?: Buffer, ttl: number = Protocol.TTL): Buffer {
     return this.header(MessageType.PING, 0, ttl, id);
   }
