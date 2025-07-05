@@ -81,7 +81,7 @@ export default [
       "no-var": "error",
       eqeqeq: ["error", "always"],
       curly: ["error", "all"],
-      "no-empty": ["error", { allowEmptyCatch: true }],
+      "no-empty": "error",
       complexity: ["warn", { max: 20, variant: "modified" }],
     },
   },

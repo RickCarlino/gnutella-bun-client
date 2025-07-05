@@ -186,36 +186,23 @@ export class ConnectionManager extends EventEmitter {
     attempt.attempts++;
     attempt.lastAttempt = Date.now();
 
-    try {
-      console.log(
-        `Attempting connection to ${peerKey} (attempt ${attempt.attempts})`,
-      );
+    console.log(
+      `Attempting connection to ${peerKey} (attempt ${attempt.attempts})`,
+    );
 
-      const connection = await Promise.race([
-        this.server.connectPeer(host, port),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Connection timeout")),
-            this.config.connectionTimeoutMs,
-          ),
+    const connection = await Promise.race([
+      this.server.connectPeer(host, port),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Connection timeout")),
+          this.config.connectionTimeoutMs,
         ),
-      ]);
+      ),
+    ]);
 
-      console.log(`Begin handshake with ${peerKey}`);
-      this.onPeerConnected(peerKey, connection);
-      return true;
-    } catch (error) {
-      console.error(`Failed to connect to ${peerKey}:`, error);
-      this.settingStore.recordPeerFailure(host, port);
-
-      // Calculate next retry time with exponential backoff and jitter
-      const baseDelay =
-        this.config.retryDelayMs * Math.pow(2, attempt.attempts - 1);
-      const jitter = Math.random() * 0.3 * baseDelay; // 30% jitter
-      attempt.nextRetryTime = Date.now() + baseDelay + jitter;
-
-      return false;
-    }
+    console.log(`Begin handshake with ${peerKey}`);
+    this.onPeerConnected(peerKey, connection);
+    return true;
   }
 
   /**
@@ -248,37 +235,33 @@ export class ConnectionManager extends EventEmitter {
           break;
         }
 
-        try {
-          console.log(`Querying GWebCache: ${cache.url}`);
-          const result = await this.gwcClient.fetchPeersAndCaches(cache.url);
+        console.log(`Querying GWebCache: ${cache.url}`);
+        const result = await this.gwcClient.fetchPeersAndCaches(cache.url);
 
-          // Update cache timestamp
-          this.settingStore.updateCacheTimestamp(cache.url, "pull");
+        // Update cache timestamp
+        this.settingStore.updateCacheTimestamp(cache.url, "pull");
 
-          // Add discovered peers
-          for (const gwcPeer of result.peers) {
-            const key = `${gwcPeer.ip}:${gwcPeer.port}`;
-            if (!seenPeers.has(key)) {
-              // Add to setting store
-              this.settingStore.addPeer(gwcPeer.ip, gwcPeer.port, "gwc");
+        // Add discovered peers
+        for (const gwcPeer of result.peers) {
+          const key = `${gwcPeer.ip}:${gwcPeer.port}`;
+          if (!seenPeers.has(key)) {
+            // Add to setting store
+            this.settingStore.addPeer(gwcPeer.ip, gwcPeer.port, "gwc");
 
-              const peer = {
-                ip: gwcPeer.ip,
-                port: gwcPeer.port,
-                lastSeen: Date.now(),
-                source: "gwc" as const,
-                failureCount: 0,
-              };
-              peers.push(peer);
-              seenPeers.add(key);
-            }
+            const peer = {
+              ip: gwcPeer.ip,
+              port: gwcPeer.port,
+              lastSeen: Date.now(),
+              source: "gwc" as const,
+              failureCount: 0,
+            };
+            peers.push(peer);
+            seenPeers.add(key);
           }
-
-          // Save to persist new peers
-          await this.settingStore.save();
-        } catch (error) {
-          console.error(`Failed to query GWebCache ${cache.url}:`, error);
         }
+
+        // Save to persist new peers
+        await this.settingStore.save();
       }
     }
 

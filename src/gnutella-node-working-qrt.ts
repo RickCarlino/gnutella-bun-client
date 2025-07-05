@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { promises as fs } from "fs";
-import { readFile, writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import net from "net";
 import path from "path";
 import { promisify } from "util";
@@ -188,7 +188,7 @@ class MessageParser {
   }
 
   static parseHandshake(
-    buffer: Buffer
+    buffer: Buffer,
   ):
     | HandshakeConnectMessage
     | HandshakeOkMessage
@@ -254,7 +254,7 @@ class MessageParser {
 
   static parsePayload(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): GnutellaMessage | null {
     const parsers: Record<number, () => GnutellaMessage | null> = {
       [MessageType.PING]: () => ({ type: "ping", header }),
@@ -313,7 +313,7 @@ class MessageParser {
 
   static parseQuery(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): QueryMessage | null {
     if (payload.length < 3) {
       return null;
@@ -334,7 +334,7 @@ class MessageParser {
 
   static parseQueryHits(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): QueryHitsMessage | null {
     if (payload.length < 11) {
       return null;
@@ -354,14 +354,14 @@ class MessageParser {
 
   static parseRouteTableUpdate(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): RouteTableUpdateMessage | null {
     const qrp = this.parseQRP(payload);
     return qrp ? { ...qrp, header } : null;
   }
 
   static parseQRP(
-    payload: Buffer
+    payload: Buffer,
   ): Omit<RouteTableUpdateMessage, "header"> | null {
     if (payload.length < 1) {
       return null;
@@ -418,7 +418,7 @@ class SocketHandler {
     socket: net.Socket,
     onMessage: (message: GnutellaMessage) => void,
     onError: (error: Error) => void,
-    onClose: () => void
+    onClose: () => void,
   ) {
     this.socket = socket;
     this.buffer = Buffer.alloc(0);
@@ -566,7 +566,7 @@ class MessageBuilder {
     type: MessageType,
     payloadLength: number,
     ttl: number = Protocol.TTL,
-    id?: Buffer
+    id?: Buffer,
   ): Buffer {
     const header = Buffer.alloc(Protocol.HEADER_SIZE);
     const messageId = id || IDGenerator.generate();
@@ -601,7 +601,7 @@ class MessageBuilder {
     ip: string,
     files: number = 0,
     kb: number = 0,
-    ttl: number = Protocol.TTL
+    ttl: number = Protocol.TTL,
   ): Buffer {
     const payload = Buffer.alloc(Protocol.PONG_SIZE);
     payload.writeUInt16LE(port, 0);
@@ -619,19 +619,19 @@ class MessageBuilder {
     port: number,
     ip: string,
     files: FileEntry[],
-    serventId: Buffer
+    serventId: Buffer,
   ): Buffer {
     const fileEntries = files.map((file) => this.fileEntry(file));
     const totalFileSize = fileEntries.reduce(
       (sum, entry) => sum + entry.length,
-      0
+      0,
     );
     const payloadSize = 11 + totalFileSize + Protocol.QUERY_HITS_FOOTER;
     const header = this.header(
       MessageType.QUERY_HITS,
       payloadSize,
       Protocol.TTL,
-      queryId
+      queryId,
     );
     const payloadHeader = this.queryHitHeader(files.length, port, ip);
     const vendorCode = this.vendorCode();
@@ -692,7 +692,7 @@ class MessageBuilder {
 
   static bye(
     code: number = 200,
-    message: string = "Closing connection"
+    message: string = "Closing connection",
   ): Buffer {
     const messageBytes = Buffer.from(message + "\r\n", "utf8");
     const payloadSize = 2 + messageBytes.length;
@@ -710,7 +710,7 @@ class MessageBuilder {
     fileIndex: number,
     ipAddress: string,
     port: number,
-    ttl: number = Protocol.TTL
+    ttl: number = Protocol.TTL,
   ): Buffer {
     const payloadSize = 26; // 16 (servent ID) + 4 (file index) + 4 (IP) + 2 (port)
     const header = this.header(MessageType.PUSH, payloadSize, ttl);
@@ -807,7 +807,7 @@ class MessageRouter {
         this.handleHandshakeConnect(
           conn,
           msg as HandshakeConnectMessage,
-          context
+          context,
         ),
       handshake_ok: () =>
         this.handleHandshakeOk(conn, msg as HandshakeOkMessage, context),
@@ -829,13 +829,13 @@ class MessageRouter {
   private handleHandshakeConnect(
     conn: Connection,
     msg: HandshakeConnectMessage,
-    context: Context
+    context: Context,
   ): void {
     const clientAcceptsDeflate =
       msg.headers["Accept-Encoding"]?.includes("deflate");
     const responseHeaders = this.buildResponseHeaders(
       context,
-      clientAcceptsDeflate
+      clientAcceptsDeflate,
     );
     conn.send(MessageBuilder.handshakeOk(responseHeaders));
   }
@@ -843,7 +843,7 @@ class MessageRouter {
   private handleHandshakeOk(
     conn: Connection,
     msg: HandshakeOkMessage,
-    context: Context
+    context: Context,
   ): void {
     if (conn.handshake) {
       return;
@@ -854,7 +854,7 @@ class MessageRouter {
         msg.headers["Accept-Encoding"]?.includes("deflate");
       const responseHeaders = this.buildResponseHeaders(
         context,
-        clientAcceptsDeflate
+        clientAcceptsDeflate,
       );
       conn.send(MessageBuilder.handshakeOk(responseHeaders));
     }
@@ -864,7 +864,7 @@ class MessageRouter {
     const shouldCompress =
       msg.headers["Content-Encoding"]?.includes("deflate") &&
       this.buildResponseHeaders(context, false)["Accept-Encoding"]?.includes(
-        "deflate"
+        "deflate",
       );
 
     if (shouldCompress && conn.enableCompression) {
@@ -880,7 +880,7 @@ class MessageRouter {
   private handlePing(
     conn: Connection,
     msg: PingMessage,
-    context: Context
+    context: Context,
   ): void {
     if (!conn.handshake) {
       return;
@@ -890,7 +890,7 @@ class MessageRouter {
     const sharedFiles = context.qrpManager.getFiles();
     const fileCount = sharedFiles.length;
     const totalSizeKb = Math.floor(
-      sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024
+      sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024,
     );
 
     conn.send(
@@ -900,15 +900,15 @@ class MessageRouter {
         context.localIp,
         fileCount,
         totalSizeKb,
-        pongTtl
-      )
+        pongTtl,
+      ),
     );
   }
 
   private handlePong(
     _conn: Connection,
     msg: PongMessage,
-    context: Context
+    context: Context,
   ): void {
     context.peerStore.add(msg.ipAddress, msg.port);
   }
@@ -916,7 +916,7 @@ class MessageRouter {
   private handleQuery(
     conn: Connection,
     msg: QueryMessage,
-    context: Context
+    context: Context,
   ): void {
     if (!this.ttlCheck(msg.header)) {
       return;
@@ -927,7 +927,7 @@ class MessageRouter {
     }
 
     const matchingFiles = context.qrpManager.getMatchingFiles(
-      msg.searchCriteria
+      msg.searchCriteria,
     );
     if (matchingFiles.length === 0) {
       return;
@@ -938,14 +938,14 @@ class MessageRouter {
       CONFIG.httpPort,
       context.localIp,
       matchingFiles,
-      context.serventId
+      context.serventId,
     );
     conn.send(queryHit);
   }
 
   private buildResponseHeaders(
     context: Context,
-    clientAcceptsDeflate: boolean
+    clientAcceptsDeflate: boolean,
   ): Record<string, string> {
     const headers = buildBaseHeaders(context);
     if (clientAcceptsDeflate) {
@@ -956,13 +956,11 @@ class MessageRouter {
 
   private async sendQRPTable(
     conn: Connection,
-    qrpManager: QRPManager
+    qrpManager: QRPManager,
   ): Promise<void> {
-    try {
-      conn.send(qrpManager.buildResetMessage());
-      const patchMessages = await qrpManager.buildPatchMessage();
-      patchMessages.forEach((msg) => conn.send(msg));
-    } catch {}
+    conn.send(qrpManager.buildResetMessage());
+    const patchMessages = await qrpManager.buildPatchMessage();
+    patchMessages.forEach((msg) => conn.send(msg));
   }
 
   private handleBye(conn: Connection, msg: ByeMessage): void {
@@ -974,7 +972,7 @@ class MessageRouter {
   private handlePush(
     _conn: Connection,
     msg: PushMessage,
-    context: Context
+    context: Context,
   ): void {
     // Check if the push request is for us
     if (!msg.serventId.equals(context.serventId)) {
@@ -987,7 +985,7 @@ class MessageRouter {
 
     // This PUSH is for us - initiate a push connection
     console.log(
-      `Received PUSH request for file ${msg.fileIndex} to ${msg.ipAddress}:${msg.port}`
+      `Received PUSH request for file ${msg.fileIndex} to ${msg.ipAddress}:${msg.port}`,
     );
 
     // Create a new connection to the requester
@@ -1001,7 +999,7 @@ class MessageRouter {
       const givMessage = this.buildGivMessage(
         msg.fileIndex,
         context.serventId,
-        context.qrpManager.getFile(msg.fileIndex)?.filename || ""
+        context.qrpManager.getFile(msg.fileIndex)?.filename || "",
       );
       pushSocket.write(givMessage);
 
@@ -1011,14 +1009,14 @@ class MessageRouter {
         (err) => {
           console.error("Error in push connection handler:", err);
           pushSocket.destroy();
-        }
+        },
       );
     });
 
     pushSocket.once("error", (err) => {
       console.error(
         `Failed to establish push connection to ${msg.ipAddress}:${msg.port}:`,
-        err
+        err,
       );
       pushSocket.destroy();
     });
@@ -1027,7 +1025,7 @@ class MessageRouter {
   private buildGivMessage(
     fileIndex: number,
     serventId: Buffer,
-    filename: string
+    filename: string,
   ): Buffer {
     // Format: GIV <file_index>:<servent_id>/<file_name>\n\n
     const serventIdHex = serventId.toString("hex").toUpperCase();
@@ -1038,7 +1036,7 @@ class MessageRouter {
   private async handlePushConnection(
     socket: net.Socket,
     fileIndex: number,
-    context: Context
+    context: Context,
   ): Promise<void> {
     // After sending GIV, the socket will receive HTTP requests
     let buffer = Buffer.alloc(0);
@@ -1069,83 +1067,77 @@ class MessageRouter {
             return;
           }
 
-          try {
-            // Construct file path
-            const filePath = path.join(
-              process.cwd(),
-              "gnutella-library",
-              file.filename
-            );
-            const stat = await fs.stat(filePath);
+          // Construct file path
+          const filePath = path.join(
+            process.cwd(),
+            "gnutella-library",
+            file.filename,
+          );
+          const stat = await fs.stat(filePath);
 
-            // Parse Range header if present
-            const rangeHeader = lines.find((line) =>
-              line.toLowerCase().startsWith("range:")
-            );
-            let start = 0;
-            let end = stat.size - 1;
-            let status = 200;
-            let statusText = "OK";
+          // Parse Range header if present
+          const rangeHeader = lines.find((line) =>
+            line.toLowerCase().startsWith("range:"),
+          );
+          let start = 0;
+          let end = stat.size - 1;
+          let status = 200;
+          let statusText = "OK";
 
-            if (rangeHeader) {
-              const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-              if (rangeMatch) {
-                start = parseInt(rangeMatch[1]);
-                if (rangeMatch[2]) {
-                  end = parseInt(rangeMatch[2]);
-                }
-                status = 206;
-                statusText = "Partial Content";
+          if (rangeHeader) {
+            const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+            if (rangeMatch) {
+              start = parseInt(rangeMatch[1]);
+              if (rangeMatch[2]) {
+                end = parseInt(rangeMatch[2]);
               }
+              status = 206;
+              statusText = "Partial Content";
             }
-
-            const contentLength = end - start + 1;
-
-            // Send HTTP response headers
-            const headers = [
-              `HTTP/1.1 ${status} ${statusText}`,
-              "Server: GnutellaBun/0.1",
-              "Content-Type: application/octet-stream",
-              `Content-Length: ${contentLength}`,
-              "Accept-Ranges: bytes",
-            ];
-
-            if (status === 206) {
-              headers.push(`Content-Range: bytes ${start}-${end}/${stat.size}`);
-            }
-
-            headers.push("", ""); // Empty line to end headers
-            socket.write(headers.join("\r\n"));
-
-            // Stream file content
-            const readStream = require("fs").createReadStream(filePath, {
-              start,
-              end,
-            });
-            readStream.pipe(socket);
-
-            readStream.on("end", () => {
-              // Keep connection open for HTTP/1.1 keep-alive
-              const connectionHeader = lines.find((line) =>
-                line.toLowerCase().startsWith("connection:")
-              );
-              if (
-                connectionHeader &&
-                connectionHeader.toLowerCase().includes("close")
-              ) {
-                socket.end();
-              }
-            });
-
-            readStream.on("error", (err: Error) => {
-              console.error("Error reading file for PUSH:", err);
-              socket.destroy();
-            });
-          } catch (err) {
-            console.error("Error handling PUSH file request:", err);
-            socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
-            socket.end();
           }
+
+          const contentLength = end - start + 1;
+
+          // Send HTTP response headers
+          const headers = [
+            `HTTP/1.1 ${status} ${statusText}`,
+            "Server: GnutellaBun/0.1",
+            "Content-Type: application/octet-stream",
+            `Content-Length: ${contentLength}`,
+            "Accept-Ranges: bytes",
+          ];
+
+          if (status === 206) {
+            headers.push(`Content-Range: bytes ${start}-${end}/${stat.size}`);
+          }
+
+          headers.push("", ""); // Empty line to end headers
+          socket.write(headers.join("\r\n"));
+
+          // Stream file content
+          const readStream = require("fs").createReadStream(filePath, {
+            start,
+            end,
+          });
+          readStream.pipe(socket);
+
+          readStream.on("end", () => {
+            // Keep connection open for HTTP/1.1 keep-alive
+            const connectionHeader = lines.find((line) =>
+              line.toLowerCase().startsWith("connection:"),
+            );
+            if (
+              connectionHeader &&
+              connectionHeader.toLowerCase().includes("close")
+            ) {
+              socket.end();
+            }
+          });
+
+          readStream.on("error", (err: Error) => {
+            console.error("Error reading file for PUSH:", err);
+            socket.destroy();
+          });
         } else {
           socket.write("HTTP/1.1 405 Method Not Allowed\r\n\r\n");
           socket.end();
@@ -1194,13 +1186,9 @@ class GnutellaServer {
       // Send Bye messages to all connections that support it
       this.connections.forEach((conn) => {
         if (conn.handshake) {
-          try {
-            conn.send(MessageBuilder.bye(200, "Server shutting down"));
-            // Give a brief moment for the Bye message to be sent
-            setTimeout(() => conn.socket.destroy(), 100);
-          } catch {
-            conn.socket.destroy();
-          }
+          conn.send(MessageBuilder.bye(200, "Server shutting down"));
+          // Give a brief moment for the Bye message to be sent
+          setTimeout(() => conn.socket.destroy(), 100);
         } else {
           conn.socket.destroy();
         }
@@ -1230,8 +1218,8 @@ class GnutellaServer {
         conn.send(
           MessageBuilder.handshake(
             `GNUTELLA CONNECT/${Protocol.VERSION}`,
-            headers
-          )
+            headers,
+          ),
         );
         resolve(conn);
       });
@@ -1245,14 +1233,14 @@ class GnutellaServer {
 
   private handleConnection(
     socket: net.Socket,
-    isOutbound: boolean = false
+    isOutbound: boolean = false,
   ): void {
     const id = `${socket.remoteAddress}:${socket.remotePort}`;
     const handler = new SocketHandler(
       socket,
       (msg) => this.handleMessage(id, msg),
       (err) => this.handleError(id, err),
-      () => this.handleClose(id)
+      () => this.handleClose(id),
     );
 
     const connection: Connection = {
@@ -1287,7 +1275,7 @@ class GnutellaServer {
   closeConnection(
     id: string,
     code: number = 200,
-    reason: string = "Closing connection"
+    reason: string = "Closing connection",
   ): void {
     const conn = this.connections.get(id);
     if (!conn) {
@@ -1295,17 +1283,12 @@ class GnutellaServer {
     }
 
     if (conn.handshake) {
-      try {
-        conn.send(MessageBuilder.bye(code, reason));
-        // Wait briefly for Bye to send, then close
-        setTimeout(() => {
-          conn.socket.destroy();
-          this.connections.delete(id);
-        }, 100);
-      } catch {
+      conn.send(MessageBuilder.bye(code, reason));
+      // Wait briefly for Bye to send, then close
+      setTimeout(() => {
         conn.socket.destroy();
         this.connections.delete(id);
-      }
+      }, 100);
     } else {
       conn.socket.destroy();
       this.connections.delete(id);
@@ -1316,7 +1299,7 @@ class GnutellaServer {
     targetServentId: Buffer,
     fileIndex: number,
     requesterIp: string,
-    requesterPort: number
+    requesterPort: number,
   ): void {
     // Send PUSH message to all connected nodes
     // The PUSH will be routed based on servent ID
@@ -1324,16 +1307,12 @@ class GnutellaServer {
       targetServentId,
       fileIndex,
       requesterIp,
-      requesterPort
+      requesterPort,
     );
 
     this.connections.forEach((conn) => {
       if (conn.handshake) {
-        try {
-          conn.send(pushMessage);
-        } catch (err) {
-          console.error(`Failed to send PUSH to ${conn.id}:`, err);
-        }
+        conn.send(pushMessage);
       }
     });
   }
@@ -1355,16 +1334,14 @@ class PeerStore {
   }
 
   async load(): Promise<void> {
-    try {
-      const data = await readFile(this.filename, "utf8");
-      const parsed: GnutellaConfig = JSON.parse(data);
-      if (parsed.peers) {
-        Object.keys(parsed.peers).forEach((key) => {
-          const p = parsed.peers[key];
-          this.add(p.ip, p.port, p.lastSeen);
-        });
-      }
-    } catch {}
+    const data = await readFile(this.filename, "utf8");
+    const parsed: GnutellaConfig = JSON.parse(data);
+    if (parsed.peers) {
+      Object.keys(parsed.peers).forEach((key) => {
+        const p = parsed.peers[key];
+        this.add(p.ip, p.port, p.lastSeen);
+      });
+    }
   }
 
   async save(): Promise<void> {
@@ -1412,7 +1389,7 @@ class QRPManager {
 
   constructor(
     tableSize: number = Protocol.QRP_TABLE_SIZE,
-    infinity: number = Protocol.QRP_INFINITY
+    infinity: number = Protocol.QRP_INFINITY,
   ) {
     this.tableSize = tableSize;
     this.infinity = infinity;
@@ -1459,9 +1436,9 @@ class QRPManager {
     return this.getFiles().filter((file) =>
       queryKeywords.every((queryKeyword) =>
         file.keywords.some((fileKeyword) =>
-          fileKeyword.toLowerCase().includes(queryKeyword)
-        )
-      )
+          fileKeyword.toLowerCase().includes(queryKeyword),
+        ),
+      ),
     );
   }
 
@@ -1473,7 +1450,7 @@ class QRPManager {
     const header = MessageBuilder.header(
       MessageType.ROUTE_TABLE_UPDATE,
       payload.length,
-      1
+      1,
     );
     return Buffer.concat([header, payload]);
   }
@@ -1548,7 +1525,7 @@ class QRPManager {
       const header = MessageBuilder.header(
         MessageType.ROUTE_TABLE_UPDATE,
         payload.length,
-        1
+        1,
       );
       return Buffer.concat([header, payload]);
     });
@@ -1635,7 +1612,7 @@ export class GnutellaNode {
   sendPush(
     targetServentId: Buffer,
     fileIndex: number,
-    requesterPort: number
+    requesterPort: number,
   ): void {
     if (!this.server || !this.context) {
       throw new Error("GnutellaNode not started");
@@ -1645,7 +1622,7 @@ export class GnutellaNode {
       targetServentId,
       fileIndex,
       this.context.localIp,
-      requesterPort
+      requesterPort,
     );
   }
 

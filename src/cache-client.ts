@@ -35,34 +35,27 @@ export class GWebCacheClient {
     url.searchParams.set("version", this.clientVersion);
     url.searchParams.set("ping", "1");
 
-    try {
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          "User-Agent": this.userAgent,
-        },
-        signal: AbortSignal.timeout(10000), // 10 second timeout
-      });
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "User-Agent": this.userAgent,
+      },
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    });
 
-      if (!response.ok) {
-        // Handle specific GWC errors
-        if (response.status === 503) {
-          const text = await response.text();
-          if (text.includes("Required network not accepted")) {
-            throw new Error(`Cache does not support ${network} network`);
-          }
+    if (!response.ok) {
+      // Handle specific GWC errors
+      if (response.status === 503) {
+        const text = await response.text();
+        if (text.includes("Required network not accepted")) {
+          throw new Error(`Cache does not support ${network} network`);
         }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-
-      const text = await response.text();
-      return this.parseResponse(text);
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`GWC query failed: ${error.message}`);
-      }
-      throw error;
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
+
+    const text = await response.text();
+    return this.parseResponse(text);
   }
 
   /**
@@ -83,27 +76,20 @@ export class GWebCacheClient {
     url.searchParams.set("client", this.clientCode);
     url.searchParams.set("version", this.clientVersion);
 
-    try {
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          "User-Agent": this.userAgent,
-        },
-        signal: AbortSignal.timeout(10000),
-      });
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "User-Agent": this.userAgent,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const text = await response.text();
-      return this.parseUpdateResponse(text);
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`GWC update failed: ${error.message}`);
-      }
-      throw error;
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
+
+    const text = await response.text();
+    return this.parseUpdateResponse(text);
   }
 
   /**
@@ -295,28 +281,24 @@ export class GWebCacheClient {
    * Validate cache URL
    */
   private isValidCacheUrl(url: string): boolean {
-    try {
-      const parsed = new URL(url);
-      // Only accept HTTP/HTTPS
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return false;
-      }
-      // Must have a hostname
-      if (!parsed.hostname) {
-        return false;
-      }
-      // Reject localhost/local addresses
-      if (
-        parsed.hostname === "localhost" ||
-        parsed.hostname === "127.0.0.1" ||
-        parsed.hostname.endsWith(".local")
-      ) {
-        return false;
-      }
-      return true;
-    } catch {
+    const parsed = new URL(url);
+    // Only accept HTTP/HTTPS
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return false;
     }
+    // Must have a hostname
+    if (!parsed.hostname) {
+      return false;
+    }
+    // Reject localhost/local addresses
+    if (
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname.endsWith(".local")
+    ) {
+      return false;
+    }
+    return true;
   }
 
   /**

@@ -45,13 +45,9 @@ export class GnutellaServer extends EventEmitter {
       // Send Bye messages to all connections that support it
       this.connections.forEach((conn) => {
         if (conn.handshake) {
-          try {
-            conn.send(MessageBuilder.bye(200, "Server shutting down"));
-            // Give a brief moment for the Bye message to be sent
-            setTimeout(() => conn.socket.destroy(), 100);
-          } catch {
-            conn.socket.destroy();
-          }
+          conn.send(MessageBuilder.bye(200, "Server shutting down"));
+          // Give a brief moment for the Bye message to be sent
+          setTimeout(() => conn.socket.destroy(), 100);
         } else {
           conn.socket.destroy();
         }
@@ -175,17 +171,12 @@ export class GnutellaServer extends EventEmitter {
     }
 
     if (conn.handshake) {
-      try {
-        conn.send(MessageBuilder.bye(code, reason));
-        // Wait briefly for Bye to send, then close
-        setTimeout(() => {
-          conn.socket.destroy();
-          this.connections.delete(id);
-        }, 100);
-      } catch {
+      conn.send(MessageBuilder.bye(code, reason));
+      // Wait briefly for Bye to send, then close
+      setTimeout(() => {
         conn.socket.destroy();
         this.connections.delete(id);
-      }
+      }, 100);
     } else {
       conn.socket.destroy();
       this.connections.delete(id);
@@ -209,11 +200,7 @@ export class GnutellaServer extends EventEmitter {
 
     this.connections.forEach((conn) => {
       if (conn.handshake) {
-        try {
-          conn.send(pushMessage);
-        } catch (err) {
-          console.error(`Failed to send PUSH to ${conn.id}:`, err);
-        }
+        conn.send(pushMessage);
       }
     });
   }

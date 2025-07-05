@@ -235,11 +235,9 @@ export class MessageRouter {
     conn: Connection,
     qrpManager: QRPManager,
   ): Promise<void> {
-    try {
-      conn.send(qrpManager.buildResetMessage());
-      const patchMessages = await qrpManager.buildPatchMessage();
-      patchMessages.forEach((msg) => conn.send(msg));
-    } catch {}
+    conn.send(qrpManager.buildResetMessage());
+    const patchMessages = await qrpManager.buildPatchMessage();
+    patchMessages.forEach((msg) => conn.send(msg));
   }
 
   private handleBye(conn: Connection, msg: ByeMessage): void {
@@ -440,83 +438,77 @@ export class MessageRouter {
             return;
           }
 
-          try {
-            // Construct file path
-            const filePath = path.join(
-              process.cwd(),
-              "gnutella-library",
-              file.filename,
-            );
-            const stat = await fs.stat(filePath);
+          // Construct file path
+          const filePath = path.join(
+            process.cwd(),
+            "gnutella-library",
+            file.filename,
+          );
+          const stat = await fs.stat(filePath);
 
-            // Parse Range header if present
-            const rangeHeader = lines.find((line) =>
-              line.toLowerCase().startsWith("range:"),
-            );
-            let start = 0;
-            let end = stat.size - 1;
-            let status = 200;
-            let statusText = "OK";
+          // Parse Range header if present
+          const rangeHeader = lines.find((line) =>
+            line.toLowerCase().startsWith("range:"),
+          );
+          let start = 0;
+          let end = stat.size - 1;
+          let status = 200;
+          let statusText = "OK";
 
-            if (rangeHeader) {
-              const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-              if (rangeMatch) {
-                start = parseInt(rangeMatch[1]);
-                if (rangeMatch[2]) {
-                  end = parseInt(rangeMatch[2]);
-                }
-                status = 206;
-                statusText = "Partial Content";
+          if (rangeHeader) {
+            const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+            if (rangeMatch) {
+              start = parseInt(rangeMatch[1]);
+              if (rangeMatch[2]) {
+                end = parseInt(rangeMatch[2]);
               }
+              status = 206;
+              statusText = "Partial Content";
             }
-
-            const contentLength = end - start + 1;
-
-            // Send HTTP response headers
-            const headers = [
-              `HTTP/1.1 ${status} ${statusText}`,
-              "Server: GnutellaBun/0.1",
-              "Content-Type: application/octet-stream",
-              `Content-Length: ${contentLength}`,
-              "Accept-Ranges: bytes",
-            ];
-
-            if (status === 206) {
-              headers.push(`Content-Range: bytes ${start}-${end}/${stat.size}`);
-            }
-
-            headers.push("", ""); // Empty line to end headers
-            socket.write(headers.join("\r\n"));
-
-            // Stream file content
-            const readStream = require("fs").createReadStream(filePath, {
-              start,
-              end,
-            });
-            readStream.pipe(socket);
-
-            readStream.on("end", () => {
-              // Keep connection open for HTTP/1.1 keep-alive
-              const connectionHeader = lines.find((line) =>
-                line.toLowerCase().startsWith("connection:"),
-              );
-              if (
-                connectionHeader &&
-                connectionHeader.toLowerCase().includes("close")
-              ) {
-                socket.end();
-              }
-            });
-
-            readStream.on("error", (err: Error) => {
-              console.error("Error reading file for PUSH:", err);
-              socket.destroy();
-            });
-          } catch (err) {
-            console.error("Error handling PUSH file request:", err);
-            socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
-            socket.end();
           }
+
+          const contentLength = end - start + 1;
+
+          // Send HTTP response headers
+          const headers = [
+            `HTTP/1.1 ${status} ${statusText}`,
+            "Server: GnutellaBun/0.1",
+            "Content-Type: application/octet-stream",
+            `Content-Length: ${contentLength}`,
+            "Accept-Ranges: bytes",
+          ];
+
+          if (status === 206) {
+            headers.push(`Content-Range: bytes ${start}-${end}/${stat.size}`);
+          }
+
+          headers.push("", ""); // Empty line to end headers
+          socket.write(headers.join("\r\n"));
+
+          // Stream file content
+          const readStream = require("fs").createReadStream(filePath, {
+            start,
+            end,
+          });
+          readStream.pipe(socket);
+
+          readStream.on("end", () => {
+            // Keep connection open for HTTP/1.1 keep-alive
+            const connectionHeader = lines.find((line) =>
+              line.toLowerCase().startsWith("connection:"),
+            );
+            if (
+              connectionHeader &&
+              connectionHeader.toLowerCase().includes("close")
+            ) {
+              socket.end();
+            }
+          });
+
+          readStream.on("error", (err: Error) => {
+            console.error("Error reading file for PUSH:", err);
+            socket.destroy();
+          });
         } else {
           socket.write("HTTP/1.1 405 Method Not Allowed\r\n\r\n");
           socket.end();

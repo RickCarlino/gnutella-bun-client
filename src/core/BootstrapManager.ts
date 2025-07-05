@@ -48,51 +48,42 @@ export class BootstrapManager {
   async bootstrap(): Promise<void> {
     console.log("Starting bootstrap process...");
 
-    try {
-      // Load settings
-      await this.settingStore.load();
+    // Load settings
+    await this.settingStore.load();
 
-      // Try to get our public IP
-      try {
-        this.publicIp = await getPublicIP();
-        console.log(`Detected public IP: ${this.publicIp}`);
-      } catch (err) {
-        console.warn("Could not determine public IP:", err);
-      }
+    // Try to get our public IP
+    this.publicIp = await getPublicIP();
+    console.log(`Detected public IP: ${this.publicIp}`);
 
-      // Start connection manager
-      this.connectionManager.start();
+    // Start connection manager
+    this.connectionManager.start();
 
-      // Initial connection attempt with saved peers
-      await this.attemptSavedPeerConnections();
+    // Initial connection attempt with saved peers
+    await this.attemptSavedPeerConnections();
 
-      // If we don't have enough connections, query GWebCaches
-      if (this.connectionManager.getConnectionCount() < 4) {
-        await this.queryGWebCaches();
-      }
-
-      // If we have connections and a public IP, announce ourselves
-      if (
-        this.connectionManager.getConnectionCount() >=
-          this.config.minConnectionsToAnnounce &&
-        this.publicIp
-      ) {
-        await this.announceToGWebCaches();
-      }
-
-      // Schedule periodic announcements
-      this.scheduleAnnouncements();
-
-      // Save any new peers/caches we discovered
-      await this.settingStore.save();
-
-      console.log(
-        `Bootstrap complete. Connected to ${this.connectionManager.getConnectionCount()} peers.`,
-      );
-    } catch (error) {
-      console.error("Bootstrap failed:", error);
-      this.handleBootstrapFailure();
+    // If we don't have enough connections, query GWebCaches
+    if (this.connectionManager.getConnectionCount() < 4) {
+      await this.queryGWebCaches();
     }
+
+    // If we have connections and a public IP, announce ourselves
+    if (
+      this.connectionManager.getConnectionCount() >=
+        this.config.minConnectionsToAnnounce &&
+      this.publicIp
+    ) {
+      await this.announceToGWebCaches();
+    }
+
+    // Schedule periodic announcements
+    this.scheduleAnnouncements();
+
+    // Save any new peers/caches we discovered
+    await this.settingStore.save();
+
+    console.log(
+      `Bootstrap complete. Connected to ${this.connectionManager.getConnectionCount()} peers.`,
+    );
   }
 
   /**
@@ -147,36 +138,31 @@ export class BootstrapManager {
     console.log(`Querying ${cachesToQuery.length} GWebCaches for peers...`);
 
     const queryPromises = cachesToQuery.map(async (cache) => {
-      try {
-        console.log(`Querying ${cache.url}...`);
-        const result = await this.gwcClient.fetchPeersAndCaches(cache.url);
+      console.log(`Querying ${cache.url}...`);
+      const result = await this.gwcClient.fetchPeersAndCaches(cache.url);
 
-        // Update timestamp
-        this.settingStore.updateCacheTimestamp(cache.url, "pull");
+      // Update timestamp
+      this.settingStore.updateCacheTimestamp(cache.url, "pull");
 
-        // Add discovered peers
-        for (const peer of result.peers) {
-          this.settingStore.addPeer(peer.ip, peer.port, "gwc");
-        }
-
-        // Add new cache URLs
-        for (const cacheUrl of result.caches) {
-          // Check if we already know this cache
-          const existing = caches.find((c) => c.url === cacheUrl);
-          if (!existing) {
-            console.log(`Discovered new cache: ${cacheUrl}`);
-            this.settingStore.updateCacheTimestamp(cacheUrl, "pull");
-          }
-        }
-
-        console.log(
-          `Found ${result.peers.length} peers and ${result.caches.length} caches from ${cache.url}`,
-        );
-        return result;
-      } catch (error) {
-        console.error(`Failed to query ${cache.url}:`, error);
-        return null;
+      // Add discovered peers
+      for (const peer of result.peers) {
+        this.settingStore.addPeer(peer.ip, peer.port, "gwc");
       }
+
+      // Add new cache URLs
+      for (const cacheUrl of result.caches) {
+        // Check if we already know this cache
+        const existing = caches.find((c) => c.url === cacheUrl);
+        if (!existing) {
+          console.log(`Discovered new cache: ${cacheUrl}`);
+          this.settingStore.updateCacheTimestamp(cacheUrl, "pull");
+        }
+      }
+
+      console.log(
+        `Found ${result.peers.length} peers and ${result.caches.length} caches from ${cache.url}`,
+      );
+      return result;
     });
 
     await Promise.all(queryPromises);
@@ -215,27 +201,22 @@ export class BootstrapManager {
     console.log(`Announcing to ${cachesToAnnounce.length} GWebCaches...`);
 
     const announcePromises = cachesToAnnounce.map(async (cache) => {
-      try {
-        console.log(`Announcing to ${cache.url}...`);
-        const success = await this.gwcClient.submitHost(
-          cache.url,
-          this.publicIp as string,
-          this.localPort,
-        );
+      console.log(`Announcing to ${cache.url}...`);
+      const success = await this.gwcClient.submitHost(
+        cache.url,
+        this.publicIp as string,
+        this.localPort,
+      );
 
-        if (success) {
-          // Update timestamp
-          this.settingStore.updateCacheTimestamp(cache.url, "push");
-          console.log(`Successfully announced to ${cache.url}`);
-        } else {
-          console.warn(`Failed to announce to ${cache.url}`);
-        }
-
-        return success;
-      } catch (error) {
-        console.error(`Error announcing to ${cache.url}:`, error);
-        return false;
+      if (success) {
+        // Update timestamp
+        this.settingStore.updateCacheTimestamp(cache.url, "push");
+        console.log(`Successfully announced to ${cache.url}`);
+      } else {
+        console.warn(`Failed to announce to ${cache.url}`);
       }
+
+      return success;
     });
 
     const results = await Promise.all(announcePromises);
@@ -264,19 +245,5 @@ export class BootstrapManager {
         await this.announceToGWebCaches();
       }
     }, intervalMs);
-  }
-
-  /**
-   * Handle total bootstrap failure
-   */
-  private handleBootstrapFailure(): void {
-    console.error("Bootstrap failed - unable to join the Gnutella network");
-    console.error("Possible causes:");
-    console.error("1. No internet connection");
-    console.error("2. All GWebCaches are down");
-    console.error("3. Firewall blocking connections");
-    console.error("4. No saved peers and GWebCaches are rate limiting");
-    console.error("");
-    console.error("You can manually add peers by editing settings.json");
   }
 }

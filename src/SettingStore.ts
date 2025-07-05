@@ -14,61 +14,55 @@ export class SettingStore {
   }
 
   async load(): Promise<void> {
-    try {
-      const data = await readFile(this.filename, "utf8");
-      const parsed: GnutellaConfig = JSON.parse(data);
+    const data = await readFile(this.filename, "utf8");
+    const parsed: GnutellaConfig = JSON.parse(data);
 
-      // Load peers with all metadata
-      if (parsed.peers) {
-        Object.keys(parsed.peers).forEach((key) => {
-          const p = parsed.peers[key];
-          this.peers.set(key, {
-            ip: p.ip,
-            port: p.port,
-            lastSeen: p.lastSeen,
-            firstSeen: p.firstSeen,
-            source: p.source,
-            failureCount: p.failureCount || 0,
-          });
+    // Load peers with all metadata
+    if (parsed.peers) {
+      Object.keys(parsed.peers).forEach((key) => {
+        const p = parsed.peers[key];
+        this.peers.set(key, {
+          ip: p.ip,
+          port: p.port,
+          lastSeen: p.lastSeen,
+          firstSeen: p.firstSeen,
+          source: p.source,
+          failureCount: p.failureCount || 0,
         });
-      }
+      });
+    }
 
-      // Load cache timestamps
-      if (parsed.caches) {
-        Object.keys(parsed.caches).forEach((url) => {
-          this.cacheTimestamps.set(url, {
-            lastPull: parsed.caches[url].lastPull || 0,
-            lastPush: parsed.caches[url].lastPush || 0,
-          });
+    // Load cache timestamps
+    if (parsed.caches) {
+      Object.keys(parsed.caches).forEach((url) => {
+        this.cacheTimestamps.set(url, {
+          lastPull: parsed.caches[url].lastPull || 0,
+          lastPush: parsed.caches[url].lastPush || 0,
         });
-      }
-    } catch {}
+      });
+    }
   }
 
   async save(): Promise<void> {
-    try {
-      const content = await readFile(this.filename, "utf8");
-      const existingData: GnutellaConfig = JSON.parse(content);
+    const content = await readFile(this.filename, "utf8");
+    const existingData: GnutellaConfig = JSON.parse(content);
 
-      // Save peers with all metadata
-      const nextPeers: Record<string, Peer> = {};
-      Array.from(this.peers.entries()).forEach(([key, peer]) => {
-        nextPeers[key] = peer;
-      });
-      existingData.peers = nextPeers;
+    // Save peers with all metadata
+    const nextPeers: Record<string, Peer> = {};
+    Array.from(this.peers.entries()).forEach(([key, peer]) => {
+      nextPeers[key] = peer;
+    });
+    existingData.peers = nextPeers;
 
-      // Save cache timestamps
-      const nextCaches: Record<string, { lastPull: number; lastPush: number }> =
-        {};
-      Array.from(this.cacheTimestamps.entries()).forEach(
-        ([url, timestamps]) => {
-          nextCaches[url] = timestamps;
-        },
-      );
-      existingData.caches = { ...existingData.caches, ...nextCaches };
+    // Save cache timestamps
+    const nextCaches: Record<string, { lastPull: number; lastPush: number }> =
+      {};
+    Array.from(this.cacheTimestamps.entries()).forEach(([url, timestamps]) => {
+      nextCaches[url] = timestamps;
+    });
+    existingData.caches = { ...existingData.caches, ...nextCaches };
 
-      await writeFile(this.filename, JSON.stringify(existingData, null, 2));
-    } catch {}
+    await writeFile(this.filename, JSON.stringify(existingData, null, 2));
   }
 
   addPeer(

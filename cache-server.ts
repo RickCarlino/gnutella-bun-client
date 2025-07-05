@@ -181,13 +181,9 @@ export function addCache(url: string, network: string): string {
     item: newCache,
     collection: caches,
     validator: () => {
-      try {
-        const parsedUrl = new URL(url);
-        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-          return "WARNING|Invalid URL protocol";
-        }
-      } catch {
-        return "WARNING|Invalid URL";
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        return "WARNING|Invalid URL protocol";
       }
       if (!CONFIG.SUPPORTED_NETWORKS.includes(network)) {
         return "WARNING|Unsupported network";

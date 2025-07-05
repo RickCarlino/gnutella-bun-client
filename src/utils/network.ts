@@ -15,22 +15,17 @@ export async function getPublicIP(): Promise<string> {
   ];
 
   for (const service of services) {
-    try {
-      const response = await fetch(service, {
-        signal: AbortSignal.timeout(5000), // 5 second timeout
-      });
+    const response = await fetch(service, {
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
 
-      if (response.ok) {
-        const ip = (await response.text()).trim();
+    if (response.ok) {
+      const ip = (await response.text()).trim();
 
-        // Basic validation
-        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
-          return ip;
-        }
+      // Basic validation
+      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+        return ip;
       }
-    } catch {
-      // Try next service
-      continue;
     }
   }
 
