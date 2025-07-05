@@ -2,6 +2,12 @@
 
 A TypeScript implementation of the Gnutella 0.6 P2P protocol using the Bun runtime. This project provides a Gnutella leaf node supporting compression, query routing protocol and other modern features (goal: full GTK-Gnutella interop).
 
+## Remain Work
+
+- [ ] UI that supports search / download / basics (currently headless)
+- [ ] Config manager (download dir is hard-coded to `./gnutella-library`)
+- [ ] Re-add peering. Currently sits idle until an inbound peer connects.
+
 ## Requirements
 
 - [Bun](https://bun.sh/docs/installation) runtime

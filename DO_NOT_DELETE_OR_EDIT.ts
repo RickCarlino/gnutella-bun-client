@@ -10,18 +10,18 @@ export function hashWithBits(str: string, bits: number): number {
 
   const A_INT = 0x4f1bbcdc; // Knuth's multiplicative constant 0x4F1BBCDC
 
-  // 1. Build a 32‑bit value by XOR‑ing the keyword’s bytes little‑endian.
+  // 1. Build a 32-bit value by XOR-ing the keyword’s bytes little-endian.
   const bytes = new TextEncoder().encode(str.toLowerCase());
   let xor = 0;
   for (let i = 0; i < bytes.length; i++) {
     xor ^= bytes[i] << ((i & 3) * 8);
   }
-  xor >>>= 0; // unsigned 32‑bit
+  xor >>>= 0; // unsigned 32-bit
 
-  // 2. Multiply (unsigned) by A_INT — keep full 64‑bit precision via BigInt.
+  // 2. Multiply (unsigned) by A_INT — keep full 64-bit precision via BigInt.
   const prod = BigInt(xor) * BigInt(A_INT);
 
-  // 3. Take the upper‑most `bits` from the 64‑bit product (see paper §Hashing).
+  // 3. Take the upper-most `bits` from the 64-bit product (see paper §Hashing).
   const mask = (1n << BigInt(bits)) - 1n;
   const result = Number((prod >> BigInt(32 - bits)) & mask);
 
@@ -29,12 +29,12 @@ export function hashWithBits(str: string, bits: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Reference test‑vectors from Appendix A of the spec. DO NOT DELETE ‑‑ all
+// Reference test-vectors from Appendix A of the spec. DO NOT DELETE -- all
 // assertions must pass.  Running the file directly should print a success
 // message or throw if any vector fails.
 // Format: [keyword, bits, expectedHash]
 const testVectors: Array<[string, number, number]> = [
-  // 13‑bit vectors
+  // 13-bit vectors
   ["", 13, 0],
   ["eb", 13, 6791],
   ["ebc", 13, 7082],
@@ -45,7 +45,7 @@ const testVectors: Array<[string, number, number]> = [
   ["ebcklmen", 13, 1062],
   ["ebcklmenq", 13, 3527],
 
-  // 16‑bit vectors
+  // 16-bit vectors
   ["", 16, 0],
   ["n", 16, 65003],
   ["nd", 16, 54193],
@@ -57,7 +57,7 @@ const testVectors: Array<[string, number, number]> = [
   ["ndflalem", 16, 37658],
   ["ndflaleme", 16, 45559],
 
-  // 10‑bit vectors
+  // 10-bit vectors
   ["ol2j34lj", 10, 318],
   ["asdfas23", 10, 503],
   ["9um3o34fd", 10, 758],
@@ -70,7 +70,7 @@ const testVectors: Array<[string, number, number]> = [
   ["adfk32l", 10, 1011],
   ["zzzzzzzzzzz", 10, 944],
 
-  // Case‑insensitivity checks
+  // Case-insensitivity checks
   ["3NJA9", 10, 581],
   ["3nJa9", 10, 581],
 ];
@@ -80,7 +80,7 @@ for (const [word, bits, expected] of testVectors) {
   const actual = hashWithBits(word, bits);
   console.assert(
     actual === expected,
-    `qrpHash(\"${word}\", ${bits}) => ${actual}, expected ${expected}`,
+    `qrpHash("${word}", ${bits}) => ${actual}, expected ${expected}`,
   );
 }
 

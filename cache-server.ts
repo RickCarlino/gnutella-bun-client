@@ -47,10 +47,14 @@ function getClientIP(req: Request): string {
 
 function isValidIP(ip: string): boolean {
   const parts = ip.split(".");
-  if (parts.length !== 4) return false;
+  if (parts.length !== 4) {
+    return false;
+  }
 
   const nums = parts.map((p) => parseInt(p));
-  if (nums.some((n) => isNaN(n) || n < 0 || n > 255)) return false;
+  if (nums.some((n) => isNaN(n) || n < 0 || n > 255)) {
+    return false;
+  }
 
   const [first, second] = nums;
   const isPrivate =
@@ -129,7 +133,9 @@ function validateAndAdd<T extends { addedAt: number }>({
   updateMessage?: string;
 }): string {
   const error = validator();
-  if (error) return error;
+  if (error) {
+    return error;
+  }
 
   const existingIndex = finder(collection);
   if (existingIndex !== -1) {
@@ -154,16 +160,23 @@ export function addPeer(
   cluster?: string
 ): string {
   const newHost: Host = { ip, port, network, addedAt: Date.now() };
-  if (cluster) newHost.cluster = cluster;
+  if (cluster) {
+    newHost.cluster = cluster;
+  }
 
   return validateAndAdd({
     item: newHost,
     collection: hosts,
     validator: () => {
-      if (!isValidIP(ip)) return "WARNING|Invalid IP";
-      if (!isValidPort(port)) return "WARNING|Invalid port";
-      if (!CONFIG.SUPPORTED_NETWORKS.includes(network))
+      if (!isValidIP(ip)) {
+        return "WARNING|Invalid IP";
+      }
+      if (!isValidPort(port)) {
+        return "WARNING|Invalid port";
+      }
+      if (!CONFIG.SUPPORTED_NETWORKS.includes(network)) {
         return "WARNING|Unsupported network";
+      }
       return null;
     },
     finder: (items) =>
@@ -196,8 +209,9 @@ export function addCache(url: string, network: string): string {
       } catch {
         return "WARNING|Invalid URL";
       }
-      if (!CONFIG.SUPPORTED_NETWORKS.includes(network))
+      if (!CONFIG.SUPPORTED_NETWORKS.includes(network)) {
         return "WARNING|Unsupported network";
+      }
       return null;
     },
     finder: (items) =>
@@ -208,7 +222,9 @@ export function addCache(url: string, network: string): string {
 }
 
 function getRandomItems<T>(items: T[], limit: number): T[] {
-  if (items.length <= limit) return items;
+  if (items.length <= limit) {
+    return items;
+  }
   return [...items].sort(() => Math.random() - 0.5).slice(0, limit);
 }
 
@@ -296,19 +312,24 @@ export function startServer() {
         const updateResults: string[] = [];
 
         if (params.has("ip")) {
-          const ipParam = params.get("ip")!;
-          const [ip, portStr] = ipParam.split(":");
-          const port = parseInt(portStr);
+          const ipParam = params.get("ip");
+          if (ipParam) {
+            const [ip, portStr] = ipParam.split(":");
+            const port = parseInt(portStr);
 
-          updateResults.push(
-            ip && !isNaN(port)
-              ? addPeer(ip, port, network, params.get("cluster") || undefined)
-              : "WARNING|Invalid IP format"
-          );
+            updateResults.push(
+              ip && !isNaN(port)
+                ? addPeer(ip, port, network, params.get("cluster") || undefined)
+                : "WARNING|Invalid IP format"
+            );
+          }
         }
 
         if (params.has("url")) {
-          updateResults.push(addCache(params.get("url")!, network));
+          const url = params.get("url");
+          if (url) {
+            updateResults.push(addCache(url, network));
+          }
         }
 
         updateResults.forEach((result) => {

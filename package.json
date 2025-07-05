@@ -1,10 +1,13 @@
 {
   "name": "gnutella",
+  "type": "module",
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
     "start": "bun run index.ts",
-    "dev": "bun run index.ts"
+    "dev": "bun run index.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "keywords": [],
   "author": "",
@@ -12,7 +15,10 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^24.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.35.1",
+    "@typescript-eslint/parser": "^8.35.1",
     "bun-types": "^1.2.16",
+    "eslint": "^9.30.1",
     "typescript": "^5.8.3"
   },
   "dependencies": {

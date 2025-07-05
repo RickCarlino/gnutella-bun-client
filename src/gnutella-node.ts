@@ -90,6 +90,13 @@ interface QueryMessage {
   extensions: Buffer | null;
 }
 
+interface QueryHitResult {
+  fileIndex: number;
+  fileSize: number;
+  filename: string;
+  extensions?: string;
+}
+
 interface QueryHitsMessage {
   type: "query_hits";
   header: MessageHeader;
@@ -97,7 +104,7 @@ interface QueryHitsMessage {
   port: number;
   ipAddress: string;
   speed: number;
-  results: any[];
+  results: QueryHitResult[];
   vendorCode: Buffer;
   serventId: Buffer;
 }
@@ -144,15 +151,23 @@ const Protocol = {
 class MessageParser {
   static parse(buffer: Buffer): GnutellaMessage | null {
     const handshake = this.parseHandshake(buffer);
-    if (handshake) return handshake;
+    if (handshake) {
+      return handshake;
+    }
 
-    if (buffer.length < Protocol.HEADER_SIZE) return null;
+    if (buffer.length < Protocol.HEADER_SIZE) {
+      return null;
+    }
 
     const header = this.parseHeader(buffer);
-    if (!header) return null;
+    if (!header) {
+      return null;
+    }
 
     const totalSize = Protocol.HEADER_SIZE + header.payloadLength;
-    if (buffer.length < totalSize) return null;
+    if (buffer.length < totalSize) {
+      return null;
+    }
 
     const payload = buffer.slice(Protocol.HEADER_SIZE, totalSize);
     return this.parsePayload(header, payload);
@@ -164,11 +179,15 @@ class MessageParser {
       const index = text.indexOf(Protocol.HANDSHAKE_END);
       return index !== -1 ? index + 4 : 0;
     }
-    return Protocol.HEADER_SIZE + ((message as any).header?.payloadLength || 0);
+    // Type guard to check if message has header
+    if ("header" in message && message.header) {
+      return Protocol.HEADER_SIZE + message.header.payloadLength;
+    }
+    return Protocol.HEADER_SIZE;
   }
 
   static parseHandshake(
-    buffer: Buffer
+    buffer: Buffer,
   ):
     | HandshakeConnectMessage
     | HandshakeOkMessage
@@ -176,7 +195,9 @@ class MessageParser {
     | null {
     const text = buffer.toString("ascii");
     const endIndex = text.indexOf(Protocol.HANDSHAKE_END);
-    if (endIndex === -1) return null;
+    if (endIndex === -1) {
+      return null;
+    }
 
     const lines = text.substring(0, endIndex).split(`\r\n`);
     const startLine = lines[0];
@@ -192,7 +213,9 @@ class MessageParser {
 
     if (startLine.startsWith("GNUTELLA/")) {
       const match = startLine.match(/GNUTELLA\/(\S+) (\d+) (.+)/);
-      if (!match) return null;
+      if (!match) {
+        return null;
+      }
 
       const [, version, code, message] = match;
       const statusCode = parseInt(code);
@@ -230,7 +253,7 @@ class MessageParser {
 
   static parsePayload(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): GnutellaMessage | null {
     const parsers: Record<number, () => GnutellaMessage | null> = {
       [MessageType.PING]: () => ({ type: "ping", header }),
@@ -248,7 +271,9 @@ class MessageParser {
   }
 
   static parsePong(header: MessageHeader, payload: Buffer): PongMessage | null {
-    if (payload.length < Protocol.PONG_SIZE) return null;
+    if (payload.length < Protocol.PONG_SIZE) {
+      return null;
+    }
     return {
       type: "pong",
       header,
@@ -260,7 +285,9 @@ class MessageParser {
   }
 
   static parseBye(header: MessageHeader, payload: Buffer): ByeMessage | null {
-    if (payload.length < 2) return null;
+    if (payload.length < 2) {
+      return null;
+    }
     return {
       type: "bye",
       header,
@@ -270,7 +297,9 @@ class MessageParser {
   }
 
   static parsePush(header: MessageHeader, payload: Buffer): PushMessage | null {
-    if (payload.length < 26) return null; // 16 (servent ID) + 4 (file index) + 4 (IP) + 2 (port)
+    if (payload.length < 26) {
+      return null;
+    } // 16 (servent ID) + 4 (file index) + 4 (IP) + 2 (port)
     return {
       type: "push",
       header,
@@ -283,11 +312,15 @@ class MessageParser {
 
   static parseQuery(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): QueryMessage | null {
-    if (payload.length < 3) return null;
+    if (payload.length < 3) {
+      return null;
+    }
     const nullIndex = payload.indexOf(0, 2);
-    if (nullIndex === -1) return null;
+    if (nullIndex === -1) {
+      return null;
+    }
     return {
       type: "query",
       header,
@@ -300,9 +333,11 @@ class MessageParser {
 
   static parseQueryHits(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): QueryHitsMessage | null {
-    if (payload.length < 11) return null;
+    if (payload.length < 11) {
+      return null;
+    }
     return {
       type: "query_hits",
       header,
@@ -318,16 +353,18 @@ class MessageParser {
 
   static parseRouteTableUpdate(
     header: MessageHeader,
-    payload: Buffer
+    payload: Buffer,
   ): RouteTableUpdateMessage | null {
     const qrp = this.parseQRP(payload);
     return qrp ? { ...qrp, header } : null;
   }
 
   static parseQRP(
-    payload: Buffer
+    payload: Buffer,
   ): Omit<RouteTableUpdateMessage, "header"> | null {
-    if (payload.length < 1) return null;
+    if (payload.length < 1) {
+      return null;
+    }
     const variant = payload[0];
 
     const qrpParsers: Record<
@@ -335,7 +372,9 @@ class MessageParser {
       () => Omit<RouteTableUpdateMessage, "header"> | null
     > = {
       [QRPVariant.RESET]: () => {
-        if (payload.length < 6) return null;
+        if (payload.length < 6) {
+          return null;
+        }
         return {
           type: "route_table_update",
           variant: "reset",
@@ -344,7 +383,9 @@ class MessageParser {
         };
       },
       [QRPVariant.PATCH]: () => {
-        if (payload.length < 6) return null;
+        if (payload.length < 6) {
+          return null;
+        }
         return {
           type: "route_table_update",
           variant: "patch",
@@ -376,7 +417,7 @@ class SocketHandler {
     socket: net.Socket,
     onMessage: (message: GnutellaMessage) => void,
     onError: (error: Error) => void,
-    onClose: () => void
+    onClose: () => void,
   ) {
     this.socket = socket;
     this.buffer = Buffer.alloc(0);
@@ -394,7 +435,9 @@ class SocketHandler {
   }
 
   enableCompression(): void {
-    if (this.compressionEnabled) return;
+    if (this.compressionEnabled) {
+      return;
+    }
     this.compressionEnabled = true;
     this.setupCompression();
   }
@@ -435,10 +478,14 @@ class SocketHandler {
   private processBuffer(): void {
     while (this.buffer.length > 0) {
       const message = MessageParser.parse(this.buffer);
-      if (!message) break;
+      if (!message) {
+        break;
+      }
 
       const size = MessageParser.getMessageSize(message, this.buffer);
-      if (size === 0 || this.buffer.length < size) break;
+      if (size === 0 || this.buffer.length < size) {
+        break;
+      }
 
       this.onMessage(message);
       this.buffer = this.buffer.slice(size);
@@ -518,7 +565,7 @@ class MessageBuilder {
     type: MessageType,
     payloadLength: number,
     ttl: number = Protocol.TTL,
-    id?: Buffer
+    id?: Buffer,
   ): Buffer {
     const header = Buffer.alloc(Protocol.HEADER_SIZE);
     const messageId = id || IDGenerator.generate();
@@ -553,7 +600,7 @@ class MessageBuilder {
     ip: string,
     files: number = 0,
     kb: number = 0,
-    ttl: number = Protocol.TTL
+    ttl: number = Protocol.TTL,
   ): Buffer {
     const payload = Buffer.alloc(Protocol.PONG_SIZE);
     payload.writeUInt16LE(port, 0);
@@ -571,19 +618,19 @@ class MessageBuilder {
     port: number,
     ip: string,
     files: FileEntry[],
-    serventId: Buffer
+    serventId: Buffer,
   ): Buffer {
     const fileEntries = files.map((file) => this.fileEntry(file));
     const totalFileSize = fileEntries.reduce(
       (sum, entry) => sum + entry.length,
-      0
+      0,
     );
     const payloadSize = 11 + totalFileSize + Protocol.QUERY_HITS_FOOTER;
     const header = this.header(
       MessageType.QUERY_HITS,
       payloadSize,
       Protocol.TTL,
-      queryId
+      queryId,
     );
     const payloadHeader = this.queryHitHeader(files.length, port, ip);
     const vendorCode = this.vendorCode();
@@ -644,7 +691,7 @@ class MessageBuilder {
 
   static bye(
     code: number = 200,
-    message: string = "Closing connection"
+    message: string = "Closing connection",
   ): Buffer {
     const messageBytes = Buffer.from(message + "\r\n", "utf8");
     const payloadSize = 2 + messageBytes.length;
@@ -662,7 +709,7 @@ class MessageBuilder {
     fileIndex: number,
     ipAddress: string,
     port: number,
-    ttl: number = Protocol.TTL
+    ttl: number = Protocol.TTL,
   ): Buffer {
     const payloadSize = 26; // 16 (servent ID) + 4 (file index) + 4 (IP) + 2 (port)
     const header = this.header(MessageType.PUSH, payloadSize, ttl);
@@ -759,7 +806,7 @@ class MessageRouter {
         this.handleHandshakeConnect(
           conn,
           msg as HandshakeConnectMessage,
-          context
+          context,
         ),
       handshake_ok: () =>
         this.handleHandshakeOk(conn, msg as HandshakeOkMessage, context),
@@ -773,19 +820,21 @@ class MessageRouter {
     };
 
     const handler = handlers[msg.type];
-    if (handler) handler();
+    if (handler) {
+      handler();
+    }
   }
 
   private handleHandshakeConnect(
     conn: Connection,
     msg: HandshakeConnectMessage,
-    context: Context
+    context: Context,
   ): void {
     const clientAcceptsDeflate =
       msg.headers["Accept-Encoding"]?.includes("deflate");
     const responseHeaders = this.buildResponseHeaders(
       context,
-      clientAcceptsDeflate
+      clientAcceptsDeflate,
     );
     conn.send(MessageBuilder.handshakeOk(responseHeaders));
   }
@@ -793,16 +842,18 @@ class MessageRouter {
   private handleHandshakeOk(
     conn: Connection,
     msg: HandshakeOkMessage,
-    context: Context
+    context: Context,
   ): void {
-    if (conn.handshake) return;
+    if (conn.handshake) {
+      return;
+    }
 
     if (conn.isOutbound) {
       const clientAcceptsDeflate =
         msg.headers["Accept-Encoding"]?.includes("deflate");
       const responseHeaders = this.buildResponseHeaders(
         context,
-        clientAcceptsDeflate
+        clientAcceptsDeflate,
       );
       conn.send(MessageBuilder.handshakeOk(responseHeaders));
     }
@@ -812,7 +863,7 @@ class MessageRouter {
     const shouldCompress =
       msg.headers["Content-Encoding"]?.includes("deflate") &&
       this.buildResponseHeaders(context, false)["Accept-Encoding"]?.includes(
-        "deflate"
+        "deflate",
       );
 
     if (shouldCompress && conn.enableCompression) {
@@ -828,15 +879,17 @@ class MessageRouter {
   private handlePing(
     conn: Connection,
     msg: PingMessage,
-    context: Context
+    context: Context,
   ): void {
-    if (!conn.handshake) return;
+    if (!conn.handshake) {
+      return;
+    }
 
     const pongTtl = Math.max(msg.header.hops, 1);
     const sharedFiles = context.qrpManager.getFiles();
     const fileCount = sharedFiles.length;
     const totalSizeKb = Math.floor(
-      sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024
+      sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024,
     );
 
     conn.send(
@@ -846,15 +899,15 @@ class MessageRouter {
         context.localIp,
         fileCount,
         totalSizeKb,
-        pongTtl
-      )
+        pongTtl,
+      ),
     );
   }
 
   private handlePong(
     _conn: Connection,
     msg: PongMessage,
-    context: Context
+    context: Context,
   ): void {
     context.peerStore.add(msg.ipAddress, msg.port);
   }
@@ -862,30 +915,36 @@ class MessageRouter {
   private handleQuery(
     conn: Connection,
     msg: QueryMessage,
-    context: Context
+    context: Context,
   ): void {
-    if (!this.ttlCheck(msg.header)) return;
+    if (!this.ttlCheck(msg.header)) {
+      return;
+    }
 
-    if (!context.qrpManager.matchesQuery(msg.searchCriteria)) return;
+    if (!context.qrpManager.matchesQuery(msg.searchCriteria)) {
+      return;
+    }
 
     const matchingFiles = context.qrpManager.getMatchingFiles(
-      msg.searchCriteria
+      msg.searchCriteria,
     );
-    if (matchingFiles.length === 0) return;
+    if (matchingFiles.length === 0) {
+      return;
+    }
 
     const queryHit = MessageBuilder.queryHit(
       msg.header.descriptorId,
       CONFIG.httpPort,
       context.localIp,
       matchingFiles,
-      context.serventId
+      context.serventId,
     );
     conn.send(queryHit);
   }
 
   private buildResponseHeaders(
     context: Context,
-    clientAcceptsDeflate: boolean
+    clientAcceptsDeflate: boolean,
   ): Record<string, string> {
     const headers = buildBaseHeaders(context);
     if (clientAcceptsDeflate) {
@@ -896,7 +955,7 @@ class MessageRouter {
 
   private async sendQRPTable(
     conn: Connection,
-    qrpManager: QRPManager
+    qrpManager: QRPManager,
   ): Promise<void> {
     try {
       conn.send(qrpManager.buildResetMessage());
@@ -914,7 +973,7 @@ class MessageRouter {
   private handlePush(
     _conn: Connection,
     msg: PushMessage,
-    context: Context
+    context: Context,
   ): void {
     // Check if the push request is for us
     if (!msg.serventId.equals(context.serventId)) {
@@ -927,7 +986,7 @@ class MessageRouter {
 
     // This PUSH is for us - initiate a push connection
     console.log(
-      `Received PUSH request for file ${msg.fileIndex} to ${msg.ipAddress}:${msg.port}`
+      `Received PUSH request for file ${msg.fileIndex} to ${msg.ipAddress}:${msg.port}`,
     );
 
     // Create a new connection to the requester
@@ -941,7 +1000,7 @@ class MessageRouter {
       const givMessage = this.buildGivMessage(
         msg.fileIndex,
         context.serventId,
-        context.qrpManager.getFile(msg.fileIndex)?.filename || ""
+        context.qrpManager.getFile(msg.fileIndex)?.filename || "",
       );
       pushSocket.write(givMessage);
 
@@ -951,14 +1010,14 @@ class MessageRouter {
         (err) => {
           console.error("Error in push connection handler:", err);
           pushSocket.destroy();
-        }
+        },
       );
     });
 
     pushSocket.once("error", (err) => {
       console.error(
         `Failed to establish push connection to ${msg.ipAddress}:${msg.port}:`,
-        err
+        err,
       );
       pushSocket.destroy();
     });
@@ -967,7 +1026,7 @@ class MessageRouter {
   private buildGivMessage(
     fileIndex: number,
     serventId: Buffer,
-    filename: string
+    filename: string,
   ): Buffer {
     // Format: GIV <file_index>:<servent_id>/<file_name>\n\n
     const serventIdHex = serventId.toString("hex").toUpperCase();
@@ -978,7 +1037,7 @@ class MessageRouter {
   private async handlePushConnection(
     socket: net.Socket,
     fileIndex: number,
-    context: Context
+    context: Context,
   ): Promise<void> {
     // After sending GIV, the socket will receive HTTP requests
     let buffer = Buffer.alloc(0);
@@ -1014,13 +1073,13 @@ class MessageRouter {
             const filePath = path.join(
               process.cwd(),
               "gnutella-library",
-              file.filename
+              file.filename,
             );
             const stat = await fs.stat(filePath);
 
             // Parse Range header if present
             const rangeHeader = lines.find((line) =>
-              line.toLowerCase().startsWith("range:")
+              line.toLowerCase().startsWith("range:"),
             );
             let start = 0;
             let end = stat.size - 1;
@@ -1067,7 +1126,7 @@ class MessageRouter {
             readStream.on("end", () => {
               // Keep connection open for HTTP/1.1 keep-alive
               const connectionHeader = lines.find((line) =>
-                line.toLowerCase().startsWith("connection:")
+                line.toLowerCase().startsWith("connection:"),
               );
               if (
                 connectionHeader &&
@@ -1120,8 +1179,12 @@ class GnutellaServer {
   async start(port: number): Promise<void> {
     this.server = net.createServer((socket) => this.handleConnection(socket));
     return new Promise((resolve, reject) => {
-      this.server!.listen(port, "0.0.0.0", () => resolve());
-      this.server!.once("error", reject);
+      if (!this.server) {
+        reject(new Error("Server not initialized"));
+        return;
+      }
+      this.server.listen(port, "0.0.0.0", () => resolve());
+      this.server.once("error", reject);
     });
   }
 
@@ -1142,7 +1205,11 @@ class GnutellaServer {
         }
       });
       this.connections.clear();
-      this.server!.close(() => resolve());
+      if (this.server) {
+        this.server.close(() => resolve());
+      } else {
+        resolve();
+      }
     });
   }
 
@@ -1153,13 +1220,17 @@ class GnutellaServer {
       socket.once("connect", () => {
         this.handleConnection(socket, true);
         const id = `${socket.remoteAddress}:${socket.remotePort}`;
-        const conn = this.connections.get(id)!;
+        const conn = this.connections.get(id);
+        if (!conn) {
+          reject(new Error("Connection not found after establishment"));
+          return;
+        }
         const headers = buildBaseHeaders(this.context);
         conn.send(
           MessageBuilder.handshake(
             `GNUTELLA CONNECT/${Protocol.VERSION}`,
-            headers
-          )
+            headers,
+          ),
         );
         resolve(conn);
       });
@@ -1173,14 +1244,14 @@ class GnutellaServer {
 
   private handleConnection(
     socket: net.Socket,
-    isOutbound: boolean = false
+    isOutbound: boolean = false,
   ): void {
     const id = `${socket.remoteAddress}:${socket.remotePort}`;
     const handler = new SocketHandler(
       socket,
       (msg) => this.handleMessage(id, msg),
       (err) => this.handleError(id, err),
-      () => this.handleClose(id)
+      () => this.handleClose(id),
     );
 
     const connection: Connection = {
@@ -1198,7 +1269,9 @@ class GnutellaServer {
 
   private handleMessage(id: string, msg: GnutellaMessage): void {
     const conn = this.connections.get(id);
-    if (!conn) return;
+    if (!conn) {
+      return;
+    }
     this.router.route(conn, msg, this.context);
   }
 
@@ -1213,10 +1286,12 @@ class GnutellaServer {
   closeConnection(
     id: string,
     code: number = 200,
-    reason: string = "Closing connection"
+    reason: string = "Closing connection",
   ): void {
     const conn = this.connections.get(id);
-    if (!conn) return;
+    if (!conn) {
+      return;
+    }
 
     if (conn.handshake) {
       try {
@@ -1240,7 +1315,7 @@ class GnutellaServer {
     targetServentId: Buffer,
     fileIndex: number,
     requesterIp: string,
-    requesterPort: number
+    requesterPort: number,
   ): void {
     // Send PUSH message to all connected nodes
     // The PUSH will be routed based on servent ID
@@ -1248,7 +1323,7 @@ class GnutellaServer {
       targetServentId,
       fileIndex,
       requesterIp,
-      requesterPort
+      requesterPort,
     );
 
     this.connections.forEach((conn) => {
@@ -1293,7 +1368,7 @@ class PeerStore {
 
   async save(): Promise<void> {
     try {
-      let existingData: any = {};
+      let existingData: GnutellaConfig = { peers: {} };
       try {
         const content = await readFile(this.filename, "utf8");
         existingData = JSON.parse(content);
@@ -1344,7 +1419,7 @@ class QRPManager {
 
   constructor(
     tableSize: number = Protocol.QRP_TABLE_SIZE,
-    infinity: number = Protocol.QRP_INFINITY
+    infinity: number = Protocol.QRP_INFINITY,
   ) {
     this.tableSize = tableSize;
     this.infinity = infinity;
@@ -1362,7 +1437,9 @@ class QRPManager {
   }
 
   removeFile(index: number): boolean {
-    if (!this.sharedFiles.has(index)) return false;
+    if (!this.sharedFiles.has(index)) {
+      return false;
+    }
     this.sharedFiles.delete(index);
     this.rebuildTable();
     return true;
@@ -1389,9 +1466,9 @@ class QRPManager {
     return this.getFiles().filter((file) =>
       queryKeywords.every((queryKeyword) =>
         file.keywords.some((fileKeyword) =>
-          fileKeyword.toLowerCase().includes(queryKeyword)
-        )
-      )
+          fileKeyword.toLowerCase().includes(queryKeyword),
+        ),
+      ),
     );
   }
 
@@ -1403,7 +1480,7 @@ class QRPManager {
     const header = MessageBuilder.header(
       MessageType.ROUTE_TABLE_UPDATE,
       payload.length,
-      1
+      1,
     );
     return Buffer.concat([header, payload]);
   }
@@ -1478,7 +1555,7 @@ class QRPManager {
       const header = MessageBuilder.header(
         MessageType.ROUTE_TABLE_UPDATE,
         payload.length,
-        1
+        1,
       );
       return Buffer.concat([header, payload]);
     });
@@ -1532,7 +1609,9 @@ export class GnutellaNode {
 
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isFile()) continue;
+      if (!entry.isFile()) {
+        continue;
+      }
 
       const filePath = path.join(dir, entry.name);
       const stat = await fs.stat(filePath);
@@ -1563,7 +1642,7 @@ export class GnutellaNode {
   sendPush(
     targetServentId: Buffer,
     fileIndex: number,
-    requesterPort: number
+    requesterPort: number,
   ): void {
     if (!this.server || !this.context) {
       throw new Error("GnutellaNode not started");
@@ -1573,7 +1652,7 @@ export class GnutellaNode {
       targetServentId,
       fileIndex,
       this.context.localIp,
-      requesterPort
+      requesterPort,
     );
   }
 
