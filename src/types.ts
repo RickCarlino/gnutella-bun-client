@@ -32,6 +32,9 @@ export interface Peer {
   ip: string;
   port: number;
   lastSeen: number;
+  firstSeen?: number;
+  source?: "manual" | "gwc" | "pong";
+  failureCount?: number;
 }
 
 export interface GnutellaConfig {

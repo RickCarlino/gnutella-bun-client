@@ -6,22 +6,32 @@ import { QRPManager } from "./QRPManager";
 import { SettingStore } from "./SettingStore";
 import { Context, SharedFile } from "./types";
 import { promises as fs } from "fs";
+import { GWebCacheClient } from "./cache-client";
+import { ConnectionManager } from "./core/ConnectionManager";
+import { BootstrapManager } from "./core/BootstrapManager";
+import { getPublicIP } from "./utils/network";
 
 export class GnutellaNode {
   private server: GnutellaServer | null;
   private peerStore: SettingStore;
   private qrpManager: QRPManager;
   private context: Context | null;
+  private gwcClient: GWebCacheClient | null;
+  private connectionManager: ConnectionManager | null;
+  private bootstrapManager: BootstrapManager | null;
 
   constructor() {
     this.server = null;
     this.peerStore = new SettingStore();
     this.qrpManager = new QRPManager();
     this.context = null;
+    this.gwcClient = null;
+    this.connectionManager = null;
+    this.bootstrapManager = null;
   }
 
   async start(): Promise<void> {
-    const localIp = await this.getPublicIp();
+    const localIp = await getPublicIP();
     const localPort = Protocol.PORT;
     const serventId = IDGenerator.servent();
 
@@ -36,16 +46,44 @@ export class GnutellaNode {
     await this.peerStore.load();
     await this.loadSharedFiles();
 
+    // Initialize server
     this.server = new GnutellaServer(this.context);
+
+    // Initialize GWebCache client
+    this.gwcClient = new GWebCacheClient("BUNT", "0.1.0");
+
+    // Initialize connection manager
+    this.connectionManager = new ConnectionManager(
+      this.server,
+      this.peerStore,
+      this.gwcClient,
+    );
+
+    // Wire up server events to connection manager
+    this.server.on("peer:connected", (id, connection) => {
+      this.connectionManager?.onPeerConnected(id, connection);
+    });
+
+    this.server.on("peer:disconnected", (id) => {
+      this.connectionManager?.onPeerDisconnected(id);
+    });
+
+    // Start the server
     await this.server.start(localPort);
+
+    // Initialize and run bootstrap manager
+    this.bootstrapManager = new BootstrapManager(
+      this.server,
+      this.peerStore,
+      this.gwcClient,
+      this.connectionManager,
+      localPort,
+    );
+
+    await this.bootstrapManager.bootstrap();
 
     this.setupPeriodicTasks();
     this.setupShutdownHandler();
-  }
-
-  private async getPublicIp(): Promise<string> {
-    const response = await fetch("https://wtfismyip.com/text");
-    return (await response.text()).trim();
   }
 
   private async loadSharedFiles(): Promise<void> {
@@ -112,8 +150,17 @@ export class GnutellaNode {
 
   private setupShutdownHandler(): void {
     process.on("SIGINT", async () => {
+      console.log("\nShutting down gracefully...");
+
+      // Stop bootstrap manager
+      this.bootstrapManager?.stop();
+
+      // Stop server
       await this.server?.stop();
+
+      // Save peer data
       await this.peerStore.save();
+
       process.exit(0);
     });
   }

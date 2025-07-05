@@ -12,6 +12,7 @@ import {
   Context,
   GnutellaMessage,
   HandshakeConnectMessage,
+  HandshakeErrorMessage,
   HandshakeOkMessage,
   MessageHeader,
   PingMessage,
@@ -75,18 +76,23 @@ export class MessageRouter {
           msg as HandshakeConnectMessage,
           context,
         ),
-      handshake_ok: () =>
-        this.handleHandshakeOk(conn, msg as HandshakeOkMessage, context),
+      handshake_ok: () => {
+        this.handleHandshakeOk(conn, msg as HandshakeOkMessage, context);
+      },
       ping: () => this.handlePing(conn, msg as PingMessage, context),
       pong: () => this.handlePong(conn, msg as PongMessage, context),
       push: () => this.handlePush(conn, msg as PushMessage, context),
       query: () => this.handleQuery(conn, msg as QueryMessage, context),
       bye: () => this.handleBye(conn, msg as ByeMessage),
-      handshake_error: () => {},
+      handshake_error: () => {
+        console.error(`Handshake error from ${conn.socket.remoteAddress}`);
+        console.log((msg as HandshakeErrorMessage).message);
+      },
       route_table_update: () => {},
     };
 
     const handler = handlers[msg.type];
+    console.log(`=== ROUTING ${msg.type} ===`);
     if (handler) {
       handler();
     }
@@ -111,6 +117,11 @@ export class MessageRouter {
     msg: HandshakeOkMessage,
     context: Context,
   ): void {
+    const TADA_EMOJI = String.fromCodePoint(0x1f389);
+    console.warn(
+      `${TADA_EMOJI} Handshake OK received again from ${conn.socket.remoteAddress}`,
+    );
+
     if (conn.handshake) {
       return;
     }
@@ -176,7 +187,8 @@ export class MessageRouter {
     msg: PongMessage,
     context: Context,
   ): void {
-    context.peerStore.addPeer(msg.ipAddress, msg.port);
+    console.log(`=== GOT PONG ${_conn.socket.remoteAddress}===`);
+    context.peerStore.addPeer(msg.ipAddress, msg.port, "pong");
   }
 
   private handleQuery(
@@ -184,6 +196,7 @@ export class MessageRouter {
     msg: QueryMessage,
     context: Context,
   ): void {
+    console.log(`=== GOT QUERY ${conn.socket.remoteAddress}===`);
     if (!this.ttlCheck(msg.header)) {
       return;
     }
