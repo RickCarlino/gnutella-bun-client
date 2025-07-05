@@ -10,10 +10,8 @@ import {
   MessageType,
   PongMessage,
   PushMessage,
-  QRPVariant,
   QueryHitsMessage,
   QueryMessage,
-  RouteTableUpdateMessage,
 } from "./types";
 
 export class MessageParser {
@@ -130,8 +128,6 @@ export class MessageParser {
       [MessageType.PUSH]: () => this.parsePush(header, payload),
       [MessageType.QUERY]: () => this.parseQuery(header, payload),
       [MessageType.QUERY_HITS]: () => this.parseQueryHits(header, payload),
-      [MessageType.ROUTE_TABLE_UPDATE]: () =>
-        this.parseRouteTableUpdate(header, payload),
     };
 
     const parser = parsers[header.payloadDescriptor];
@@ -217,56 +213,5 @@ export class MessageParser {
       vendorCode: payload.slice(payload.length - 20, payload.length - 16),
       serventId: payload.slice(payload.length - 16),
     };
-  }
-
-  static parseRouteTableUpdate(
-    header: MessageHeader,
-    payload: Buffer,
-  ): RouteTableUpdateMessage | null {
-    const qrp = this.parseQRP(payload);
-    return qrp ? { ...qrp, header } : null;
-  }
-
-  static parseQRP(
-    payload: Buffer,
-  ): Omit<RouteTableUpdateMessage, "header"> | null {
-    if (payload.length < 1) {
-      return null;
-    }
-    const variant = payload[0];
-
-    const qrpParsers: Record<
-      number,
-      () => Omit<RouteTableUpdateMessage, "header"> | null
-    > = {
-      [QRPVariant.RESET]: () => {
-        if (payload.length < 6) {
-          return null;
-        }
-        return {
-          type: "route_table_update",
-          variant: "reset",
-          tableLength: payload.readUInt32LE(1),
-          infinity: payload[5],
-        };
-      },
-      [QRPVariant.PATCH]: () => {
-        if (payload.length < 6) {
-          return null;
-        }
-        return {
-          type: "route_table_update",
-          variant: "patch",
-          seqNo: payload[1],
-          seqSize: payload[2],
-          compressor: payload[3],
-          entryBits: payload[4],
-          data: Buffer.from(payload.subarray(5)),
-        };
-      },
-    };
-
-    const parser = qrpParsers[variant];
-    return parser ? parser() : null;
   }
 }

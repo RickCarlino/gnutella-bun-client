@@ -1,5 +1,5 @@
 import type { Socket } from "net";
-import type { QRPManager } from "./QRPManager";
+import type { SimpleFileManager } from "./SimpleFileManager";
 import type { SettingStore } from "./SettingStore";
 
 export interface Cache {
@@ -50,12 +50,6 @@ export enum MessageType {
   PUSH = 64,
   QUERY = 128,
   QUERY_HITS = 129,
-  ROUTE_TABLE_UPDATE = 48,
-}
-
-export enum QRPVariant {
-  RESET = 0,
-  PATCH = 1,
 }
 
 export interface MessageHeader {
@@ -144,24 +138,11 @@ export interface QueryHitsMessage {
   serventId: Buffer;
 }
 
-export interface RouteTableUpdateMessage {
-  type: "route_table_update";
-  header: MessageHeader;
-  variant: "reset" | "patch";
-  tableLength?: number;
-  infinity?: number;
-  seqNo?: number;
-  seqSize?: number;
-  compressor?: number;
-  entryBits?: number;
-  data?: Buffer;
-}
-
 export interface Context {
   localIp: string;
   localPort: number;
   peerStore: SettingStore;
-  qrpManager: QRPManager;
+  fileManager: SimpleFileManager;
   serventId: Buffer;
 }
 
@@ -192,5 +173,4 @@ export type GnutellaMessage =
   | ByeMessage
   | PushMessage
   | QueryMessage
-  | QueryHitsMessage
-  | RouteTableUpdateMessage;
+  | QueryHitsMessage;

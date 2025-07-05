@@ -5,7 +5,6 @@ import { buildBaseHeaders } from "./buildBaseHeaders";
 import { CONFIG, Protocol } from "./const";
 import { IDGenerator } from "./IDGenerator";
 import { MessageBuilder } from "./MessageBuilder";
-import { QRPManager } from "./QRPManager";
 import {
   ByeMessage,
   Connection,
@@ -86,7 +85,6 @@ export class MessageRouter {
       bye: () => this.handleBye(conn, msg as ByeMessage),
       handshake_error: () =>
         this.handleHandshakeError(conn, msg as HandshakeErrorMessage, context),
-      route_table_update: () => {},
     };
 
     const handler = handlers[msg.type];
@@ -147,9 +145,6 @@ export class MessageRouter {
     }
 
     conn.send(MessageBuilder.ping(IDGenerator.generate(), Protocol.TTL));
-    setTimeout(async () => {
-      await this.sendQRPTable(conn, context.qrpManager);
-    }, 1);
   }
 
   private handlePing(
@@ -162,7 +157,7 @@ export class MessageRouter {
     }
 
     const pongTtl = Math.max(msg.header.hops, 1);
-    const sharedFiles = context.qrpManager.getFiles();
+    const sharedFiles = context.fileManager.getFiles();
     const fileCount = sharedFiles.length;
     const totalSizeKb = Math.floor(
       sharedFiles.reduce((sum, file) => sum + file.size, 0) / 1024,
@@ -199,11 +194,11 @@ export class MessageRouter {
       return;
     }
 
-    if (!context.qrpManager.matchesQuery(msg.searchCriteria)) {
+    if (!context.fileManager.matchesQuery(msg.searchCriteria)) {
       return;
     }
 
-    const matchingFiles = context.qrpManager.getMatchingFiles(
+    const matchingFiles = context.fileManager.getMatchingFiles(
       msg.searchCriteria,
     );
     if (matchingFiles.length === 0) {
@@ -229,15 +224,6 @@ export class MessageRouter {
       headers["Content-Encoding"] = "deflate";
     }
     return headers;
-  }
-
-  private async sendQRPTable(
-    conn: Connection,
-    qrpManager: QRPManager,
-  ): Promise<void> {
-    conn.send(qrpManager.buildResetMessage());
-    const patchMessages = await qrpManager.buildPatchMessage();
-    patchMessages.forEach((msg) => conn.send(msg));
   }
 
   private handleBye(conn: Connection, msg: ByeMessage): void {
@@ -370,7 +356,7 @@ export class MessageRouter {
       const givMessage = this.buildGivMessage(
         msg.fileIndex,
         context.serventId,
-        context.qrpManager.getFile(msg.fileIndex)?.filename || "",
+        context.fileManager.getFile(msg.fileIndex)?.filename || "",
       );
       pushSocket.write(givMessage);
 
@@ -431,7 +417,7 @@ export class MessageRouter {
             return;
           }
 
-          const file = context.qrpManager.getFile(fileIndex);
+          const file = context.fileManager.getFile(fileIndex);
           if (!file) {
             socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
             socket.end();

@@ -62,8 +62,6 @@ export const Protocol = {
   HEADER_SIZE: 23,
   PONG_SIZE: 14,
   QUERY_HITS_FOOTER: 23,
-  QRP_TABLE_SIZE: 8192,
-  QRP_INFINITY: 7,
   HANDSHAKE_END: `\r\n\r\n`,
 };
 

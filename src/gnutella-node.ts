@@ -2,7 +2,7 @@ import path from "path";
 import { Protocol, HOUR } from "./const";
 import { GnutellaServer } from "./GnutellaServer";
 import { IDGenerator } from "./IDGenerator";
-import { QRPManager } from "./QRPManager";
+import { SimpleFileManager } from "./SimpleFileManager";
 import { SettingStore } from "./SettingStore";
 import { Context, SharedFile } from "./types";
 import { promises as fs } from "fs";
@@ -14,7 +14,7 @@ import { getPublicIP } from "./utils/network";
 export class GnutellaNode {
   private server: GnutellaServer | null;
   private peerStore: SettingStore;
-  private qrpManager: QRPManager;
+  private fileManager: SimpleFileManager;
   private context: Context | null;
   private gwcClient: GWebCacheClient | null;
   private connectionManager: ConnectionManager | null;
@@ -23,7 +23,7 @@ export class GnutellaNode {
   constructor() {
     this.server = null;
     this.peerStore = new SettingStore();
-    this.qrpManager = new QRPManager();
+    this.fileManager = new SimpleFileManager();
     this.context = null;
     this.gwcClient = null;
     this.connectionManager = null;
@@ -39,7 +39,7 @@ export class GnutellaNode {
       localIp,
       localPort,
       peerStore: this.peerStore,
-      qrpManager: this.qrpManager,
+      fileManager: this.fileManager,
       serventId,
     };
 
@@ -114,12 +114,12 @@ export class GnutellaNode {
         keywords.add(parsed.ext.replace(/^\./, "").toLowerCase());
       }
 
-      this.qrpManager.addFile(entry.name, stat.size, Array.from(keywords));
+      this.fileManager.addFile(entry.name, stat.size, Array.from(keywords));
     }
   }
 
   getSharedFiles(): SharedFile[] {
-    return this.qrpManager.getFiles();
+    return this.fileManager.getFiles();
   }
 
   sendPush(
