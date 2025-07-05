@@ -1,25 +1,5 @@
-#!/usr/bin/env bun
-
 import type { Server } from "bun";
-
-interface Host {
-  ip: string;
-  port: number;
-  network: string;
-  addedAt: number;
-  cluster?: string;
-}
-
-interface Cache {
-  url: string;
-  network: string;
-  addedAt: number;
-}
-
-interface RateLimit {
-  lastAccess: number;
-  count: number;
-}
+import { Host, Cache, RateLimit } from "./src/types";
 
 const hosts: Host[] = [];
 const caches: Cache[] = [];
@@ -104,7 +84,7 @@ function cleanupOldEntries() {
 
   const removeExpired = <T extends { addedAt: number }>(
     arr: T[],
-    expirySeconds: number
+    expirySeconds: number,
   ) => {
     for (let i = arr.length - 1; i >= 0; i--) {
       if ((now - arr[i].addedAt) / 1000 > expirySeconds) {
@@ -157,7 +137,7 @@ export function addPeer(
   ip: string,
   port: number,
   network: string,
-  cluster?: string
+  cluster?: string,
 ): string {
   const newHost: Host = { ip, port, network, addedAt: Date.now() };
   if (cluster) {
@@ -181,7 +161,7 @@ export function addPeer(
     },
     finder: (items) =>
       items.findIndex(
-        (h) => h.ip === ip && h.port === port && h.network === network
+        (h) => h.ip === ip && h.port === port && h.network === network,
       ),
     maxSize: CONFIG.MAX_HOSTS,
     updateMessage: "Host updated",
@@ -231,14 +211,14 @@ function getRandomItems<T>(items: T[], limit: number): T[] {
 function getHostsForNetwork(network: string, limit: number): Host[] {
   return getRandomItems(
     hosts.filter((h) => h.network === network),
-    limit
+    limit,
   );
 }
 
 function getCachesForNetwork(network: string, limit: number): Cache[] {
   return getRandomItems(
     caches.filter((c) => c.network === network),
-    limit
+    limit,
   );
 }
 
@@ -249,14 +229,14 @@ function formatSpec2Response(params: URLSearchParams, network: string): string {
   if (params.has("ping")) {
     const networks = CONFIG.SUPPORTED_NETWORKS.join("-");
     lines.push(
-      `I|pong|${CONFIG.CACHE_NAME} ${CONFIG.CACHE_VERSION}|${networks}`
+      `I|pong|${CONFIG.CACHE_NAME} ${CONFIG.CACHE_VERSION}|${networks}`,
     );
   }
 
   const hostList = getHostsForNetwork(network, CONFIG.MAX_HOSTS_PER_RESPONSE);
   const cacheList = getCachesForNetwork(
     network,
-    CONFIG.MAX_CACHES_PER_RESPONSE
+    CONFIG.MAX_CACHES_PER_RESPONSE,
   );
 
   hostList.forEach((host) => {
@@ -320,7 +300,7 @@ export function startServer() {
             updateResults.push(
               ip && !isNaN(port)
                 ? addPeer(ip, port, network, params.get("cluster") || undefined)
-                : "WARNING|Invalid IP format"
+                : "WARNING|Invalid IP format",
             );
           }
         }

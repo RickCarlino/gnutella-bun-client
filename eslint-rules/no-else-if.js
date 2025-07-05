@@ -9,7 +9,8 @@ export default {
     fixable: null,
     schema: [],
     messages: {
-      noElseIf: "'else if' statements are not allowed. Use switch statements, lookup tables or polymorphism.",
+      noElseIf:
+        "'else if' statements are not allowed. Use switch statements, lookup tables or polymorphism.",
     },
   },
   create(context) {

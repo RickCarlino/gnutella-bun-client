@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# THE WORK IS NOT DONE UNTIL `bun run all` PASSES!
+
 ## Project Overview
 
 This is a Gnutella 0.6 P2P protocol implementation in TypeScript using the Bun runtime. The project implements both client and server functionality for the Gnutella network, along with a GWebCache server and client for peer discovery.

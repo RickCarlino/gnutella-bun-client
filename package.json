@@ -7,7 +7,10 @@
     "start": "bun run index.ts",
     "dev": "bun run index.ts",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "format": "bunx prettier --write .",
+    "typecheck": "bunx tsc --noEmit",
+    "all": "bun run lint && bun run typecheck && bun run format"
   },
   "keywords": [],
   "author": "",

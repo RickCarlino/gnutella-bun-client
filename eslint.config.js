@@ -44,7 +44,7 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tseslint,
-      "custom": {
+      custom: {
         rules: {
           "no-else-if": noElseIf,
         },

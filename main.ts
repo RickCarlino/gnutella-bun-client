@@ -1,5 +1,5 @@
 import { serve } from "bun";
-import { CONFIG } from "./src/config";
+import { CONFIG } from "./src/const";
 import { GnutellaNode } from "./src/gnutella-node";
 import { createServer } from "./src/http";
 

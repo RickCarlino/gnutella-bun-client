@@ -4,10 +4,10 @@ A TypeScript implementation of the Gnutella 0.6 P2P protocol using the Bun runti
 
 ## Remaining Work
 
-- [X] CONNECT
-- [X] PING / PONG
-- [X] QUERY / QUERY HIT
-- [X] GZip Compression
+- [x] CONNECT
+- [x] PING / PONG
+- [x] QUERY / QUERY HIT
+- [x] GZip Compression
 - [ ] Automatic GWebCache bootstrapping
 - [ ] (in progress) HTTP Server for file downloads
 - [ ] User interface

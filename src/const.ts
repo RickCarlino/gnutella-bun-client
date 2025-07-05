@@ -1,14 +1,4 @@
-interface Peer {
-  ip: string;
-  port: number;
-  lastSeen: number;
-}
-
-export interface GnutellaConfig {
-  httpPort: number;
-  peers: Record<string, Peer>;
-  caches: Record<string, { lastPush: number; lastPull: number }>;
-}
+import { GnutellaConfig } from "./types";
 
 export const CONFIG: GnutellaConfig = {
   httpPort: 8080,
@@ -64,3 +54,17 @@ export const CONFIG: GnutellaConfig = {
     },
   },
 };
+
+export const Protocol = {
+  PORT: 6346,
+  VERSION: "0.6",
+  TTL: 7,
+  HEADER_SIZE: 23,
+  PONG_SIZE: 14,
+  QUERY_HITS_FOOTER: 23,
+  QRP_TABLE_SIZE: 8192,
+  QRP_INFINITY: 7,
+  HANDSHAKE_END: `\r\n\r\n`,
+};
+
+export const HOUR = 60 * 60 * 1000; // 1 hour
