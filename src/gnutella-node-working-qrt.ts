@@ -5,8 +5,9 @@ import net from "net";
 import path from "path";
 import { promisify } from "util";
 import zlib from "zlib";
-import { CONFIG, GnutellaConfig } from "./config";
 import { Binary } from "./binary";
+import { CONFIG } from "./const";
+import { GnutellaConfig } from "./types";
 
 enum MessageType {
   PING = 0,
@@ -1367,15 +1368,7 @@ class PeerStore {
   }
 
   async save(): Promise<void> {
-    try {
-      let existingData: GnutellaConfig = { peers: {} };
-      try {
-        const content = await readFile(this.filename, "utf8");
-        existingData = JSON.parse(content);
-      } catch {}
-      existingData.peers = Array.from(this.peers.values());
-      await writeFile(this.filename, JSON.stringify(existingData, null, 2));
-    } catch {}
+    console.warn(`Saves disabled for now...`);
   }
 
   add(ip: string, port: number, lastSeen: number = Date.now()): void {
