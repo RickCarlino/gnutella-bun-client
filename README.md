@@ -2,11 +2,16 @@
 
 A TypeScript implementation of the Gnutella 0.6 P2P protocol using the Bun runtime. This project provides a Gnutella leaf node supporting compression, query routing protocol and other modern features (goal: full GTK-Gnutella interop).
 
-## Remain Work
+## Remaining Work
 
-- [ ] UI that supports search / download / basics (currently headless)
-- [ ] Config manager (download dir is hard-coded to `./gnutella-library`)
-- [ ] Re-add peering. Currently sits idle until an inbound peer connects.
+- [X] CONNECT
+- [X] PING / PONG
+- [X] QUERY / QUERY HIT
+- [X] GZip Compression
+- [ ] Automatic GWebCache bootstrapping
+- [ ] (in progress) HTTP Server for file downloads
+- [ ] User interface
+- [ ] UDP Support
 
 ## Requirements
 
@@ -80,23 +85,11 @@ bun test src/message_parser.test.ts
 
 - **settings.json** - Stores peer and cache data with timestamps
 
-## Current Features
-
-- ✅ Gnutella 0.6 protocol implementation
-- ✅ Query Routing Protocol (QRP) support
-- ✅ Message parsing and routing
-- ✅ Persistent peer storage
-- ✅ Incoming connection handling
-- ✅ GWebCache server implementation
-- ✅ PUSH downloads for firewalled hosts
-- ✅ HTTP file serving with range support
-
 ## Limitations
 
 - **Leaf node only** - No ultrapeer capabilities
 - **Querying only, No file sharing (yet!)** - Will serve the contents of `gnutella-library/` but does not yet offer downloads to peers.
 - **No outbound connections** - Currently only accepts incoming connections
-- **No compression** - Gnutella compression not implemented
 - **No automatic bootstrapping** - Relies on existing peer list
 
 ## Protocol Specifications
@@ -110,13 +103,6 @@ The `/docs` directory contains the protocol specifications this implementation f
 
 ## Development
 
-### Code Style
-
-- No class keyword (use functions and interfaces)
-- No else-if statements (use switch statements)
-- TypeScript strict mode enabled
-- Unix timestamps for all time tracking
-
 ### Architecture Notes
 
 The implementation uses a class-based architecture with:
@@ -126,26 +112,6 @@ The implementation uses a class-based architecture with:
 - `SocketHandler` managing individual peer connections
 - `MessageRouter` for message distribution
 - `QRPManager` for query routing optimization
-
-## PUSH Downloads
-
-PUSH downloads are used when the file-serving host is behind a firewall and cannot accept incoming connections. The implementation supports:
-
-- Parsing and routing PUSH messages through the Gnutella network
-- Initiating outbound connections when receiving PUSH requests
-- GIV protocol handshake for pushed connections
-- HTTP file serving over pushed connections with range support
-
-See [push-download-example.ts](push-download-example.ts) for usage examples.
-
-## Future Work
-
-- [ ] Outbound connection support
-- [ ] File sharing capabilities
-- [ ] Automatic GWebCache bootstrapping
-- [ ] Connection compression
-- [ ] Ultrapeer promotion
-- [ ] Push proxy support
 
 ## Resources
 

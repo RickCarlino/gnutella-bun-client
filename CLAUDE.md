@@ -11,9 +11,7 @@ This is a Gnutella 0.6 P2P protocol implementation in TypeScript using the Bun r
 ### Running Components
 
 - `bun cache-server.ts` - Run the GWebCache server (for peer discovery)
-- `bun cache-client.ts` - Query GWebCache servers to get peer IPs
-- `bun server.ts` - Run Gnutella server (listens on port 6346 for incoming connections)
-- `bun client.ts` - Run Gnutella client (connects to other peers)
+- `bun main.ts` - Run Gnutella client (connects to other peers)
 
 ### Testing
 
@@ -50,7 +48,6 @@ The `/docs` directory contains the Gnutella protocol specifications that this im
 
 ### Code Style Requirements
 
-- **NO class keyword** - Use functions and interfaces only
 - **NO else if statements** - Use switch statements instead
 - Use Unix timestamps for all time tracking
 - TypeScript strict mode is enabled
@@ -66,8 +63,6 @@ The `/docs` directory contains the Gnutella protocol specifications that this im
 
 The implementation is not yet suitable for real-world Gnutella usage. Missing features include:
 
-- Query Routing Protocol (QRP)
-- Compressed connections
 - Automatic bootstrapping and peer caching
 
 For local testing with GTK-Gnutella:

@@ -4,3 +4,4 @@ node_modules/
 failed*
 *.json
 gnutella-library/
+.claude/

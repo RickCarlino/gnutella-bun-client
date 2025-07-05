@@ -11,4 +11,5 @@ if (import.meta.main) {
     fetch: app.fetch,
   });
   await node.start();
+  // Test comment - testing hook again
 }

@@ -1,6 +1,7 @@
 import eslint from "@eslint/js";
 import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
+import noElseIf from "./eslint-rules/no-else-if.js";
 
 export default [
   {
@@ -43,6 +44,11 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tseslint,
+      "custom": {
+        rules: {
+          "no-else-if": noElseIf,
+        },
+      },
     },
     rules: {
       ...eslint.configs.recommended.rules,
@@ -62,6 +68,9 @@ export default [
       "@typescript-eslint/no-non-null-assertion": "warn",
       "@typescript-eslint/no-require-imports": "off",
       "@typescript-eslint/no-empty-object-type": "off",
+
+      // Custom rules
+      "custom/no-else-if": "error",
 
       // General rules
       "no-console": "off", // Console is commonly used in this project
