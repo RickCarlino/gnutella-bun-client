@@ -35,6 +35,7 @@ export default [
         fetch: "readonly",
         TextEncoder: "readonly",
         TextDecoder: "readonly",
+        AbortSignal: "readonly",
         // Timer globals
         setTimeout: "readonly",
         setInterval: "readonly",
@@ -81,6 +82,7 @@ export default [
       eqeqeq: ["error", "always"],
       curly: ["error", "all"],
       "no-empty": ["error", { allowEmptyCatch: true }],
+      complexity: ["warn", { max: 20, variant: "modified" }],
     },
   },
 ];
