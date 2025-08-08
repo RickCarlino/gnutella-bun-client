@@ -1,6 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
+
 - `main.ts`: Bun entrypoint; starts `GnutellaNode` and HTTP server.
 - `src/`: Core TypeScript modules (protocol, server, routing, utils). Notable: `gnutella-node.ts`, `GnutellaServer.ts`, `Message*`, `core/*`, `http.tsx` (Hono routes).
 - `templates/`: Hono JSX views (e.g., `index.tsx`).
@@ -10,6 +11,7 @@
 - `settings.json`: Peer/cache state. Treat as local data.
 
 ## Build, Test, and Development Commands
+
 - Install deps: `bun install`
 - Run node (dev): `bun main.ts` (serves HTTP on 8080; Gnutella on 6346).
 - Run GWebCache: `bun cache-server.ts`
@@ -21,6 +23,7 @@
 - Tests (when present): `bun test` or `bun test path/to/file.test.ts`
 
 ## Coding Style & Naming Conventions
+
 - Language: TypeScript (ESM). Strict TS enabled.
 - Formatting: Prettier defaults (2 spaces, double quotes, semicolons).
 - Linting: ESLint with `@typescript-eslint`.
@@ -29,16 +32,19 @@
 - Imports: keep relative module paths explicit (project uses `.ts` imports, ESM).
 
 ## Testing Guidelines
+
 - Framework: Bun test runner.
 - Location: colocate as `src/**/*.test.ts`.
 - Naming: `*.test.ts` with descriptive `describe()` blocks.
 - Run: `bun test` (add `--watch` locally if desired). Aim for unit tests around parsers, routers, and hashing utilities.
 
 ## Commit & Pull Request Guidelines
+
 - Commits: concise, imperative subject (≤72 chars). Conventional Commits preferred (`feat:`, `fix:`, `chore:`, `refactor:`).
 - PRs: include summary, rationale, before/after notes, and manual test steps. Link related issues; attach logs or screenshots for protocol/HTTP changes.
 - Checks: ensure `bun run all` passes before requesting review.
 
 ## Security & Configuration Tips
+
 - Do not commit private IPs, tokens, or large binaries. `settings.json` is local state.
 - Default ports: HTTP `8080`, Gnutella `6346`. Expose carefully when running on public hosts.

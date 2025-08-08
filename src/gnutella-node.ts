@@ -9,6 +9,7 @@ import { Hash } from "./Hash";
 import { IDGenerator } from "./IDGenerator";
 import { CONFIG } from "./const";
 import { GnutellaConfig } from "./types";
+import { log } from "./log";
 
 enum MessageType {
   PING = 0,
@@ -154,25 +155,44 @@ class MessageParser {
   static parse(buffer: Buffer): GnutellaMessage | null {
     const handshake = this.parseHandshake(buffer);
     if (handshake) {
+      log.debug("Parser", "Parsed handshake", { type: handshake.type });
       return handshake;
     }
 
     if (buffer.length < Protocol.HEADER_SIZE) {
+      log.debug("Parser", "Insufficient data for header", {
+        have: buffer.length,
+        need: Protocol.HEADER_SIZE,
+      });
       return null;
     }
 
     const header = this.parseHeader(buffer);
     if (!header) {
+      log.warn("Parser", "Failed to parse header");
       return null;
     }
 
     const totalSize = Protocol.HEADER_SIZE + header.payloadLength;
     if (buffer.length < totalSize) {
+      log.debug("Parser", "Partial message in buffer", {
+        have: buffer.length,
+        need: totalSize,
+      });
       return null;
     }
 
     const payload = buffer.slice(Protocol.HEADER_SIZE, totalSize);
-    return this.parsePayload(header, payload);
+    const parsed = this.parsePayload(header, payload);
+    if (!parsed) {
+      log.warn("Parser", "Unknown/invalid payload", {
+        descriptor: header.payloadDescriptor,
+        length: header.payloadLength,
+      });
+    } else {
+      log.debug("Parser", "Parsed payload", { type: parsed.type });
+    }
+    return parsed;
   }
 
   static getMessageSize(message: GnutellaMessage, buffer: Buffer): number {
@@ -206,11 +226,13 @@ class MessageParser {
     const headers = this.parseHeaders(lines.slice(1));
 
     if (startLine.startsWith("GNUTELLA CONNECT/")) {
-      return {
+      const msg = {
         type: "handshake_connect",
         version: startLine.split("/")[1],
         headers,
-      };
+      } as HandshakeConnectMessage;
+      log.debug("Parser", "Handshake CONNECT", { headers });
+      return msg;
     }
 
     if (startLine.startsWith("GNUTELLA/")) {
@@ -222,9 +244,25 @@ class MessageParser {
       const [, version, code, message] = match;
       const statusCode = parseInt(code);
 
-      return statusCode === 200
-        ? { type: "handshake_ok", version, statusCode, message, headers }
-        : { type: "handshake_error", code: statusCode, message, headers };
+      if (statusCode === 200) {
+        const ok: HandshakeOkMessage = {
+          type: "handshake_ok",
+          version,
+          statusCode,
+          message,
+          headers,
+        };
+        log.debug("Parser", "Handshake OK", { headers });
+        return ok;
+      }
+      const err: HandshakeErrorMessage = {
+        type: "handshake_error",
+        code: statusCode,
+        message,
+        headers,
+      };
+      log.warn("Parser", "Handshake error", { code: statusCode, message });
+      return err;
     }
 
     return null;
@@ -428,12 +466,21 @@ class SocketHandler {
     this.onError = onError;
     this.onClose = onClose;
     this.setupEventHandlers();
+    log.info("Socket", "New socket handler", {
+      local: `${socket.localAddress}:${socket.localPort}`,
+      remote: `${socket.remoteAddress}:${socket.remotePort}`,
+    });
   }
 
   send(data: Buffer): void {
     const target =
       this.compressionEnabled && this.deflater ? this.deflater : this.socket;
     target.write(data);
+    log.debug(
+      "Socket",
+      this.compressionEnabled ? "Wrote compressed data" : "Wrote data",
+      { bytes: data.length },
+    );
   }
 
   enableCompression(): void {
@@ -442,24 +489,33 @@ class SocketHandler {
     }
     this.compressionEnabled = true;
     this.setupCompression();
+    log.info("Socket", "Compression enabled");
   }
 
   close(): void {
     this.inflater?.end();
     this.deflater?.end();
     this.socket.destroy();
+    log.info("Socket", "Closed socket");
   }
 
   private setupEventHandlers(): void {
     this.socket.on("data", (chunk) => {
+      log.debug("Socket", "Received data", { bytes: chunk.length });
       if (this.compressionEnabled && this.inflater) {
         this.inflater.write(chunk);
       } else {
         this.handleData(chunk);
       }
     });
-    this.socket.on("error", this.onError);
-    this.socket.on("close", this.onClose);
+    this.socket.on("error", (e) => {
+      log.error("Socket", "Socket error", e);
+      this.onError(e as Error);
+    });
+    this.socket.on("close", () => {
+      log.info("Socket", "Socket closed");
+      this.onClose();
+    });
   }
 
   private setupCompression(): void {
@@ -740,10 +796,13 @@ class MessageRouter {
   }
 
   route(conn: Connection, msg: GnutellaMessage, context: Context): void {
+    log.debug("Router", "Routing message", { type: msg.type, conn: conn.id });
     // Check for duplicate messages (only for messages with headers)
     if ("header" in msg && msg.header) {
       if (this.isMessageSeen(msg.header.descriptorId)) {
-        // Drop duplicate message
+        log.debug("Router", "Dropping duplicate message", {
+          id: msg.header.descriptorId.toString("hex"),
+        });
         return;
       }
     }
@@ -769,7 +828,9 @@ class MessageRouter {
     const handler = handlers[msg.type];
     if (handler) {
       handler();
+      return;
     }
+    log.warn("Router", "No handler for message", { type: msg.type });
   }
 
   private handleHandshakeConnect(
@@ -779,6 +840,10 @@ class MessageRouter {
   ): void {
     // Record peer-advertised headers for later capability checks
     conn.remoteHeaders = { ...msg.headers };
+    log.info("Router", "Handshake CONNECT received", {
+      conn: conn.id,
+      headers: msg.headers,
+    });
     const clientAcceptsDeflate =
       msg.headers["Accept-Encoding"]?.includes("deflate");
     const responseHeaders = this.buildResponseHeaders(
@@ -800,6 +865,7 @@ class MessageRouter {
     }
 
     if (conn.isOutbound) {
+      log.info("Router", "Outbound handshake OK", { conn: conn.id });
       const clientAcceptsDeflate =
         msg.headers["Accept-Encoding"]?.includes("deflate");
       const responseHeaders = this.buildResponseHeaders(
@@ -810,6 +876,7 @@ class MessageRouter {
     }
 
     conn.handshake = true;
+    log.info("Router", "Handshake complete", { conn: conn.id });
 
     const shouldCompress =
       msg.headers["Content-Encoding"]?.includes("deflate") &&
@@ -822,6 +889,7 @@ class MessageRouter {
     }
 
     conn.send(MessageBuilder.ping(IDGenerator.generate(), Protocol.TTL));
+    log.debug("Router", "Sent initial PING", { conn: conn.id });
     setTimeout(async () => {
       await this.sendQRPTable(conn, context.qrpManager);
     }, 1);
@@ -853,6 +921,12 @@ class MessageRouter {
         pongTtl,
       ),
     );
+    log.debug("Router", "Responded with PONG", {
+      conn: conn.id,
+      files: fileCount,
+      kb: totalSizeKb,
+      ttl: pongTtl,
+    });
   }
 
   private handlePong(
@@ -861,6 +935,10 @@ class MessageRouter {
     context: Context,
   ): void {
     context.peerStore.add(msg.ipAddress, msg.port);
+    log.debug("Router", "Learned peer from PONG", {
+      ip: msg.ipAddress,
+      port: msg.port,
+    });
   }
 
   private handleQuery(
@@ -883,6 +961,9 @@ class MessageRouter {
     }
 
     if (!context.qrpManager.matchesQuery(msg.searchCriteria)) {
+      log.debug("Router", "Query filtered by QRP", {
+        search: msg.searchCriteria,
+      });
       return;
     }
 
@@ -901,6 +982,11 @@ class MessageRouter {
       context.serventId,
     );
     conn.send(queryHit);
+    log.info("Router", "Sent QUERY_HITS", {
+      conn: conn.id,
+      matches: matchingFiles.length,
+      search: msg.searchCriteria,
+    });
   }
 
   private buildResponseHeaders(
@@ -918,14 +1004,22 @@ class MessageRouter {
     conn: Connection,
     qrpManager: QRPManager,
   ): Promise<void> {
+    log.debug("Router", "Sending QRP reset", { conn: conn.id });
     conn.send(qrpManager.buildResetMessage());
     const patchMessages = await qrpManager.buildPatchMessage();
+    log.debug("Router", "Sending QRP patches", {
+      conn: conn.id,
+      chunks: patchMessages.length,
+    });
     patchMessages.forEach((msg) => conn.send(msg));
   }
 
   private handleBye(conn: Connection, msg: ByeMessage): void {
     // According to spec: "A servent receiving a Bye message MUST close the connection immediately"
-    console.log(`Received Bye message (code: ${msg.code}): ${msg.message}`);
+    log.info("Router", "Received BYE", {
+      code: msg.code,
+      message: msg.message,
+    });
     conn.socket.destroy();
   }
 
@@ -944,9 +1038,10 @@ class MessageRouter {
     }
 
     // This PUSH is for us - initiate a push connection
-    console.log(
-      `Received PUSH request for file ${msg.fileIndex} to ${msg.ipAddress}:${msg.port}`,
-    );
+    log.info("Router", "Received PUSH request", {
+      fileIndex: msg.fileIndex,
+      target: `${msg.ipAddress}:${msg.port}`,
+    });
 
     // Create a new connection to the requester
     const pushSocket = net.createConnection({
@@ -967,15 +1062,16 @@ class MessageRouter {
       // Hand off to HTTP handling logic
       this.handlePushConnection(pushSocket, msg.fileIndex, context).catch(
         (err) => {
-          console.error("Error in push connection handler:", err);
+          log.error("Router", "Error in push connection handler", err);
           pushSocket.destroy();
         },
       );
     });
 
     pushSocket.once("error", (err) => {
-      console.error(
-        `Failed to establish push connection to ${msg.ipAddress}:${msg.port}:`,
+      log.error(
+        "Router",
+        `Failed to establish push connection to ${msg.ipAddress}:${msg.port}`,
         err,
       );
       pushSocket.destroy();
@@ -1096,11 +1192,11 @@ class MessageRouter {
             });
 
             readStream.on("error", (err: Error) => {
-              console.error("Error reading file for PUSH:", err);
+              log.error("Router", "Error reading file for PUSH", err);
               socket.destroy();
             });
           } catch (err) {
-            console.error("Error handling PUSH file request:", err);
+            log.error("Router", "Error handling PUSH file request", err);
             socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
             socket.end();
           }
@@ -1111,7 +1207,10 @@ class MessageRouter {
       }
     });
 
-    socket.on("error", () => socket.destroy());
+    socket.on("error", (e) => {
+      log.error("Router", "Push socket error", e);
+      socket.destroy();
+    });
     socket.setTimeout(30000, () => socket.destroy()); // 30 second timeout
   }
 }
@@ -1129,11 +1228,14 @@ class GnutellaServer {
     this.context = context;
   }
   async pingPeers(ttl: number = Protocol.TTL): Promise<void> {
+    let count = 0;
     this.connections.forEach((conn) => {
       if (conn.handshake) {
         conn.send(MessageBuilder.ping(IDGenerator.generate(), ttl));
+        count++;
       }
     });
+    log.debug("Server", "Pinged peers", { ttl, count });
   }
   async start(port: number): Promise<void> {
     this.server = net.createServer((socket) => this.handleConnection(socket));
@@ -1142,7 +1244,10 @@ class GnutellaServer {
         reject(new Error("Server not initialized"));
         return;
       }
-      this.server.listen(port, "0.0.0.0", () => resolve());
+      this.server.listen(port, "0.0.0.0", () => {
+        log.info("Server", "Gnutella server listening", { port });
+        resolve();
+      });
       this.server.once("error", reject);
     });
   }
@@ -1170,7 +1275,10 @@ class GnutellaServer {
       });
       this.connections.clear();
       if (this.server) {
-        this.server.close(() => resolve());
+        this.server.close(() => {
+          log.info("Server", "Server stopped");
+          resolve();
+        });
       } else {
         resolve();
       }
@@ -1182,6 +1290,7 @@ class GnutellaServer {
       const socket = net.createConnection({ host, port });
 
       socket.once("connect", () => {
+        log.info("Server", "Connected to peer", { host, port });
         this.handleConnection(socket, true);
         const id = `${socket.remoteAddress}:${socket.remotePort}`;
         const conn = this.connections.get(id);
@@ -1200,6 +1309,7 @@ class GnutellaServer {
       });
 
       socket.once("error", (err) => {
+        log.error("Server", "Failed to connect to peer", { host, port, err });
         socket.destroy();
         reject(err);
       });
@@ -1229,6 +1339,13 @@ class GnutellaServer {
     };
 
     this.connections.set(id, connection);
+    log.info(
+      "Server",
+      isOutbound ? "Outbound connection" : "Inbound connection",
+      {
+        id,
+      },
+    );
   }
 
   private handleMessage(id: string, msg: GnutellaMessage): void {
@@ -1236,15 +1353,18 @@ class GnutellaServer {
     if (!conn) {
       return;
     }
+    log.debug("Server", "Message received", { id, type: msg.type });
     this.router.route(conn, msg, this.context);
   }
 
   private handleError(id: string, _error: Error): void {
     this.connections.delete(id);
+    log.warn("Server", "Connection error/removed", { id });
   }
 
   private handleClose(id: string): void {
     this.connections.delete(id);
+    log.info("Server", "Connection closed", { id });
   }
 
   closeConnection(
@@ -1278,6 +1398,7 @@ class GnutellaServer {
       conn.socket.destroy();
       this.connections.delete(id);
     }
+    log.info("Server", "Closed connection", { id, code, reason });
   }
 
   sendPush(
@@ -1300,7 +1421,7 @@ class GnutellaServer {
         try {
           conn.send(pushMessage);
         } catch (err) {
-          console.error(`Failed to send PUSH to ${conn.id}:`, err);
+          log.error("Server", `Failed to send PUSH to ${conn.id}`, err);
         }
       }
     });
@@ -1331,6 +1452,10 @@ class PeerStore {
         this.add(p.ip, p.port, p.lastSeen);
       });
     }
+    log.info("PeerStore", "Loaded peers", {
+      count: this.peers.size,
+      file: this.filename,
+    });
   }
 
   async save(): Promise<void> {
@@ -1342,14 +1467,17 @@ class PeerStore {
     });
     existingData.peers = peersData;
     await writeFile(this.filename, JSON.stringify(existingData, null, 2));
+    log.debug("PeerStore", "Saved peers", { count: this.peers.size });
   }
 
   add(ip: string, port: number, lastSeen: number = Date.now()): void {
     this.peers.set(`${ip}:${port}`, { ip, port, lastSeen });
+    log.debug("PeerStore", "Added/updated peer", { ip, port });
   }
 
   remove(ip: string, port: number): void {
     this.peers.delete(`${ip}:${port}`);
+    log.debug("PeerStore", "Removed peer", { ip, port });
   }
 
   get(count: number): Peer[] {
@@ -1365,6 +1493,7 @@ class PeerStore {
         this.peers.delete(key);
       }
     });
+    log.debug("PeerStore", "Pruned peers", { remaining: this.peers.size });
   }
 }
 
@@ -1399,6 +1528,7 @@ class QRPManager {
     const sha1 = Hash.sha1(filename);
     this.sharedFiles.set(index, { filename, size, index, keywords, sha1 });
     this.updateTableForKeywords(keywords);
+    log.debug("QRP", "Added file", { index, filename, size });
     return index;
   }
 
@@ -1421,10 +1551,12 @@ class QRPManager {
 
   matchesQuery(searchCriteria: string): boolean {
     const keywords = this.extractKeywords(searchCriteria);
-    return keywords.every((keyword) => {
+    const match = keywords.every((keyword) => {
       const hash = Hash.qrp(keyword, Math.log2(this.tableSize));
       return this.table[hash] < this.infinity;
     });
+    log.debug("QRP", "QRP table match", { search: searchCriteria, match });
+    return match;
   }
 
   getMatchingFiles(searchCriteria: string): SharedFile[] {
@@ -1448,6 +1580,10 @@ class QRPManager {
       payload.length,
       1,
     );
+    log.debug("QRP", "Built QRP reset", {
+      tableSize: this.tableSize,
+      infinity: this.infinity,
+    });
     return Buffer.concat([header, payload]);
   }
 
@@ -1455,7 +1591,12 @@ class QRPManager {
     const deflate = promisify(zlib.deflate);
     const patchData = this.createPatchData();
     const compressed = await deflate(patchData);
-    return this.createPatchChunks(compressed);
+    const chunks = this.createPatchChunks(compressed);
+    log.debug("QRP", "Built QRP patch chunks", {
+      compressedBytes: compressed.length,
+      chunks: chunks.length,
+    });
+    return chunks;
   }
 
   private updateTableForKeywords(keywords: string[]): void {
@@ -1542,9 +1683,15 @@ export class GnutellaNode {
   }
 
   async start(): Promise<void> {
+    log.info("Node", "Starting node...");
     const localIp = await this.getPublicIp();
     const localPort = Protocol.PORT;
     const serventId = IDGenerator.servent();
+    log.info("Node", "Local identity", {
+      ip: localIp,
+      port: localPort,
+      servent: serventId.toString("hex").slice(0, 16) + "...",
+    });
 
     this.context = {
       localIp,
@@ -1556,6 +1703,9 @@ export class GnutellaNode {
 
     await this.peerStore.load();
     await this.loadSharedFiles();
+    log.info("Node", "Shared files loaded", {
+      count: this.qrpManager.getFiles().length,
+    });
 
     this.server = new GnutellaServer(this.context);
     await this.server.start(localPort);
@@ -1629,10 +1779,12 @@ export class GnutellaNode {
     setInterval(() => this.server?.pingPeers(Protocol.TTL), 3 * 1000);
     // Send alive pings (TTL=1) every 30 seconds to keep connections alive
     setInterval(() => this.server?.pingPeers(1), 30 * 1000);
+    log.info("Node", "Periodic tasks scheduled");
   }
 
   private setupShutdownHandler(): void {
     process.on("SIGINT", async () => {
+      log.info("Node", "SIGINT received, shutting down...");
       await this.server?.stop();
       await this.peerStore.save();
       process.exit(0);
