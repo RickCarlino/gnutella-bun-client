@@ -1,13 +1,13 @@
 # Gnutella Client for Bun Runtime
 
-A TypeScript implementation of the Gnutella 0.6 P2P protocol using the Bun runtime. This project provides a Gnutella leaf node supporting compression, query routing protocol and other modern features (goal: full GTK-Gnutella interop).
+A TypeScript implementation of the Gnutella 0.6 P2P protocol using the Bun runtime. This project provides a Gnutella leaf node supporting deflate compression, Query Routing Protocol (QRP), and other modern features (goal: full GTK-Gnutella interop).
 
 ## Remaining Work
 
 - [x] CONNECT
 - [x] PING / PONG
 - [x] QUERY / QUERY HIT
-- [x] GZip Compression
+- [x] Deflate Compression
 - [ ] Automatic GWebCache bootstrapping
 - [ ] (in progress) HTTP Server for file downloads
 - [ ] User interface
@@ -36,26 +36,16 @@ This will:
 
 ### Core Components
 
-- **[main.ts](main.ts)** - Entry point that starts a GnutellaNode
-- **[src/gnutella_node.ts](src/gnutella_node.ts)** - Main Gnutella node implementation
-- **[src/gnutella_server.ts](src/gnutella_server.ts)** - Server for accepting incoming connections
-- **[src/socket_handler.ts](src/socket_handler.ts)** - Handles individual socket connections
-- **[src/message_router.ts](src/message_router.ts)** - Routes messages between connections
-- **[src/peer_store.ts](src/peer_store.ts)** - Manages persistent peer storage
+- **[main.ts](main.ts)** - Entry point that starts a `GnutellaNode` and HTTP server
+- **[src/gnutella-node.ts](src/gnutella-node.ts)** - Main Gnutella node (parsing, routing, QRP, bye/compression negotiation, push handling)
+- **[src/http.tsx](src/http.tsx)** - Hono routes for UI and file serving
 
-### Protocol Implementation
+### Protocol Implementation & Utilities
 
-- **[src/message_parser.ts](src/message_parser.ts)** - Parses Gnutella protocol messages
-- **[src/message_builder.ts](src/message_builder.ts)** - Constructs Gnutella protocol messages
-- **[src/qrp_manager.ts](src/qrp_manager.ts)** - Query Routing Protocol implementation
-- **[src/constants.ts](src/constants.ts)** - Protocol constants and configuration
-- **[src/core_types.ts](src/core_types.ts)** - TypeScript type definitions
-
-### Utilities
-
-- **[src/binary.ts](src/binary.ts)** - Binary data handling utilities
-- **[src/hash.ts](src/hash.ts)** - Hashing utilities for QRP
-- **[src/id_generator.ts](src/id_generator.ts)** - Generates unique message IDs
+- **[src/binary.ts](src/binary.ts)** - Binary helpers (endian, IP encode/decode, base32)
+- **[src/Hash.ts](src/Hash.ts)** - Hashing utilities (e.g., SHA1 URN)
+- **[src/IDGenerator.ts](src/IDGenerator.ts)** - 16-byte message/servent IDs
+- **[src/const.ts](src/const.ts)** - Protocol constants and configuration
 
 ### GWebCache Server
 
@@ -88,9 +78,8 @@ bun test src/message_parser.test.ts
 ## Limitations
 
 - **Leaf node only** - No ultrapeer capabilities
-- **Querying only, No file sharing (yet!)** - Will serve the contents of `gnutella-library/` but does not yet offer downloads to peers.
-- **No outbound connections** - Currently only accepts incoming connections
-- **No automatic bootstrapping** - Relies on existing peer list
+- **Querying only, limited file serving** - Serves files from `gnutella-library/`; HTTP range/URN endpoints are basic.
+- **Bootstrap work in progress** - Uses configured peers/caches in `settings.json`/`const.ts`.
 
 ## Protocol Specifications
 

@@ -1,6 +1,18 @@
 import { createHash } from "crypto";
 
 export class Hash {
+  // QRP hash as used for Query Routing tables
+  static qrp(str: string, bits: number): number {
+    const A_INT = 0x4f1bbcdc; // Knuth-like multiplicative constant
+    const bytes = new TextEncoder().encode(str.toLowerCase());
+    let xor = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      xor ^= bytes[i] << ((i & 3) * 8);
+    }
+    const prod = BigInt(xor >>> 0) * BigInt(A_INT >>> 0);
+    const mask = (1n << BigInt(bits)) - 1n;
+    return Number((prod >> BigInt(32 - bits)) & mask) >>> 0;
+  }
   static sha1(data: string | Buffer): Buffer {
     return createHash("sha1").update(data).digest();
   }

@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { promises as fs } from "fs";
 import { readFile, writeFile } from "fs/promises";
 import net from "net";
@@ -6,6 +5,8 @@ import path from "path";
 import { promisify } from "util";
 import zlib from "zlib";
 import { Binary } from "./binary";
+import { Hash } from "./Hash";
+import { IDGenerator } from "./IDGenerator";
 import { CONFIG } from "./const";
 import { GnutellaConfig } from "./types";
 
@@ -494,65 +495,7 @@ class SocketHandler {
   }
 }
 
-class IDGenerator {
-  static generate(): Buffer {
-    const id = crypto.randomBytes(16);
-    id[8] = 255;
-    id[15] = 0;
-    return id;
-  }
-
-  static servent(): Buffer {
-    return this.generate();
-  }
-}
-
-class Hash {
-  static qrp(str: string, bits: number): number {
-    const A_INT = 1327217884;
-    const bytes = new TextEncoder().encode(str.toLowerCase());
-    let xor = 0;
-
-    for (let i = 0; i < bytes.length; i++) {
-      xor ^= bytes[i] << ((i & 3) * 8);
-    }
-
-    const prod = BigInt(xor >>> 0) * BigInt(A_INT);
-    const mask = (1n << BigInt(bits)) - 1n;
-    return Number((prod >> BigInt(32 - bits)) & mask) >>> 0;
-  }
-
-  static sha1(data: string | Buffer): Buffer {
-    return crypto.createHash("sha1").update(data).digest();
-  }
-
-  static sha1ToBase32(sha1: Buffer): string {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    let result = "";
-    let bits = 0;
-    let value = 0;
-
-    for (const byte of sha1) {
-      value = (value << 8) | byte;
-      bits += 8;
-
-      while (bits >= 5) {
-        result += chars[(value >>> (bits - 5)) & 31];
-        bits -= 5;
-      }
-    }
-
-    if (bits > 0) {
-      result += chars[(value << (5 - bits)) & 31];
-    }
-
-    return result.padEnd(32, "=");
-  }
-
-  static sha1ToUrn(sha1: Buffer): string {
-    return `urn:sha1:${this.sha1ToBase32(sha1)}`;
-  }
-}
+// Hash and IDGenerator are imported from ./Hash and ./IDGenerator
 
 interface FileEntry {
   filename: string;
@@ -737,7 +680,9 @@ function buildBaseHeaders(context: Context): Record<string, string> {
   return {
     "User-Agent": "GnutellaBun/0.1",
     "X-Ultrapeer": "False",
+    "X-Ultrapeer-Needed": "False",
     "X-Query-Routing": "0.2",
+    GGEP: "0.5",
     "Accept-Encoding": "deflate",
     "Listen-IP": `${context.localIp}:${context.localPort}`,
     "Bye-Packet": "0.1",
@@ -752,6 +697,7 @@ interface Connection {
   compressed: boolean;
   enableCompression: () => void;
   isOutbound: boolean;
+  remoteHeaders?: Record<string, string>;
 }
 
 class MessageRouter {
@@ -831,6 +777,8 @@ class MessageRouter {
     msg: HandshakeConnectMessage,
     context: Context,
   ): void {
+    // Record peer-advertised headers for later capability checks
+    conn.remoteHeaders = { ...msg.headers };
     const clientAcceptsDeflate =
       msg.headers["Accept-Encoding"]?.includes("deflate");
     const responseHeaders = this.buildResponseHeaders(
@@ -845,6 +793,8 @@ class MessageRouter {
     msg: HandshakeOkMessage,
     context: Context,
   ): void {
+    // Record peer-advertised headers for later capability checks
+    conn.remoteHeaders = { ...msg.headers };
     if (conn.handshake) {
       return;
     }
@@ -918,6 +868,16 @@ class MessageRouter {
     msg: QueryMessage,
     context: Context,
   ): void {
+    // Spec guidance: cap broadcast query life; if TTL + Hops > 7, reduce TTL so sum=7.
+    // Drop queries with extremely high TTL (>15).
+    const sum = msg.header.ttl + msg.header.hops;
+    if (msg.header.ttl > 15) {
+      return;
+    }
+    if (sum > 7) {
+      msg.header.ttl = Math.max(0, 7 - msg.header.hops);
+    }
+
     if (!this.ttlCheck(msg.header)) {
       return;
     }
@@ -1193,7 +1153,12 @@ class GnutellaServer {
       this.connections.forEach((conn) => {
         if (conn.handshake) {
           try {
-            conn.send(MessageBuilder.bye(200, "Server shutting down"));
+            const supportsBye = Boolean(
+              conn.remoteHeaders && conn.remoteHeaders["Bye-Packet"],
+            );
+            if (supportsBye) {
+              conn.send(MessageBuilder.bye(200, "Server shutting down"));
+            }
             // Give a brief moment for the Bye message to be sent
             setTimeout(() => conn.socket.destroy(), 100);
           } catch {
@@ -1294,7 +1259,12 @@ class GnutellaServer {
 
     if (conn.handshake) {
       try {
-        conn.send(MessageBuilder.bye(code, reason));
+        const supportsBye = Boolean(
+          conn.remoteHeaders && conn.remoteHeaders["Bye-Packet"],
+        );
+        if (supportsBye) {
+          conn.send(MessageBuilder.bye(code, reason));
+        }
         // Wait briefly for Bye to send, then close
         setTimeout(() => {
           conn.socket.destroy();
