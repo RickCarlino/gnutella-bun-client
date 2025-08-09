@@ -146,7 +146,7 @@ const Protocol = {
   HEADER_SIZE: 23,
   PONG_SIZE: 14,
   QUERY_HITS_FOOTER: 23,
-  QRP_TABLE_SIZE: 8192,
+  QRP_TABLE_SIZE: 65536,
   QRP_INFINITY: 7,
   HANDSHAKE_END: `\r\n\r\n`,
 };
@@ -1555,7 +1555,6 @@ class QRPManager {
       const hash = Hash.qrp(keyword, Math.log2(this.tableSize));
       return this.table[hash] < this.infinity;
     });
-    log.debug("QRP", "QRP table match", { search: searchCriteria, match });
     return match;
   }
 
@@ -1591,7 +1590,7 @@ class QRPManager {
     const deflate = promisify(zlib.deflate);
     const patchData = this.createPatchData();
     const compressed = await deflate(patchData);
-    const chunks = this.createPatchChunks(compressed);
+    const chunks = this.createPatchChunksFromCompressed(compressed);
     log.debug("QRP", "Built QRP patch chunks", {
       compressedBytes: compressed.length,
       chunks: chunks.length,
@@ -1641,23 +1640,23 @@ class QRPManager {
     return patchData;
   }
 
-  private createPatchChunks(compressed: Buffer): Buffer[] {
-    const maxChunkSize = 1024 - 6;
-    const chunks: Buffer[] = [];
-
+  private createPatchChunksFromCompressed(compressed: Buffer): Buffer[] {
+    // Split a single zlib stream across PATCH messages; receiver reassembles
+    // and inflates once per sequence (per spec).
+    const maxChunkSize = 1024 - 5; // payload budget minus 5-byte header
+    const parts: Buffer[] = [];
     for (let offset = 0; offset < compressed.length; offset += maxChunkSize) {
-      const chunk = compressed.subarray(offset, offset + maxChunkSize);
-      chunks.push(chunk);
+      parts.push(compressed.subarray(offset, offset + maxChunkSize));
     }
 
-    return chunks.map((chunk, index) => {
-      const payload = Buffer.alloc(6 + chunk.length);
-      payload[0] = QRPVariant.PATCH;
-      payload[1] = index + 1;
-      payload[2] = chunks.length;
-      payload[3] = 1;
-      payload[4] = 4;
-      chunk.copy(payload, 5);
+    return parts.map((part, index) => {
+      const payload = Buffer.alloc(5 + part.length);
+      payload[0] = QRPVariant.PATCH; // variant
+      payload[1] = index + 1; // seq no (1-based)
+      payload[2] = parts.length; // seq size
+      payload[3] = 1; // compressor: zlib
+      payload[4] = 4; // entry bits
+      part.copy(payload, 5);
 
       const header = MessageBuilder.header(
         MessageType.ROUTE_TABLE_UPDATE,
@@ -1734,17 +1733,59 @@ export class GnutellaNode {
       const parsed = path.parse(entry.name);
 
       const keywords = new Set<string>();
-      keywords.add(entry.name.toLowerCase());
-
+      // Tokenize the base name; skip very short/noisy tokens
       if (parsed.name) {
         parsed.name
           .split(/[^a-zA-Z0-9]+/)
           .filter(Boolean)
-          .forEach((k) => keywords.add(k.toLowerCase()));
+          .forEach((raw) => {
+            const k = raw.toLowerCase();
+            // Drop tokens shorter than 3
+            if (k.length < 3) return;
+            // Drop tiny numeric tokens (e.g., "10", "2")
+            if (/^\d+$/.test(k) && k.length < 4) return;
+            keywords.add(k);
+          });
       }
 
+      // Optionally include extension if it's informative (skip common ones)
       if (parsed.ext) {
-        keywords.add(parsed.ext.replace(/^\./, "").toLowerCase());
+        const ext = parsed.ext.replace(/^\./, "").toLowerCase();
+        const noisyExt = new Set([
+          "pdf",
+          "epub",
+          "txt",
+          "zip",
+          "gz",
+          "bz2",
+          "xz",
+          "7z",
+          "rar",
+          "doc",
+          "docx",
+          "rtf",
+          "html",
+          "htm",
+          "md",
+          "jpg",
+          "jpeg",
+          "png",
+          "gif",
+          "webp",
+          "mp3",
+          "m4a",
+          "flac",
+          "mp4",
+          "mkv",
+          "avi",
+          "mov",
+          "srt",
+          "ass",
+          "sub",
+        ]);
+        if (!noisyExt.has(ext)) {
+          keywords.add(ext);
+        }
       }
 
       this.qrpManager.addFile(entry.name, stat.size, Array.from(keywords));
