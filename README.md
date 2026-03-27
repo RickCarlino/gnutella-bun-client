@@ -7,6 +7,15 @@ GnutellaBun is a Gnutella 0.6 servent written for Bun. You can use it in two way
 
 It aims to be straightforward to run and pleasant to extend.
 
+## Download Binaries
+
+Prebuilt binaries for the latest release:
+
+- [Windows x64](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-windows-x64.exe)
+- [macOS Intel](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-darwin-x64)
+- [macOS Apple Silicon](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-darwin-arm64)
+- [Linux builds](https://github.com/RickCarlino/gnutella-bun-client/releases)
+
 ## Why Use It
 
 If you want a Gnutella client, this gives you:

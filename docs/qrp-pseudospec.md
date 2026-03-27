@@ -189,7 +189,7 @@ for (let file of sharedFiles) {
 _Normalization:_ ensure `normalizeKeyword` does things like `word.toLowerCase()` and replacing accented letters with plain ASCII (e.g. é→e). This matches how other Gnutella clients hash keywords, so your indices align with theirs.
 _Hash:_ you can implement the same hash as in the Gnutella spec – for example, one approach is to treat the normalized word as a big-endian integer, multiply by a large constant, and take the high 16 bits of the result as the index. For illustration, a simple but effective choice could be a 32-bit FNV-1a hash truncated to 16 bits. Consistency is more important than cryptographic quality here.
 
-3. **Send RouteTableUpdate Reset:** Immediately after handshake (or as soon as your table is ready), send a Reset message to the Ultrapeer to start the QRP update sequence. Construct the payload as follows (fields in bytes):
+1. **Send RouteTableUpdate Reset:** Immediately after handshake (or as soon as your table is ready), send a Reset message to the Ultrapeer to start the QRP update sequence. Construct the payload as follows (fields in bytes):
 
    - Variant = 0x0 (Reset)
    - Seq-No = 0x00 (could be 0 for reset message)
@@ -201,7 +201,7 @@ _Hash:_ you can implement the same hash as in the Gnutella spec – for example,
 
    Put this into the Gnutella message header format (descriptor ID 0x30, payload length set accordingly) and send it. This tells the Ultrapeer to allocate a new QRT of 65536 bits initialized to all zeros (no keywords yet).
 
-4. **Send RouteTableUpdate Patch:** Next, transmit the actual table bits in a Patch message. Since our table is 8192 bytes, we can send it as one patch. Payload fields:
+2. **Send RouteTableUpdate Patch:** Next, transmit the actual table bits in a Patch message. Since our table is 8192 bytes, we can send it as one patch. Payload fields:
 
    - Variant = 0x1 (Patch)
    - Seq-No = 0x01 (this is patch #1)
@@ -212,9 +212,9 @@ _Hash:_ you can implement the same hash as in the Gnutella spec – for example,
 
    Ensure the Gnutella message header for this RouteTableUpdate has the correct payload length (8192 + 5 bytes of header = 8197 bytes). Send it to the Ultrapeer.
 
-5. **Verification:** No explicit ACK is defined for QRP updates, but you can monitor the connection to ensure the Ultrapeer doesn’t drop us. If the Ultrapeer remains connected and starts sending queries (within a few seconds), it likely accepted our QRP table. It will now **“shield” the leaf** by only forwarding queries that pass the QRP filter (i.e. queries containing at least one keyword that hashed to each of the set bits). All other query traffic is filtered out upstream, reducing our bandwidth load.
+3. **Verification:** No explicit ACK is defined for QRP updates, but you can monitor the connection to ensure the Ultrapeer doesn’t drop us. If the Ultrapeer remains connected and starts sending queries (within a few seconds), it likely accepted our QRP table. It will now **“shield” the leaf** by only forwarding queries that pass the QRP filter (i.e. queries containing at least one keyword that hashed to each of the set bits). All other query traffic is filtered out upstream, reducing our bandwidth load.
 
-6. **Maintaining QRP:** For a minimal implementation, you might choose not to update the QRP table frequently. However, best practice is to update whenever your shared files change (files added/removed). You can compute a new bitset and send **incremental patches**. Typically, you would diff the new table against the old one and send patches for the changed portions. But in a pinch, you can also resend the whole table (Reset + full Patch) if changes are infrequent. Ultrapeers are accustomed to periodic QRP updates from leaves as their shares change. Just avoid doing it too often (e.g. not more than once every few minutes) to prevent unnecessary overhead.
+4. **Maintaining QRP:** For a minimal implementation, you might choose not to update the QRP table frequently. However, best practice is to update whenever your shared files change (files added/removed). You can compute a new bitset and send **incremental patches**. Typically, you would diff the new table against the old one and send patches for the changed portions. But in a pinch, you can also resend the whole table (Reset + full Patch) if changes are infrequent. Ultrapeers are accustomed to periodic QRP updates from leaves as their shares change. Just avoid doing it too often (e.g. not more than once every few minutes) to prevent unnecessary overhead.
 
 ## Additional Notes
 
