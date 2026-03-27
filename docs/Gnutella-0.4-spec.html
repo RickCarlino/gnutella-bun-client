@@ -1,0 +1,3371 @@
+<html>
+  <body bgcolor="#FFFFFF" text="#000000">
+    <?xml version="1.0"?>
+    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+    <head>
+      <title>Gnutella - Stable - 0.4</title>
+    </head>
+    <p style="text-align: center">Gnutella Protocol Development</p>
+    <p style="text-align: center">
+      <a href="../../index.html">Home </a>::
+      <a href="../index.html">Developer </a>::
+      <a href="../../press/index.html">Press </a>::
+      <a href="../../research/index.html">Research</a> ::
+      <a href="../../servents/index.html">Servents</a>
+    </p>
+    <!-- #BeginEditable "body" -->
+    <h1>The Annotated Gnutella Protocol Specification v0.4 <sup>(1)</sup></h1>
+    <blockquote>
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tbody>
+          <tr>
+            <td>Document Revision 1.6</td>
+            <td align="right">Clip2</td>
+          </tr>
+          <tr>
+            <td>Status: Annotated Standard</td>
+            <td align="right">The Gnutella Developer Forum (GDF)</td>
+          </tr>
+          <tr>
+            <td>Based on previous Revision 1.2</td>
+            <td align="right">http://groups.yahoo.com/group/the_gdf</td>
+          </tr>
+        </tbody>
+      </table>
+    </blockquote>
+    <h2>Summary</h2>
+    <blockquote>
+      <p>
+        Gnutella <sup>(2)</sup> is a protocol for <b>distributed search</b>.
+        Although the Gnutella protocol supports a traditional client/centralized
+        server search paradigm, Gnutella&#8217;s distinction is its
+        <i>peer-to-peer</i>, decentralized model. In this model, every client is
+        a server, and vice versa. These so-called Gnutella
+        <b>servents</b> perform tasks normally associated with both clients and
+        servers. They provide client-side interfaces through which users can
+        issue queries and view search results, while at the same time they also
+        accept queries from other servents, check for matches against their
+        local data set, and respond with applicable results. Due to its
+        distributed nature, a network of servents that implements the Gnutella
+        protocol is highly fault-tolerant, as operation of the network will not
+        be interrupted if a subset of servents goes offline.
+      </p>
+      <dl compact>
+        <hr align="left" width="50%" size="1" />
+        <dt><sup>(1)</sup></dt>
+        <dd>
+          This document represents the <i>de facto</i> standard Gnutella 0.4
+          protocol. However, several implementations have extended the
+          descriptors that comprise the protocol, and have imposed additional
+          rules on the transmission of these descriptors through the Gnutella
+          network. Known extensions to the protocol are provided in an Appendix
+          at the end of this document, but some variations not documented here
+          may be encountered in practice.
+        </dd>
+        <dt>�</dt>
+        <dt><sup>(2)</sup></dt>
+        <dd>
+          Typically pronounced "new-tella" or, less commonly, "guh-new-tella".
+        </dd>
+      </dl>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2>Table of contents</h2>
+    <blockquote>
+      <blockquote>
+        <table border="0" cellspacing="0" cellpadding="1">
+          <tbody>
+            <tr>
+              <td>1.</td>
+              <td><a href="#t1">Protocol definition</a></td>
+            </tr>
+            <tr>
+              <td>2.</td>
+              <td>
+                <a href="#t2">Connection procedure and protocol negociation</a>
+              </td>
+            </tr>
+            <tr>
+              <td>3.</td>
+              <td>
+                <a href="#t3">Peer-to-Peer Gnutella packets: Descriptors</a>
+              </td>
+            </tr>
+            <tr>
+              <td>�</td>
+              <td>
+                <table border="0" cellspacing="0" cellpadding="1">
+                  <tbody>
+                    <tr>
+                      <td>3.1.</td>
+                      <td><a href="#t3-1">Descriptor Header</a></td>
+                    </tr>
+                    <tr>
+                      <td>3.2.</td>
+                      <td><a href="#t3-2">Descriptor Payloads</a></td>
+                    </tr>
+                    <tr>
+                      <td>�</td>
+                      <td>
+                        <table border="0" cellspacing="0" cellpadding="1">
+                          <tbody>
+                            <tr>
+                              <td>3.2.1.</td>
+                              <td>
+                                <a href="#t3-2-1"
+                                  >Ping (0x00) Descriptor Payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.2.</td>
+                              <td>
+                                <a href="#t3-2-2"
+                                  >Pong (0x01) Descriptor payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>�</td>
+                              <td>
+                                <table
+                                  border="0"
+                                  cellspacing="0"
+                                  cellpadding="1"
+                                >
+                                  <tbody>
+                                    <tr>
+                                      <td>3.2.2.1.</td>
+                                      <td>
+                                        <a href="#t3-2-2-1"
+                                          >Pong usage policy</a
+                                        >
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td>3.2.2.2.</td>
+                                      <td>
+                                        <a href="#t3-2-2-2"
+                                          >Port numbers in standard Pong
+                                          descriptors</a
+                                        >
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td>3.2.2.3.</td>
+                                      <td>
+                                        <a href="#t3-2-2-3"
+                                          >IPv4 Addresses in standard Pong
+                                          descriptors</a
+                                        >
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.3.</td>
+                              <td>
+                                <a href="#t3-2-3"
+                                  >Query (0x80) Descriptor Payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.4.</td>
+                              <td>
+                                <a href="#t3-2-4"
+                                  >QueryHits (0x81) Descriptor Payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>�</td>
+                              <td>
+                                <table
+                                  border="0"
+                                  cellspacing="0"
+                                  cellpadding="1"
+                                >
+                                  <tbody>
+                                    <tr>
+                                      <td>3.2.4.1.</td>
+                                      <td>
+                                        <a href="#t3-2-4-1">Result Structure</a>
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td>3.2.4.2.</td>
+                                      <td>
+                                        <a href="#t3-2-4-2"
+                                          >Total Payload length of QueryHits
+                                          descriptors</a
+                                        >
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td>3.2.4.3.</td>
+                                      <td>
+                                        <a href="#t3-2-4-3"
+                                          >QHD Data and Result Data
+                                          Extensions</a
+                                        >
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.5.</td>
+                              <td>
+                                <a href="#t3-2-5"
+                                  >Push (0x40) Descriptor Payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.6.</td>
+                              <td>
+                                <a href="#t3-2-6"
+                                  >Bye (0x02) Extension Descriptor Payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.7.</td>
+                              <td>
+                                <a href="#t3-2-7"
+                                  >Query Routing Protocol (0x30) Extension
+                                  Descriptor Payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.8.</td>
+                              <td>
+                                <a href="#t3-2-8"
+                                  >Open-Vendor (0x31) Extension Descriptor
+                                  Payload</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>3.2.9.</td>
+                              <td>
+                                <a href="#t3-2-9"
+                                  >Standard-Vendor (0x32) Extension Descriptor
+                                  Payload</a
+                                >
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td>4.</td>
+              <td><a href="#t4">Descriptor routing</a></td>
+            </tr>
+            <tr>
+              <td>5.</td>
+              <td><a href="#t5">File downloads</a></td>
+            </tr>
+            <tr>
+              <td>6.</td>
+              <td><a href="#t6">Firewalled servents</a></td>
+            </tr>
+            <tr>
+              <td>Appendix:</td>
+              <td><a href="#tA">Gnutella protocol extensions</a></td>
+            </tr>
+            <tr>
+              <td>�</td>
+              <td>
+                <table border="0" cellspacing="0" cellpadding="1">
+                  <tbody>
+                    <tr>
+                      <td>A.1.</td>
+                      <td>
+                        <a href="#tA-1">Extended Query Hit Descriptor (EQHD)</a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>�</td>
+                      <td>
+                        <table border="0" cellspacing="0" cellpadding="1">
+                          <tbody>
+                            <tr>
+                              <td>A.1.1.</td>
+                              <td><a href="#tA-1-1">EQHD common format</a></td>
+                            </tr>
+                            <tr>
+                              <td>A.1.2.</td>
+                              <td>
+                                <a href="#tA-1-2">BearShareTrailer EQHD</a>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>A.1.3.</td>
+                              <td><a href="#tA-1-3">Vendor codes</a></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>A.2.</td>
+                      <td>
+                        <a href="#tA-2">Extended Result Data extensions</a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>�</td>
+                      <td>
+                        <table border="0" cellspacing="0" cellpadding="1">
+                          <tbody>
+                            <tr>
+                              <td>A.2.1.</td>
+                              <td>
+                                <a href="#tA-2-1">Extended Result structure</a>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>A.2.2.</td>
+                              <td>
+                                <a href="#tA-2-2"
+                                  >Gnotella Result Data extension</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>A.2.3.</td>
+                              <td>
+                                <a href="#tA-2-3"
+                                  >LimeWire Meta-Data Result Data extension.</a
+                                >
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>A.2.4.</td>
+                              <td>
+                                <a href="#tA-2-4"
+                                  >URI Result Data extension and URI Extended
+                                  Query extension.</a
+                                >
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </blockquote>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2><a name="t1"></a>1. Protocol Definition</h2>
+    <blockquote>
+      <p>
+        The Gnutella protocol defines the way in which
+        <b>servents</b> communicate over the network. It consists of a set of
+        descriptors used for communicating data between servents and a set of
+        rules governing the inter-servent exchange of descriptors. Currently,
+        the following descriptors are defined:
+      </p>
+      <blockquote>
+        <table border="0" cellpadding="3" cellspacing="1" width="100%">
+          <tbody>
+            <tr>
+              <th valign="top">Descriptor</th>
+              <th valign="top">Description</th>
+            </tr>
+            <tr>
+              <td valign="top">Ping</td>
+              <td valign="top">
+                Used to actively discover hosts on the network. A servent
+                receiving a Ping descriptor is expected to respond with one or
+                more Pong descriptors.
+              </td>
+            </tr>
+            <tr>
+              <td valign="top">Pong</td>
+              <td valign="top">
+                The response to a Ping. Includes the address of a connected
+                Gnutella servent and information regarding the amount of data it
+                is making available to the network.
+              </td>
+            </tr>
+            <tr>
+              <td valign="top">Query</td>
+              <td valign="top">
+                The primary mechanism for searching the distributed network. A
+                servent receiving a Query descriptor will respond with a
+                QueryHit if a match is found against its local data set.
+              </td>
+            </tr>
+            <tr>
+              <td valign="top">QueryHits</td>
+              <td valign="top">
+                The response to a Query. This descriptor provides the recipient
+                with enough information to acquire the data matching the
+                corresponding Query.
+              </td>
+            </tr>
+            <tr>
+              <td valign="top">Push</td>
+              <td valign="top">
+                A mechanism that allows a firewalled servent to contribute
+                file-based data to the network.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </blockquote>
+      <p>
+        A Gnutella servent connects itself to the network by establishing a
+        connection with another servent currently on the network. The
+        acquisition of another servent&#8217;s address is not part of the
+        protocol definition and will not be described here (Host cache services
+        are currently the predominant way of automating the acquisition of
+        Gnutella servent addresses).
+      </p>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2><a name="t2"></a>2. Connection Procedure and Protocol Negociation</h2>
+    <blockquote>
+      <p>
+        Once the address of another servent on the network is obtained
+        <i>(its IPv4 address and its port number)</i>, a TCP connection to the
+        servent is created, and the following Gnutella connection request string
+        (ASCII encoded) may be sent:
+      </p>
+      <blockquote>
+        <pre>GNUTELLA CONNECT/&lt;protocol version string&gt;\n\n</pre>
+      </blockquote>
+      <p>
+        where &lt;protocol version string&gt; is defined to be the ASCII string
+        "0.4" (or, equivalently, "\x30\x2e\x34") in <b>this version</b> of the
+        specification, and where "\n" represent an ASCII line-feed character
+        (LF, code 0xa=10).
+      </p>
+      <dl compact>
+        <dt><i>Note:</i></dt>
+        <dd>
+          <i
+            >Compliant servents MAY accept a CR+LF termination instead of LF+LF,
+            but MUST not generate a CR+LF terminator when using this 0.4 version
+            of the Gnutella connection protocol.</i
+          >
+        </dd>
+        <dd>
+          <i
+            >With the Gnutella protocol, the "GNUTELLA" initial verb is
+            mandatory to avoid collision with standard or optional HTTP and FTP
+            verbs, and the final token "CONNECT/&lt;protocol version string&gt;"
+            qualifies BOTH the connection protocol for Gnutella, AND the
+            implicit set of standard descriptors and their semantics defined by
+            the current protocol specification.</i
+          >
+        </dd>
+        <dd>
+          <i
+            >The above string unambiguously defines the first interoperable
+            version of the Gnutella connection protocol. It MUST be accepted by
+            all Gnutella compatible servents, even if the current version 0.4 of
+            the Gnutella connection protocol has been obsoleted by the version
+            0.6 which introduces optional mechanisms comparable to HTTP/1.1.</i
+          >
+        </dd>
+        <dd>
+          <i
+            >Deprecated legacy applications using the Gnutella may use another
+            connection string for private use, but they are not interoperable
+            (if authentication is required to build a private network,
+            implementors SHOULD use the newer 0.6 version of the Gnutella
+            connection protocol to implement it with connection headers).</i
+          >
+        </dd>
+      </dl>
+      <p>
+        A servent wishing to accept the connection request MUST respond with:
+      </p>
+      <blockquote>
+        <pre>GNUTELLA OK\n\n</pre>
+      </blockquote>
+      <p>
+        Any other response indicates the servent&#8217;s unwillingness to accept
+        the connection. A servent may reject an incoming connection request for
+        a variety of reasons - a servent&#8217;s pool of incoming connection
+        slots may be exhausted, or it may not support the same version of the
+        protocol as the requesting servent, for example.
+      </p>
+      <p>
+        <i
+          >If a connection request must be rejected by a Gnutella compliant
+          servent, it MAY use an HTTP-like status line (starting with a numeric
+          status code such as "404 Not found").</i
+        >
+      </p>
+      <dl compact>
+        <dt><i>Note:</i></dt>
+        <dd>
+          <i
+            >Compliant servents MAY accept incoming CR+LF termination instead of
+            LF+LF, but MUST not generate a CR+LF terminator when using this 0.4
+            version of the Gnutella connection protocol, as the result is
+            unpredictable, and the protocol would non synchronize properly.</i
+          >
+        </dd>
+        <dd>
+          <i
+            >The initial "GNUTELLA" verb before the response avoids collision
+            with HTTP servers.</i
+          >
+        </dd>
+        <dd>
+          <i
+            >Some servent implementations respond with "GNUTELLA
+            CONNECT/0.4\n\n", anticipating a protocol negociation. However, as
+            there was no common standard before the 0.4 protocol, such
+            specification was not necessary. Servents MAY accept it only for
+            legacy support with previous versions. </i
+          ><i>This 0.4 </i
+          ><i
+            >version of the protocol does not support protocol version
+            negociation, which has been introduced in the later 0.6 version of
+            the Gnutella connection protocol defined in another document.</i
+          >
+        </dd>
+        <dd>�</dd>
+      </dl>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2><a name="t3"></a>3. Peer-to-Peer Gnutella Packets: Descriptors</h2>
+    <blockquote>
+      <p>
+        Once a servent has connected successfully to the network, it
+        communicates with other servents by sending and receiving Gnutella
+        protocol descriptors. Each descriptor is preceded by a Descriptor Header
+        with the byte structure given below.
+      </p>
+      <dl>
+        <dt>Note 1:</dt>
+        <dd>
+          All fields in the following structures are in
+          <b>little-endian</b> byte order unless otherwise specified.<br />
+          <i
+            >This is differing from the traditional network-byte-order
+            traditionally used in other networking protocols, but this has been
+            kept for historical reasons and interoperability with existing
+            Gnutella servents.<br />
+            The traditional byte ordering ntoh(), ntol(), hton(), lton()
+            functions used in networking libraries MUST NOT be used for
+            descriptors as they assume a big-endian byte order for the network
+            encoding (these functions or macros are no-operation identity only
+            on big-endian machines, such as Motorola systems, and perform byte
+            swaps on Intel systems). These functions MUST be replaced by
+            providing functions like nltoh(), nltol(), htonl(), ltonl() assuming
+            little-endianness on the network.</i
+          >
+        </dd>
+        <dt>Note 2:</dt>
+        <dd>
+          All 32-bit IP addresses in the following structures are in IPv4
+          format. For example, the IPv4 byte array:
+        </dd>
+        <dd>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th>Byte value</th>
+                <td align="center">0xD0</td>
+                <td align="center">0x11</td>
+                <td align="center">0x32</td>
+                <td align="center">0x04</td>
+              </tr>
+              <tr>
+                <th>Byte offset</th>
+                <td align="center">0</td>
+                <td align="center">1</td>
+                <td align="center">2</td>
+                <td align="center">3</td>
+              </tr>
+            </tbody>
+          </table>
+        </dd>
+        <dd>
+          represents the dotted address IPv4 "208.17.50.4". I.e. network
+          addresses use the standard network byte-order, defined as
+          <b>big-endian</b> for IPv4.
+        </dd>
+      </dl>
+      <h3><a name="t3-1"></a>3.1. Descriptor Header</h3>
+      <blockquote>
+        <table border="1" cellspacing="0">
+          <tbody>
+            <tr>
+              <th align="center">Fields</th>
+              <td align="center">Descriptor ID</td>
+              <td align="center">
+                Payload<br />
+                Descriptor
+              </td>
+              <td align="center">TTL</td>
+              <td align="center">Hops</td>
+              <td align="center">
+                Payload<br />
+                Length
+              </td>
+            </tr>
+            <tr>
+              <th align="center">Byte offset</th>
+              <td align="center">0...15</td>
+              <td align="center">16</td>
+              <td align="center">17</td>
+              <td align="center">18</td>
+              <td align="center">19...22</td>
+            </tr>
+          </tbody>
+        </table>
+        <dl>
+          <dt><b>Descriptor ID</b></dt>
+          <dd>
+            A 16-byte string <b>uniquely</b> identifying the
+            <b>descriptor</b> on the network. Its value must be preserved when
+            forwarding messages between servents. Its use allows detection of
+            cycles and help reduce unnecessary traffic on the network.<br />
+            <i
+              >When generating 128-bit Descriptor IDs, servents can use the UUID
+              generation algorithm, or use a cryptographically strong random
+              generator. The value of the Descriptor ID carries no
+              signification, and should always be treated as an opaque binary
+              string, whose byte order must be preserved when forwarding
+              messages.<br />
+              However, within Pong descriptors, which uniquely identifies a
+              servent host identified by a stable GUID in a more reliable and
+              persistent way than by its current IP and port number address, a
+              special Pong marking is required for newer applications: byte 8
+              SHOULD be set to 0xFF (indicating that the GUID unambiguously and
+              uniquely identifies the servent), and byte 15 SHOULD be set to
+              0x00 for future use.</i
+            >
+          </dd>
+          <dt><b>Payload Descriptor</b></dt>
+          <dd>0x00 = Ping (see section <a href="#t3-2-1">3.2.1</a>)</dd>
+          <dd>0x01 = Pong (see section <a href="#t3-2-2">3.2.2</a>)</dd>
+          <dd>0x80 = Query (see section <a href="#t3-2-3">3.2.3</a>)</dd>
+          <dd>0x81 = QueryHits (see section <a href="#t3-2-4">3.2.4</a>)</dd>
+          <dd>0x40 = Push (see section <a href="#t3-2-5">3.2.5</a>)</dd>
+          <dd><b>Extension Descriptors:</b></dd>
+          <dd>
+            <i>0x02 = Bye (see section <a href="#t3-2-6">3.2.6</a>)</i>
+          </dd>
+          <dd>
+            <i
+              >0x10 = IBCM (Reserved for the non-standard InBandControlMessage
+              descriptor, but MAY cause compatibility problem with legacy, non
+              IBCM-aware, servents)</i
+            >
+          </dd>
+          <dd>
+            <i>0x30 = QRP (see section <a href="#t3-2-7">3.2.7</a>)</i>
+          </dd>
+          <dd>
+            <i
+              >0x31 = Open Vendor Extension (see section
+              <a href="#t3-2-8">3.2.8</a>)</i
+            >
+          </dd>
+          <dd>
+            <i
+              >0x32 = Standard Vendor Extension (see section
+              <a href="#t3-2-9">3.2.9</a>)</i
+            >
+          </dd>
+          <dd>
+            <i
+              >Note: Other values SHOULD not be used for now, as remote servents
+              may consider it as invalid. Their use will be specified in an
+              higher version of the protocol than the current 0.4 protocol (or
+              its 0.6 extension).</i
+            >
+          </dd>
+          <dt><b>TTL</b></dt>
+          <dd>
+            Time To Live. The number of times the descriptor will be forwarded
+            by Gnutella servents before it is removed from the network.
+          </dd>
+          <dd>
+            Each servent MUST decrement the <i>TTL</i> before passing it on to
+            another servent. When the <i>TTL</i> reaches 0, the descriptor MUST
+            no longer be forwarded.
+          </dd>
+          <dd>
+            <i
+              >Note: This field is unsigned, however a value higher than 127
+              will very probably be considered as excessive when used on the
+              Internet.</i
+            >
+          </dd>
+          <dt><b>Hops</b></dt>
+          <dd>The number of times the descriptor has been forwarded.</dd>
+          <dd>
+            <i
+              >Note: This field is unsigned, however a value higher than 127
+              will very probably be considered as excessive when used on the
+              Internet.</i
+            >
+            <p>
+              As a descriptor is passed from servent to servent, the
+              <i>TTL</i> and <i>Hops</i> fields of the header MUST satisfy the
+              following conditions:
+            </p>
+            <dl>
+              <dd>
+                <i>TTL</i><sub>(<i>i</i>)</sub> + <i>Hops</i
+                ><sub>(<i>i</i>)</sub><sub></sub> = <i>TTL</i><sub>(0)</sub>
+              </dd>
+              <dd>TTL<sub>(i + 1)</sub> &lt; TTL<sub>(i)</sub></dd>
+              <dd>Hops<sub>(i + 1)</sub> &gt; Hops<sub>(i)</sub></dd>
+            </dl>
+            <p>
+              where <i>TTL</i><sub>(i)</sub> and <i>Hops</i><sub>(i)</sub> are
+              the value of the TTL and Hops fields of the header at the
+              descriptor&#8217;s <i>i</i><sup>-th</sup> hop, for <i>i</i> &gt;=
+              0.
+            </p>
+          </dd>
+          <dt><b>Payload Length</b></dt>
+          <dd>
+            The length of the descriptor immediately following this header. The
+            next descriptor header is located exactly
+            <i>Payload Length</i> bytes from the end of this header i.e. there
+            are no gaps or pad bytes in the Gnutella data stream.<br />
+            <i
+              >Note: This field is unsigned however a value of 2GB or more will
+              very probably be considered as excessive. With the current
+              specification of the protocol, the last encoded byte of the
+              Payload Length field SHOULD then be 0 (as Payloads won't reach
+              16MB when used on the Internet).</i
+            >
+          </dd>
+        </dl>
+        <p>
+          The <i>TTL</i> is the only mechanism for expiring descriptors on the
+          network. Servents SHOULD carefully scrutinize the <i>TTL</i> field of
+          received descriptors and lower them as necessary. Abuse of the
+          <i>TTL</i> field will lead to an unnecessary amount of network traffic
+          and poor network performance.
+        </p>
+        <dl compact>
+          <dt><i>Note:</i></dt>
+          <dd>
+            <i
+              >Some servents MAY consider excessive values for TTL+Hops as
+              indicating desynchronization</i
+            ><i>
+              of the connection input stream. Also, a descriptor where TTL=0 and
+              Hops=0 is invalid. All servents MUST consider that TTL+Hops values
+              between 1 and 7 are valid (a higher range is possible but not
+              recommended for use on the Internet). A servent MAY reduce
+              excessive TTL value, but MUST NOT increase it when forwarding or
+              caching Descriptors. A servent MUST NOT reduce the Hops value as
+              this will break the discovery of shorter routes and will affect
+              route caches. When forwarding a descriptor to remote servents
+              connected with slow or unreliable connections, a servent MAY also
+              count more than 1 Hop and reduce the TTL by the equivalent number,
+              provided that the resulting TTL value does not reach 0 (in such a
+              case the descriptor MUST be discarded).</i
+            >
+          </dd>
+        </dl>
+        <p>
+          The <i>Payload Length</i> field is the ONLY reliable way for a servent
+          to find the beginning of the next descriptor in the input stream. The
+          Gnutella protocol does NOT provide an "eye-catcher" string or any
+          other descriptor synchronization method
+          <i>(it assumes that reliable TCP connections are used)</i>. Therefore,
+          servents SHOULD <b>rigorously</b> validate the
+          <i>Payload Length</i> field for each descriptor received (at least for
+          fixed-length descriptors). If a servent becomes out of synch with its
+          input stream, it SHOULD drop the connection associated with the stream
+          since the upstream servent is either generating, or forwarding,
+          invalid descriptors.
+        </p>
+        <dl compact>
+          <dt><i>Note:</i></dt>
+          <dd>
+            <i
+              >A desynchronization MAY be detected by the presence of an unknown
+              value for the Payload Descriptor field in a single descriptor
+              message, which servents are NOT required to silently discard.</i
+            >
+          </dd>
+          <dd>
+            <i
+              >For example, a new Payload Descriptor value has been proposed,
+              the "Bye" descriptor with value 0x02, which gives the reason why a
+              servent is being disconnected. The currently defined policy with
+              unknown Payload Descriptors allows this because this message will
+              not be followed by any other Descriptor, so the connection MAY
+              still be silently dropped. This is however a proposed extension,
+              whose payload format has still not been agreed upon among servents
+              implementors. Its specification is not part of this document, and
+              MAY be documented later.</i
+            >
+          </dd>
+        </dl>
+      </blockquote>
+      <h3><a name="t3-2"></a>3.2. Descriptor Payloads</h3>
+      <blockquote>
+        <p>
+          Immediately following the descriptor header, is an optional payload,
+          whose content and structure depends on the
+          <i>Descriptor Payload</i> field in the descriptor header. The
+          following sections detail them:
+        </p>
+        <h4><a name="t3-2-1"></a>3.2.1. Ping (0x00) Descriptor Payload</h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center"><i>Optional Ping Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center"><i>0...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt>
+              <b><i>Optional Ping Data</i></b>
+            </dt>
+            <dd>
+              <i
+                >This is an optional field consisting in bytes of variable
+                length, it is reserved for extensions of the current version of
+                the protocol, to specify filters about expected Pong replies.
+                Its maximum length is bounded by the Payload Length field of the
+                header.<br />
+                When used, this field SHOULD be small and agreed upon with other
+                Gnutella servent implementors, as this field MAY be specified in
+                a further specification of the protocol.</i
+              >
+            </dd>
+          </dl>
+          <p>
+            Standard <i>Ping</i> descriptors currently have no associated
+            payload and are of zero length. A <i>Ping</i> is simply represented
+            by a descriptor header whose <i>Payload Descriptor</i> field is 0x00
+            and whose <i>Payload Length</i> field is 0x00000000.
+          </p>
+          <p>
+            A servent uses <i>Ping</i> descriptors to actively probe the network
+            for other servents. A servent receiving a <i>Ping</i> descriptor MAY
+            elect to respond with a <i>Pong</i> descriptor, which contains the
+            address of an active Gnutella servent (possibly the one sending the
+            <i>Pong</i> descriptor) and the amount of data it&#8217;s sharing on
+            the network.
+          </p>
+          <p>
+            This specification makes no recommendations as to the frequency at
+            which a servent SHOULD send <i>Ping</i> descriptors, although
+            servent implementers SHOULD make every attempt to minimize
+            <i>Ping</i> traffic on the network.
+          </p>
+          <dl compact>
+            <dt><i>Note:</i></dt>
+            <dd>
+              <i
+                >There's no requirement to always forward any Ping request to
+                other connected servents or with a large TTL+Hops value. So,
+                most actual servents implement a traffic limiting policy for
+                Ping descriptors.</i
+              >
+            </dd>
+          </dl>
+        </blockquote>
+        <h4><a name="t3-2-2"></a>3.2.2. Pong (0x01) Descriptor Payload</h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Port</td>
+                <td align="center">IP Address</td>
+                <td align="center">Number of Files Shared</td>
+                <td align="center">Number of Kilobytes Shared</td>
+                <td align="center"><i>Optional Pong Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...1</td>
+                <td align="center">2...5</td>
+                <td align="center">6...9</td>
+                <td align="center">10...13</td>
+                <td align="center"><i>14...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt><b>Port</b></dt>
+            <dd>
+              The TCP port number on which the responding host can accept
+              incoming Gnutella connections. (See section 3.2.2.2 below)
+            </dd>
+            <dt><b>IP Address</b></dt>
+            <dd>
+              The IPv4 address of the responding host. (See section 3.2.2.3
+              below)<br />
+              This field is in <b>big-endian</b> format.
+            </dd>
+            <dt><b>Number of Files Shared</b></dt>
+            <dd>
+              The number of files that the servent with the given
+              <i>IP Address</i> and <i>Port</i> is sharing on the network.
+            </dd>
+            <dd>
+              <i
+                >Note: An excessive number of shared files will sometimes be
+                ignored by servents receiving it, because it is suspect or
+                because cumulating it could produce internal overflows. This
+                <b>informative</b> field can be null but some servents have
+                local policies that restrict accesses from "freeloaders" that
+                don't share a minimum number of files.</i
+              >
+            </dd>
+            <dt><b>Number of Kilobytes Shared</b></dt>
+            <dd>
+              The number of kilobytes of data that the servent with the given
+              <i>IP Address</i> and <i>Port</i> is sharing on the network.<br />
+              <i
+                >Note: An excessive total shared size (more than 2GB), or an
+                excessive mean size per shared file, will sometimes be ignored
+                by servents receiving it because it is suspect or because
+                cumulating it could produce internal overflows. This
+                <b>informative</b> field can be null but some servents have
+                local policies that restrict accesses from "freeloaders" that
+                don't share a minimum volume of files.</i
+              >
+            </dd>
+            <dt>
+              <b><i>Optional Pong Data</i></b>
+            </dt>
+            <dd>
+              <i
+                >This is an optional field of variable length, it is reserved
+                for extensions of the current version of the protocol, to give
+                other information about the servent, or to provide alternate
+                transport protocols or addresses that allow incoming connections
+                to the servent. Its maximum length is bounded by the Payload
+                Length field of the header.</i
+              >
+            </dd>
+            <dd>
+              <i
+                >When used, this field SHOULD be small and agreed upon with
+                other Gnutella servent implementors, as this field MAY be
+                specified in a further specification of the protocol.</i
+              >
+            </dd>
+          </dl>
+          <p>
+            <i>Pong</i> descriptors are ONLY sent in response to an incoming
+            <i>Ping</i> descriptor. Multiple <i>Pong</i> descriptors MAY be sent
+            in response to a single <i>Ping</i> descriptor. This enables host
+            caches to send cached servent address information in response to a
+            <i>Ping</i> request.
+          </p>
+        </blockquote>
+        <h5><a name="t3-2-2-1"></a>3.2.2.1. Usage policy</h5>
+        <blockquote>
+          <dl compact>
+            <dt>
+              1) <b>Fields that SHOULD be preserved from incoming Pongs:</b>
+            </dt>
+            <dd>
+              In order to reduce the network traffic used by
+              <i>Pong</i> descriptors and to discover shorter or alternate
+              routes to the same servent, the <i>Descriptor ID</i> field of
+              cached <i>Pongs</i> SHOULD be preserved locally along with the
+              Hops and TTL fields.<br />
+              However, excessive <i>Hops</i>+<i>TTL</i> values in incoming
+              SHOULD be reduced by keeping the <i>Hops</i> field. If it has the
+              effect of producing a negative or null TTL value, the Pong MAY be
+              marked as invalid and be discarded, as the corresponding
+              advertized servent may be unreachable via the Gnutella network.
+            </dd>
+            <dt>
+              2) <b>Generating the Descriptor Id for Pong descriptors:</b>
+            </dt>
+            <dd>
+              The <i>Descriptor Id</i> associated to the payload information of
+              <i>Pong</i> replies SHOULD be constant for all
+              <i>Ping</i> requests received from the same or alternate
+              connection, at least as long as the responding servent has an
+              active connection to the network, unless the servent implements
+              multiple listening IP interfaces attached to distinct networks,
+              considered as if it was different servents.<br />
+              This <i>Descriptor Id</i> SHOULD be globally unique for that
+              server instance. So its generation should use the UUID algorithm
+              or a cryptographically strong random generator. However byte 8
+              SHOULD be set to 0xFF (indicating that the GUID unambiguously and
+              uniquely identifies the servent), and byte 15 SHOULD be reserved
+              and set to 0x00 for future use.<br />
+              When receiving or forwarding <i>Pong</i> descriptors, the
+              Descriptor Id field MUST NOT be modified, whatever its value.
+            </dd>
+            <dt>
+              3)
+              <b
+                >Responding to incoming "direct" and "browsing" Ping
+                requests:</b
+              >
+            </dt>
+            <dd>
+              Each servent SHOULD respond (at least once for each connected
+              remote servent) with a valid <i>Pong</i> answer to an incoming
+              "direct" <i>Ping</i> request with <i>TTL</i>=1 and <i>Hops</i>=0.
+              To allow the implementation of large <i>Pong</i> caches, they
+              SHOULD also advertize (at least once) with <i>Pong</i> the list of
+              their currently connected (or recently cached) accessible neighbor
+              servents in reply to an incoming "browsing" <i>Ping</i> request
+              (with <i>TTL</i>=2 and <i>Hops</i>=0).
+            </dd>
+          </dl>
+        </blockquote>
+        <h5>
+          <a name="t3-2-2-2"></a>3.2.2.2. Port numbers in standard Pong
+          descriptors
+        </h5>
+        <blockquote>
+          <dl compact>
+            <dt>1) <b>Standard and default Port numbers:</b></dt>
+            <dd>
+              Even though Gnutella servents traditionally use TCP
+              <i>Port</i> number 6346 <i>by default</i> for incoming Gnutella
+              connections, this is NOT a requirement. There's no "standard" port
+              number defined and servents may use whatever valid port number
+              between 1 and 65535 they wish for Gnutella TCP connections to
+              reach the servent.
+            </dd>
+            <dt>2) <b>Gnutella Port number and download Port number:</b></dt>
+            <dd>
+              The <i>Port</i> number advertized in Pong descriptors MAY be
+              different from the port number advertized in
+              <i>QueryHits</i> replies to enable download requests. Incoming
+              Gnutella connections MAY as well assign the same TCP port for
+              incoming HTTP connections used by download requests.
+            </dd>
+            <dt>3) <b>Non null Port numbers:</b></dt>
+            <dd>
+              A non null Port number indicates support by the servent for
+              incoming Gnutella TCP connections. Most servents SHOULD provide
+              this field with a default value for the local host, unless the
+              servent is discovered to be firewalled or manually configured to
+              use an acceptable port.
+            </dd>
+            <dd>
+              The 0.4 protocol currently does not specify any procedure to check
+              that the advertized TCP port number is accessible from other
+              servents or to discover which port is directed to the local host
+              by the firewall or router.
+            </dd>
+            <dt>4) <b>Null Port numbers:</b></dt>
+            <dd>
+              However, if the servent runs on a host whose whose local IP
+              address is on private LAN and the currently connected Host is on
+              another subnetwork or on Internet, and if Port number has not been
+              explicitly configured by the user for that network interface, it
+              is expected that the default <i>Port</i> number will not be
+              accessible; in that case it MAY be preconfigured to 0.<br />
+              Servents that receive a null Port number in an incoming
+              <i>Pong</i> SHOULD discard this Descriptor and not forward it to
+              other servents, as it indicates that direct Gnutella connection
+              with TCP to the sending host is not possible.
+            </dd>
+            <dd>
+              Note however that the presence of <i>Pong Data</i> may change this
+              behavior, as it may provide alternate transport protocols
+              <i>(apart from TCP)</i> to connect to the "firewalled" servent.
+              Such extension is out of scope of the current specification.
+            </dd>
+            <dt>5) <b>Firewalled servents:</b></dt>
+            <dd>
+              A firewalled servent that cannot accept incoming TCP connections
+              SHOULD set the <i>Port</i> field to 0, if a Pong has to be sent in
+              reply to a "direct" Ping whose <i>TTL</i>=1 and <i>Hops</i>=0
+              (this will avoid unsuccessful attempts by other remote servents to
+              connect to the firewalled servent). The neighbor servents that
+              accepted the incoming connection from a firewalled servent and
+              that receives such a <i>Pong</i> is then informed explicitly that
+              the connected servent does not accept incoming TCP connections, so
+              they need not later advertize this firewalled servent in the list
+              of servents currently connected, when answering to an incoming
+              "browsing" <i>Ping</i> (i.e. with <i>TTL</i>=2).
+            </dd>
+            <dd>
+              Note however that the presence of <i>Pong Data</i> may change this
+              behavior, as it may provide alternate transport protocols
+              <i>(apart from TCP)</i> to connect to the "firewalled" servent.
+              Such extension is out of scope of the current specification.
+            </dd>
+          </dl>
+        </blockquote>
+        <h5>
+          <a name="t3-2-2-3"></a>3.2.2.3. IPv4 Addresses in standard Pong
+          descriptors
+        </h5>
+        <blockquote>
+          <dl>
+            <dt>1) <b>Unroutable IPv4 Addresses:</b></dt>
+            <dd>
+              When sending a <i>Pong</i> descriptor reporting an IPv4 address to
+              a remote servent, the reported address SHOULD be one that can be
+              safely connected and is accessible to by this servent.<br />
+              For example, if the remote servent to which a
+              <i>Pong</i> descriptor is sent is connected via the global
+              Internet, the local servent SHOULD NOT give him any private
+              network <i>Address</i>es (i.e. in the 10/8, 172.16/12, 192.168/16
+              IPv4 address blocks) that are not routable via the Internet, and
+              SHOULD set this field to 0. The same rule SHOULD also apply if
+              both servents are connected via distinct private networks.<br />
+              If a servent receives such <i>Pong</i>s with unroutable
+              <i>Address</i> from remote servents on Internet, the address in
+              these Pongs SHOULD be ignored (as if it was set to 0) even if it
+              matches an accessible address on a local private network, because
+              the reported servents are not accessible or MAY conflict with
+              other hosts on a local private network.<br />
+              When forwarding those Pongs to any other servent, the unroutable
+              Address field MAY be forced to 0, for example if the other servent
+              is connected from a local private network.
+            </dd>
+            <dt>2) <b>Firewalled servents:</b></dt>
+            <dd>
+              A firewalled servent that cannot accept incoming IPv4 connections
+              from the network (for example the Internet) to which it wants to
+              send <i>Pong</i>s SHOULD set this field to 0, if a <i>Pong</i> has
+              to be sent in reply to a "direct" <i>Ping</i> request whose
+              <i>TTL</i>=1 and <i>Hops</i>=0 (this will avoid unsuccessful
+              attempts by other remote servents to connect to the firewalled
+              servent).<br />
+              Then, the neighbor servents that accepted the incoming connection
+              from a firewalled servent and that receives such a <i>Pong</i> is
+              explicitly informed that the connected servent does not accept
+              incoming connections at an accessible IPv4 address, so they NEED
+              NOT later advertize this firewalled servent in the list of
+              servents currently connected, when answering to an incoming
+              "browsing" Ping (i.e. with <i>TTL</i>+<i>Hops</i>=2).<br />
+              Note however that the presence of <i>Pong Data</i> extension field
+              may change this behavior, as <i>Pong Data</i> may provide
+              alternate host addresses (apart from IPv4) to connect to the
+              servent. Such extension is not described in the current
+              specification.
+            </dd>
+          </dl>
+        </blockquote>
+        <h4><a name="t3-2-3"></a>3.2.3. Query (0x80) Descriptor Payload</h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Minimum Speed</td>
+                <td align="center">Search Criteria String</td>
+                <td align="center">NUL (0x00) Terminator</td>
+                <td align="center"><i>(Optional) Query Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...1</td>
+                <td align="center">2...N</td>
+                <td align="center">N+1</td>
+                <td align="center"><i>N+2...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt><b>Port</b></dt>
+            <dd>
+              The TCP port number on which the responding host can accept
+              incoming Gnutella connections.
+            </dd>
+            <dt><b>Minimum Speed</b></dt>
+            <dd>
+              The minimum speed (in kbits/second) of servents that should
+              respond to this message. A servent receiving a
+              <i>Query</i> descriptor with a <i>Minimum Speed</i> field of
+              <i>n</i> kb/s SHOULD only respond with a <i>QueryHits</i> if it is
+              able to communicate at a speed &gt;= <i>n</i> kb/s.<br />
+              <br />
+              Here are some hints on how this field MAY be set in Query
+              descriptors:
+              <dl>
+                <dd>
+                  0 = will send results regardless of available upload speed
+                  (and even if there's no available upload slot);<br />
+                  1 = accept any result that can be transferred at a guaranteed
+                  minimum of 1.5 kbps mean speed (i.e. modem servents SHOULD NOT
+                  report hits if they don't have available upload slots or as
+                  long as this would break a guarantee offered to other
+                  downloaders, unless they implement a reliable queueing
+                  system);<br />
+                  2 to 32767 = (currently available downlink bandwidth) *
+                  70%.<br />
+                  32768 to 65535 = SHOULD NOT be used in 0.4 Query descriptors.
+                  Unaware legacy servents that receive such Query descriptors
+                  will VERY PROBABLY never return <i>QueryHits</i>.
+                </dd>
+              </dl>
+              To determine which uplink speed can be guaranteed, the replying
+              upload servent MAY compare the <i>Minimum Speed</i> field value
+              <i>n</i> of the Query to:
+              <dl>
+                <dd>
+                  min[ (maximum uplink bandwidth) * 70%, (total unused uplink
+                  bandwidth) ]<br />
+                  �� / [ (uploads in progress) + 2 ]
+                </dd>
+              </dl>
+              The restricted range of valid values of the <i>Speed</i> field in
+              QueryHits descriptors (below 32768), and its typical value is now
+              considered informative, and more useful information can now be
+              transported in this <i>Minimum Speed</i> field of Query payloads
+              (See the description of the <i>Speed</i> field in the QueryHits in
+              section <a href="#t3-2-4">3.2.4</a>).
+            </dd>
+            <dt><b>Search Criteria String</b></dt>
+            <dd>
+              A NUL (i.e. 0x00) terminated search string. The maximum length of
+              this string is bounded by the <i>Payload Length</i> field of the
+              descriptor header.<br />
+              It SHOULD use an ASCII-compatible encoding and charset. In this
+              version of the protocol, no encoding was specified, but most
+              servents use the ISO-8859-1 character set, but other encodings
+              such as UTF-8 MAY also be used (possibly in conjonction with Query
+              Data), as well as other international character sets (ISO-8859-*,
+              KOI-8, S-JIS, Big5, ...).
+            </dd>
+            <dd>
+              It MAY consist in an ASCII SPACE (0x20 = 32) separated list of
+              search keywords, that MAY optionally be terminated by one or more
+              filename extensions (after an ASCII dot, 0x2e=46).<br />
+              For interoperability with future revisions of the 0.4 protocol,
+              the search Criteria field SHOULD NOT use the ASCII FS separator
+              (0x1c = 28).<br />
+              Also a Query that contains an empty Search Criteria is valid if it
+              is followed by the required NUL terminator and by some Query Data
+              (so the Payload Length cannot be lower than 4 bytes).
+            </dd>
+            <dt>
+              <b><i>Query Data</i></b>
+            </dt>
+            <dd>
+              This is an optional field, of variable length, it is reserved for
+              extensions of the current version of the protocol. Its maximum
+              length is bounded by the <i>Payload Length</i> field of the
+              header.
+            </dd>
+            <dd>
+              When used, this field SHOULD not be excessively large and agreed
+              upon with other Gnutella servent implementors, as this field MAY
+              be specified in a further specification of the protocol.<br />
+              Popular servent implementations use this field to specify extended
+              search requests based on meta-data, encoded as a NUL-terminated
+              string containing additional XML formated search criterias. Other
+              extensions may follow this second NUL byte.<br />
+              Servents SHOULD then forward these optional extensions when they
+              are present.
+            </dd>
+          </dl>
+        </blockquote>
+        <h4><a name="t3-2-4"></a>3.2.4. QueryHits (0x81) Descriptor Payload</h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Number of Hits</td>
+                <td align="center">Port</td>
+                <td align="center">IP Address</td>
+                <td align="center">Speed</td>
+                <td align="center">Result Set</td>
+                <td align="center"><i>Optional QHD</i><i> Data</i></td>
+                <td align="center">Servent Identifier</td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0</td>
+                <td align="center">1...2</td>
+                <td align="center">3...6</td>
+                <td align="center">7...10</td>
+                <td align="center">11&#8230;10+N</td>
+                <td align="center"><i>11+N...L-17</i></td>
+                <td align="center">L-16...L-1</td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt><b>Number of Hits</b></dt>
+            <dd>
+              The number of query hits in the <i>Result Set</i> field (see
+              below).
+            </dd>
+            <dt><b>Port</b></dt>
+            <dd>
+              The port number on which the responding host can accept incoming
+              connections.
+            </dd>
+            <dt><b>IP Address</b></dt>
+            <dd>
+              The IPv4 address of the responding host.<br />
+              This field is in <b>big-endian</b> format.
+            </dd>
+            <dt><b>Speed</b></dt>
+            <dd>
+              The maximum upload speed (in kilobits/second or bits/millisecond,
+              between 0 and 32767) of the responding host.<br />
+              <i
+                >This legacy semantic is deprecating, as this does not guarantee
+                a good effective upload speed, as this depends on the effective
+                workload of the host, and its number of available upload slots
+                (so the speed is only informative and servents should not
+                consider it). As the typical value of this field is typically
+                low, the most significant bit of this 16-bit field (sent in
+                little-endian order, as all other Gnutella messages) is now used
+                as a case selector, that allows sending more useful
+                information:</i
+              >
+            </dd>
+            <dd>
+              <table border="1" cellspacing="0">
+                <tbody>
+                  <tr>
+                    <th>Legacy format</th>
+                    <td align="center">0</td>
+                    <td colspan="15" align="center">
+                      Maximum upload speed in kbit/s
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Extended format</th>
+                    <td align="center">1</td>
+                    <td align="center">
+                      Firewalled<br />
+                      indicator
+                    </td>
+                    <td align="center">
+                      XML<br />
+                      meta-data
+                    </td>
+                    <td colspan="4" align="center">
+                      Unassigned bits,<br />
+                      set to 0
+                    </td>
+                    <td colspan="9" align="center">
+                      Reserved bits,<br />
+                      set to 0
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Bit in <i>Speed</i> field</th>
+                    <td align="center">15</td>
+                    <td align="center">14</td>
+                    <td align="center">13</td>
+                    <td align="center">12</td>
+                    <td align="center">11</td>
+                    <td align="center">10</td>
+                    <td align="center">9</td>
+                    <td align="center">8</td>
+                    <td align="center">7</td>
+                    <td align="center">6</td>
+                    <td align="center">5</td>
+                    <td align="center">4</td>
+                    <td align="center">3</td>
+                    <td align="center">2</td>
+                    <td align="center">1</td>
+                    <td align="center">0</td>
+                  </tr>
+                  <tr>
+                    <th>Bit in byte</th>
+                    <td align="center">7</td>
+                    <td align="center">6</td>
+                    <td align="center">5</td>
+                    <td align="center">4</td>
+                    <td align="center">3</td>
+                    <td align="center">2</td>
+                    <td align="center">1</td>
+                    <td align="center">0</td>
+                    <td align="center">7</td>
+                    <td align="center">6</td>
+                    <td align="center">5</td>
+                    <td align="center">4</td>
+                    <td align="center">3</td>
+                    <td align="center">2</td>
+                    <td align="center">1</td>
+                    <td align="center">0</td>
+                  </tr>
+                  <tr>
+                    <th>Byte offset</th>
+                    <td colspan="8" align="center">1</td>
+                    <td colspan="8" align="center">0</td>
+                  </tr>
+                </tbody>
+              </table>
+            </dd>
+            <dd>
+              When the extended format is used (bit 15 set to 1), the other
+              fields are defined as below:
+            </dd>
+            <dl>
+              <dt><b>Firewalled indicator</b></dt>
+              <dd>
+                This bit is set to 1 in <i>Query</i> and
+                <i>QueryHits</i> payloads, to indicate that the host emitting
+                the message is firewalled. When both the initial Query source
+                and the receiver are firewalled, the responding servent should
+                not respond to the <i>Query</i>, as its <i>QueryHits</i> won't
+                be accessible, even with the <i>Push</i> mechanism (see section
+                <a href="#t3-2-5">3.2.5</a>)
+              </dd>
+              <dt><b>XML meta-data</b></dt>
+              <dd>
+                This bit is set to 1 in <i>Query</i> payloads, to indicate the
+                desired preference to receive extended meta-data for results
+                sent in Query Hits, using the LimeWire XML format. Only new
+                LimeWire servents honor this bit, and other servents
+                implementing XML meta-data in their results, should be changed
+                to honor this bit too. Any servent that can interpret XML
+                meta-data should set this bit to 1 in its <i>Query</i> to allow
+                receiving them in the extension field
+                <i>Optional QHD Data</i> (see below). Other servents that cannot
+                interpret XML meta-data, or servents that do not want to receive
+                them in <i>Optional QHD Data</i> should clear this bit (see
+                Appendix <a href="#tA-2-3">A.2.3</a>).
+              </dd>
+              <dt><b>Unassigned bits</b></dt>
+              <dd>
+                Currently unassigned, reserved for future use. Until then, these
+                bits should be set to 0.
+              </dd>
+              <dt><b>Reserved bits</b></dt>
+              <dd>
+                Currently unassigned, reserved for future indication of a
+                maximum number of hits to return. Until specification, these
+                bits should be set to 0.
+              </dd>
+            </dl>
+            <dt><b>Result Set</b></dt>
+            <dd>
+              A set of responses to the corresponding Query. This set contains
+              <i>Number of Hits</i> elements, each with the
+              <i>Result</i> structure described below (section
+              <a href="#t3-2-4-1">3.2.4.1</a>).
+            </dd>
+            <dd>
+              The size of the <i>Result Set</i> field (and of each individual
+              <i>Result</i> structure it contains) is bounded by the size of the
+              <i>Payload Length</i> field in the descriptor header and by the
+              <i>Number of Hits</i> field, minus the size of the required
+              <i>Servent Identifier</i> field at end of this payload.
+            </dd>
+            <dt>
+              <b><i>Optional QHD Data</i></b>
+            </dt>
+            <dd>
+              <i
+                >This is an optional field (the Extended QueryHits Data) of
+                variable length, it is reserved for extensions of the current
+                version of the protocol. Its maximum length is bounded by the
+                Payload Length field of the header. (see section
+                <a href="#t-3-2-4-3">3.2.4.3</a>)</i
+              >
+            </dd>
+            <dd>
+              <i
+                >When used, this field SHOULD not be excessively large and
+                agreed upon with other Gnutella servent implementors, as this
+                field MAY be specified in a further specification of the
+                protocol.<br />
+                Some servents use this field to give other collected information
+                about the Query or about the responding host.<br />
+                Servents SHOULD then forward these optional extensions when they
+                are present. (see Annexes)</i
+              >
+            </dd>
+            <dt><b>Servent Identifier</b></dt>
+            <dd>
+              This 16-byte string uniquely identifies the responding servent on
+              the network. This is typically some function of the
+              servent&#8217;s network address.
+            </dd>
+            <dd>
+              The <i>Servent Identifier</i> is instrumental in the operation of
+              the <i>Push</i> descriptor (see below).
+            </dd>
+          </dl>
+          <p>
+            <i>QueryHits</i> descriptors are only sent in response to an
+            incoming <i>Query</i> descriptor. A servent should only reply to a
+            <i>Query</i> with a <i>QueryHits</i> descriptor if it contains data
+            that strictly meets the <i>Query Search Criteria</i>.
+          </p>
+          <p>
+            A QueryHits descriptor SHOULD be initially generated with
+            <i>Hops</i>=0 and the <i>TTL</i> field equal to the number of
+            <i>Hops</i> traversed by the <i>Query</i> descriptor for which it is
+            replies.
+          </p>
+          <p>
+            The <i>Descriptor Id</i> field in the descriptor header of the
+            <i>QueryHits</i> should contain the same value as that of the
+            associated <i>Query</i> descriptor. This allows a servent to
+            identify the <i>QueryHits</i> descriptors associated with
+            <i>Query</i> descriptors it generated.
+          </p>
+        </blockquote>
+        <h5><a name="t3-2-4-1"></a>3.2.4.1. Result Structure</h5>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">File Index</td>
+                <td align="center">File Size</td>
+                <td align="center">Shared File Name</td>
+                <td align="center">NUL (0x0) Terminator</td>
+                <td align="center"><i>Optional Result�Data</i></td>
+                <td align="center">NUL (0x0) Terminator</td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...3</td>
+                <td align="center">4...7</td>
+                <td align="center">8...7+K</td>
+                <td align="center">8+K</td>
+                <td align="center"><i>9+K...R-2</i></td>
+                <td align="center">R-1</td>
+              </tr>
+            </tbody>
+          </table>
+        </blockquote>
+        <blockquote>
+          <dl>
+            <dt><b>File Index</b></dt>
+            <dd>
+              A number, assigned by the responding host, which is used to
+              uniquely identify the file matching the corresponding query.
+            </dd>
+            <dt><b>File Size</b></dt>
+            <dd>
+              The size (in bytes) of the file whose index is <i>File Index</i>.
+            </dd>
+            <dt><b>Shared File Name</b></dt>
+            <dd>
+              The nul (i.e. 0x0000) terminated shared name of the file whose
+              index is <i>File Index</i>.
+            </dd>
+            <dt>
+              <i><b>Optional Result Data</b></i>
+            </dt>
+            <dd>
+              Nul (i.e. 0x0000) terminated data about the file whose index is
+              <i>File Index</i>. Some servents MAY use this field to return
+              meta-data, encoded with XML. Care MUST be taken not to include any
+              NUL byte in this field.
+            </dd>
+            <dd>
+              A text-only extension (some as XML data) in this field SHOULD be
+              terminated by an ASCII File Separator (FS, 0x1c=28) if there is
+              another extension after it.<i><br /> </i>When this field is not
+              used, the second NUL terminator MUST still be present.
+            </dd>
+          </dl>
+        </blockquote>
+        <h5>
+          <a name="t3-2-4-2"></a>3.2.4.2. Total Payload length of QueryHits
+          descriptors.
+        </h5>
+        <blockquote>
+          <p>
+            The <i>QueryHits</i> descriptor, with its complex structure, is the
+            one which may have the longest payload. For efficiency and to allow
+            more concurrent requests, a servent that receives a
+            <i>Query</i> SHOULD limit the volume of the
+            <i>QueryHits</i> descriptor it sends as a reply. When many hits are
+            detected, servents MAY and SHOULD divide it in reasonable subsets,
+            with a delay between each QueryHits descriptor sent back to the
+            requester.<br />
+            <br />
+            Any QueryHits descriptor SHOULD NOT need more than 4 seconds to
+            transmit at an average speed per connection of 4kbps, because the
+            servent needs to be able to reply to other incoming requests from
+            its connected neighbors in a timely way. In practice, this limits
+            the total descriptor size to 2KB, unless more uplink bandwidth is
+            available, and if there's agreement (or negociation at connection
+            time) about the maximum descriptor size that can be used between
+            neighbor servents. This can only be guaranteed if replying with a
+            <i>TTL</i>=1 descriptor, which explicitly won't need to be routed
+            across relaying servents, and which has greater priority than other
+            descriptors with larger <i>TTL</i> values.
+          </p>
+          <p>
+            When a servent replies to an incoming <i>Query</i> descriptor with
+            <i>Hops</i>&gt;0, the <i>QueryHits</i> descriptor with
+            <i>TTL</i>&gt;1 will return back to the initial servent that sent
+            the <i>Query</i>, using the same connection path that was used when
+            receiving the <i>Query</i>. Most neighbor servents will forward
+            incoming <i>QueryHits</i> descriptors (with <i>TTL</i>&gt;1) without
+            breaking them into their individual components. Buffer size limits
+            in relaying servents MAY impact the intended descriptor, as a
+            relaying agent MAY drop a too long QueryHits descriptor.<br />
+            <br />
+            All servents SHOULD be able to route <i>QueryHits</i> descriptors
+            with total size (including the descriptor header) up to 2KB. And
+            servents SHOULD NOT generate any <i>QueryHits</i> descriptor with
+            more than 64KB total size, unless there's mutual agreement that such
+            large descriptors can be safely exchanged. Between these figures,
+            the maximum descriptor size CAN be reduced in an order of magnitude
+            proportional to the increase of the <i>TTL+Hops</i> value.
+          </p>
+        </blockquote>
+        <h5>
+          <a name="t3-2-4-3"></a>3.2.4.3. QHD Data and Result Data Extensions
+        </h5>
+        <blockquote>
+          <p>
+            The <i>QueryHits</i> descriptor allows two kinds of extensions,
+            either per Result or for the whole Result-Set. The choice of
+            placement of these extensions (and their encoding and semantics) is
+            not defined in this document; it's up to the implementers of
+            servents to define and test them, however several things should be
+            noted:
+          </p>
+          <p>
+            <i
+              >Important notice: This section gives some guidelines, but the
+              "SHOULD" and "MAY" words found here are still being debated,
+              particularly for the semantics of cachable extensions that could
+              be splitted or merged by future Query-caching relaying
+              servents.</i
+            >
+          </p>
+          <dl>
+            <dt>1) <b>Extensions encoding:</b></dt>
+            <dd>
+              There MAY be several Result Data extensions for the same
+              <i>Result</i> file. And there may be several QHD Data extensions
+              for the same QueryHits descriptor.
+            </dd>
+            <dd>
+              Some extensions are also versatile, i.e. they MAY be used in
+              descriptors with different Payload type.
+            </dd>
+            <dd>
+              So each extension MUST start with a distinct identifiable sequence
+              to recognize its type. The following paragraphs give examples for
+              interoperability of some existing extensions.
+            </dd>
+            <dl compact>
+              <dt>1.a) <b>XML extensions</b></dt>
+              <dd>
+                start with a ASCII "&lt;" character (0x3c=60), which is part of
+                its actual content and can be a comment, a document type
+                declaration, or the beginning of the document element; an XML
+                extension is terminated by a ASCII FS character if followed by
+                another extension.
+              </dd>
+              <dd>
+                Standard XML data uses the UTF-8 encoding by default, but MAY
+                use other explicit encodings. For interoperability, implementers
+                of XML extensions SHOULD produce XML data using an explicit
+                default target namespace and/or a distinctive document element
+                name. Full XML conformance is not required, and relaying
+                servents don't need to validate them.
+              </dd>
+              <dt>1.b) <b>URN extensions</b></dt>
+              <dd>
+                start with a ASCII lowercase "u" letter (0x75=117), part of its
+                value, and terminated by a ASCII FS, if followed by another
+                extension.
+              </dd>
+              <dt>
+                1.c) <b>Sets of <i>GGEP</i> binary-delimited extensions</b>
+              </dt>
+              <dd>
+                (not specified here) are introduced by a <i>magic</i> byte
+                (0xc3=195), and each extension in the set contains a
+                <i>length</i> indicator and an extension-specific signature;
+                however no byte in the <i>GGEP</i>
+                binary-delimited extension may be NUL (0x00) when encoded within
+                a
+                <i>Result Data</i> field (this MAY use a special binary
+                encoding). The whole set of GGEP-compatible binary extensions is
+                terminated by a ASCII FS if followed by another extension.
+              </dd>
+              <dt>
+                1.d) <b><i>BearShareTrailer</i>-type binary extensions</b>
+              </dt>
+              <dd>
+                (see <a href="#tA-1">Appendix 1</a>) start with a
+                vendor-specific Identifier of 4 ASCII characters (it SHOULD not
+                start by a "&lt;", "u" or 0xc3 byte) and specify their internal
+                data length. Such binary extensions are not designed to be used
+                in a <i>Result Data</i> extension field, but only in
+                <i>QHD Data</i> extension. For newer applications,
+                <i>GGEP</i>-style extensions SHOULD be preferred.
+              </dd>
+            </dl>
+            <dt>
+              2) <b>When to use <i>QHD Data</i> extensions:</b>
+            </dt>
+            <dd>
+              Servents MAY need to split a large incoming result-set into
+              several distinct QueryHits descriptors, each one transmitted after
+              a time delay, to better manage its outgoing bandwidth and allow
+              responding to other requests.
+            </dd>
+            <dd>
+              When it needs to do so, it MAY transmit the QHD Data separately in
+              an empty or tiny result set, or MAY have to repeat the
+              <i>QHD Data</i> in each QueryHits descriptors. Servents that send
+              large <i>QHD Data</i> SHOULD design their extension in such a way
+              that this data MAY be transmitted separately (however with the
+              same responding Servent Identifier field), or so that this data
+              MAY be repeated in multiple Query Hits.
+            </dd>
+            <dd>
+              So any meta-data associated with a single file would better not be
+              within this <i>QHD Data</i> extension field, and the
+              <i>QHD Data</i> will only be best used either with single-file
+              <i>Results Set</i>, or to transport small servent-related
+              information.
+            </dd>
+            <dd>
+              Also <i>QHD data</i> cannot be parsed without first receiving and
+              parsing the <i>Result Set</i>, because there's no length indicator
+              for the <i>Result Set</i>: each Result structure must be scanned
+              while counting them, until <i>Number of Hits</i> have been
+              scanned. For faster routing purpose, a servent MAY also need to
+              limit the <i>Number of Hits</i> allowed in the same Result Set.
+            </dd>
+            <dd>
+              Servents SHOULD also avoid transmitting
+              <i>QueryHit</i> descriptors with empty <i>Result Set</i> in order
+              to send only <i>QHD Data</i> extensions, as some legacy servents
+              MAY discard such empty descriptors.<br />
+              The 0.4 protocol does not specify however that an empty Result Set
+              is invalid. So, new servents SHOULD accept and forward
+              <i>QueryHits</i> descriptors containing an empty
+              <i>Result Set</i> if it contains <i>QHD Data</i> extension.<br />
+              Finally, all servents SHOULD discard <i>QueryHits</i> descriptors
+              with both empty <i>Result Set</i> (i.e. <i>Number of Hits</i>=0)
+              and no <i>QHD Data extension</i> (i.e.
+              <i>PayLoad Length</i>&lt;=27).
+            </dd>
+            <dt><b>3) When to use Result Data extensions:</b></dt>
+            <dd>
+              To avoid such split of related information, meta-data can be
+              encoded, along with the Result with which it is related, within
+              the <i>Result Data</i> extension. However, pure binary format for
+              these extensions is not possible as <i>Result Data</i> extensions
+              MUST NOT contain NUL bytes; additionally it SHOULD NOT contain the
+              ASCII File Separator (FS, 0x1c = 28) used to terminate text-only
+              extensions with no explicit length. This MAY then require a less
+              efficient (larger) encoding for such meta data within the
+              <i>Result Data</i><i> </i>extension field of a Result structure.
+            </dd>
+            <dd>
+              Using a <i>Result Set</i> with several combined hits saves a
+              little output bandwidth when we compare it to the bandwidth needed
+              when using an equivalent splitted <i>Result Set</i>, because of
+              the headers overhead. However servents SHOULD avoid using
+              descriptors with excessive length, as it may cause buffering
+              problems in remote servents.
+            </dd>
+            <dt><b>4) When to anticipate splitted QueryHits:</b></dt>
+            <dd>
+              If a QueryHits extension is large then it SHOULD be carefully
+              designed to differentiate servent-related information from
+              files-specific meta-data.
+            </dd>
+            <dd>
+              Servent-related information SHOULD not be sent within multiple
+              <i>QueryHits</i> descriptor associated with the same
+              <i>Query</i> request (identified by the matching
+              <i>Descriptor ID</i> field in the descriptor header), but only
+              with the first Result Set for that <i>Query</i>. It SHOULD be
+              encoded as a <i>QHD Data</i> extension, and this first
+              <i>Result Set</i> MAY need to be reduced to contain the smallest
+              <i>Result</i> structures.
+            </dd>
+            <dd>
+              Large file-related meta-data MAY be encoded as a
+              <i>QHD Data</i> extension instead of a
+              <i>Result Data</i> extension to allow better encoding. In such a
+              case, the <i>Result Set</i> MAY need to be reduced to contain only
+              one <i>Result</i> structure.
+            </dd>
+            <dd>
+              A <i>QHD Data</i> extension MAY be designed to include a vector of
+              file-related meta-data, one for each file of the
+              <i>Result Set</i>. However as a Result Set MAY be splitted by
+              relaying agents, with <i>QHD Data</i> extensions replicated in
+              each <i>QueryHits</i> descriptor, it would be difficult to
+              reassociate the meta-data with the correct file. In that case, the
+              extension may include the <i>File Id</i> within each element of
+              the vector encoded in the <i>QHD Data</i> extension.<br />
+              Until the semantics of splitting (or merging) a
+              <i>Result Set</i> are standardized in a future version of this
+              specification, servents need to be carefully tested with other
+              popular implementations, to determine the appropriate policy, as
+              it MAY break the behavior of an existing extension (for example if
+              <i>QueryHits</i> are digitally signed)
+            </dd>
+          </dl>
+        </blockquote>
+        <h4><a name="t3-2-5"></a>3.2.5. Push (0x40) Descriptor Payload</h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Servent Identifier</td>
+                <td align="center">File Index</td>
+                <td align="center">IP Address</td>
+                <td align="center">Port</td>
+                <td align="center"><i>Optional Push�Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...15</td>
+                <td align="center">16...19</td>
+                <td align="center">20...23</td>
+                <td align="center">24...25</td>
+                <td align="center"><i>26...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+        </blockquote>
+        <blockquote>
+          <dl>
+            <dt><b>Servent Identifier</b></dt>
+            <dd>
+              The 16-byte string uniquely identifying the servent on the network
+              who is being requested to push the file with index
+              <i>File Index</i>. The servent initiating the push request should
+              set this field to the <i>Servent Identifier</i> returned in the
+              corresponding <i>QueryHits</i> descriptor. This allows the
+              recipient of a <i>Push</i> request to determine whether or not it
+              is the target of that request.
+            </dd>
+            <dt><b>File Index</b></dt>
+            <dd>
+              The index uniquely identifying the file to be pushed from the
+              target servent. The servent initiating the <i>Push</i> request
+              should set this field to the value of one of the
+              <i>File Index</i> fields from the <i>Result Set</i> field in the
+              corresponding <i>QueryHits</i> descriptor.
+            </dd>
+            <dt><b>IP Address</b></dt>
+            <dd>
+              The IP address of the host to which the file with
+              <i>File Index</i> should be pushed. This field is in big-endian
+              format.
+            </dd>
+            <dt><b>Port</b></dt>
+            <dd>
+              The port to which the file with index <i>File Index</i> should be
+              pushed.
+            </dd>
+            <dt>
+              <b><i>Optional Push Data</i></b>
+            </dt>
+            <dd>
+              This is an optional field of variable length, it is reserved for
+              extensions of the current version of the protocol, to give
+              identifying information about the content to push, or routing and
+              authenticating information collected from previous
+              <i>QueryHits</i> and/or <i>Pong</i> descriptor. Its maximum length
+              is bounded by the <i>Payload Length</i> field of the descriptor
+              header.
+            </dd>
+            <dd>
+              When used, this field SHOULD not be excessively large and agreed
+              upon with other Gnutella servent implementors, as this field MAY
+              be specified in a further specification of the protocol.<br />
+              Servents SHOULD then forward these optional extensions when they
+              are present.
+            </dd>
+          </dl>
+          <p>
+            A servent may send a <i>Push</i> descriptor if it receives a
+            <i>QueryHit</i> descriptor from a servent that doesn&#8217;t support
+            incoming connections. This might occur when the servent sending the
+            <i>QueryHits</i> descriptor is behind a firewall. When a servent
+            receives a <i>Push</i> descriptor, it may act upon the push request
+            if and only if the <i>Servent Identifier</i> field contains the
+            value of its servent identifier.
+          </p>
+          <p>
+            The <i>Descriptor Id</i> field in the Descriptor Header of the Push
+            descriptor should not contain the same value as that of the
+            associated <i>QueryHits</i>
+            descriptor, but should contain a new value generated by the
+            servent&#8217;s
+            <i>Descriptor_Id</i> generation algorithm. See the section below
+            entitled "Firewalled Servents" for further details on the Push
+            process.
+          </p>
+        </blockquote>
+        <h4>
+          <a name="t3-2-6"></a>3.2.6. QRP (0x30) Extension Descriptor Payload
+        </h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center"><i>Quary Routing Table Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center"><i>0...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt>
+              <b><i>Query Routing Table Data</i></b>
+            </dt>
+            <dd>
+              <i
+                >This is a required field consisting in bytes of variable
+                length, it is reserved for extensions of the current version of
+                the protocol, to send compact information� about files shared by
+                a servent, in order for the recipient to filter incoming
+                Queries.<br />
+                This field can be large, but the descriptor should be compacted
+                with an algorithm not specified in this document..</i
+              >
+            </dd>
+          </dl>
+          <p>
+            This descriptor was not specified in the original 0.4 protocol.
+            Implementing it in servents is optional (but sending it is required
+            to implement the "Leaf node" mode specified in the UltraPeer
+            extension. It should be sent only to servents implementing the
+            UltraPeer protocol, as indicated in their connection headers.
+            Non-QRP aware servents MAY safely ignore this descriptor, as it is
+            completely compatible with all non <i>QRP</i>-aware 0.4 servents
+            that don't use it.
+          </p>
+          <p>
+            The routing of this descriptor is not defined in this document. Its
+            presence in a reception flow indicates that the recipient should
+            support the QRP mechanism, most probably to implement the UltraPeer
+            topology extension. Its occurrence in a flow sent by a given servent
+            should be paced according to the QRP protocol extension that defines
+            it. Generally, this message is not intended to be dropped by the
+            recipient. So receiving it while it was not solicited indicates that
+            the servent does not comply strictly to this specification but
+            already implements a part of the QRP extension, but does not comply
+            to its specification.
+          </p>
+        </blockquote>
+        <h4>
+          <a name="t3-2-7"></a>3.2.7. Bye (0x02) Extension Descriptor Payload
+        </h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center"><i>Optional Bye Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center"><i>0...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt>
+              <b><i>Optional Bye Data</i></b>
+            </dt>
+            <dd>
+              <i
+                >This is an optional field consisting in bytes of variable
+                length, it is reserved for extensions of the current version of
+                the protocol, to specify filters about expected Pong replies.
+                Its maximum length is bounded by the Payload Length field of the
+                header.<br />
+                When used, this field SHOULD be small and agreed upon with other
+                Gnutella servent implementors, as this field MAY be specified in
+                a further specification of the protocol.</i
+              >
+            </dd>
+          </dl>
+          <p>
+            This descriptor was not specified in the original 0.4 protocol.
+            Implementing it in servents is optional. Servents MAY safely ignore
+            this descriptor, as it is completely compatible with all non
+            <i>Bye</i>-aware 0.4 servents.
+          </p>
+          <p>
+            However a <i>Bye</i>-aware servent MUST set <i>TTL</i>=1 and
+            <i>Hops</i>=0 when sending this descriptor, then it SHOULD NOT send
+            or forward any other descriptor on the same connection path; instead
+            it MAY wait for about 30 seconds that the connection closes (if
+            timeout elapses, it SHOULD close the connection). During that
+            period, the servent MAY ignore all other incoming descriptors coming
+            from the same connection path (with the exception of another
+            incoming <i>Bye</i> Descriptor which MAY be interpreted). The
+            semantic of an sending a <i>Bye</i> descriptor with
+            <i>Hops</i>&lt;&gt;0 is unknown and not defined in this document.
+          </p>
+          <p>
+            On reception, a <i>Bye</i>-aware servent MUST NOT forward this
+            message; it MAY interpret the Payload to take further actions, but
+            it SHOULD disconnect immediately from the servent which sent this
+            descriptor. The content of the Payload is not specified in this
+            version of the protocol (it will typically contain a NUL terminated
+            status line that gives the reason why a servent will be
+            disconnected, and other <i>Optional Bye Data</i> extensions).
+          </p>
+        </blockquote>
+        <h4>
+          <a name="t3-2-7"></a>3.2.7. Open-Vendor (0x31) Extension Descriptor
+          Payload
+        </h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Vendor ID</td>
+                <td align="center">Sub-Selector</td>
+                <td align="center"><i>Optional Sub-Selector Version</i></td>
+                <td align="center"><i>Optional Vendor Sub-Selector Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...3</td>
+                <td align="center">4...5</td>
+                <td align="center"><i>6...7</i></td>
+                <td align="center"><i>6...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt><b>Vendor ID</b></dt>
+            <dd>
+              Case insensitive sequence of 4 characters, identifying the vendor
+              who has authority on the descriptor format and its definition.
+              <i>Vendor ID</i> values are similar to those used in
+              <i>QueryHits (See Appendix 1). </i>The all-zero value is reserved
+              for Vendor support requests and answers. See below.
+            </dd>
+            <dt><b>Sub-Selector</b></dt>
+            <dd>
+              A little-endian 16-bit value specifying a distinct message type
+              defined by that vendor<i>.</i> The 0xFFFF and 0xFFFE values for
+              the <i>Sub-Selector</i> field are reserved for feature request and
+              answers. See below.
+            </dd>
+            <dt>
+              <b><i>Optional Sub-Selector Version</i></b>
+            </dt>
+            <dd>
+              A little-endian 16-bit value specifying a variant for the distinct
+              message type defined by that vendor<i>.</i> The 0x0000 value is
+              assumed if absent. Some Sub-Selectors will be versioned and some
+              won't. The value 0x0001 represents version 0.1.
+            </dd>
+            <dt>
+              <b><i>Optional Vendor Sub-Selector Data</i></b>
+            </dt>
+            <dd>
+              This is an optional field consisting in bytes of variable length.
+              Its format depends on the <i>Vendor ID</i>,
+              <i>Sub-Selector</i> and
+              <i>Optional Sub-Selector Version</i> fields. Its maximum length is
+              bounded by the <i>Payload Length</i> field of the header.
+            </dd>
+          </dl>
+          <p>
+            This descriptor was not specified in the original 0.4 protocol.
+            Implementing it in servents is optional. It allows servents to send
+            experimental messages, and test their scalability and routing
+            strategies for networking enhancements without breaking other
+            existing servent implementations.
+          </p>
+          <p>
+            However servents that implement this descriptor SHOULD also
+            implement the Open-Vendor Feature request/answer 0.1 mechanism. See
+            below.
+          </p>
+          <p>
+            Non-aware servents MAY safely ignore this descriptor, as it should
+            be completely compatible with all non-Vendor aware 0.4 servents.
+          </p>
+          <p>
+            However a <i>Open-Vendor</i>-aware servent SHOULD set <i>TTL</i>=1
+            and <i>Hops</i>=0 when sending this descriptor. In that case, the
+            <i>Descriptor ID</i> field may be used for other usage than
+            identifying the uniqueness of the originator. The semantic of
+            sending a <i>Open-Vendor</i> descriptor with <i>TTL</i>&gt;1, or
+            forwarding it with <i>Hops</i>&lt;&gt;0 is unknown and not defined
+            in this document.
+          </p>
+          <p>
+            The maximum size of this Descriptor should be below 20 KB for
+            routing purpose, and MUST NOT exceed 64KB with <i>TTL</i>=1 and
+            <i>Hops</i>=0.
+          </p>
+          <p>
+            On reception, a non-aware servent MUST NOT blindly forward this
+            descriptor; it MAY interpret the Payload to take further actions.
+            The content of the Payload is not specified in this version of the
+            protocol, as it is vendor-specific, and may change over time.
+          </p>
+          <dl>
+            <dt>
+              Querying the list if <i>Vendor ID</i> supported in
+              <i>Open-Vendor</i> descriptors:
+            </dt>
+            <dd>
+              One servent A can query which <i>Vendor IDs</i> the remote servent
+              B support: it sends an <i>Open-Vendor</i> descriptor with the
+              <i>Vendor ID</i> field set to all-zeroes, and sets the
+              <i>Sub-Selector</i> field to 0xFFFF and <i>Version</i> field to
+              0x0001. If B supports some <i>Open-Vendor </i>descriptors, it will
+              answer by sending back another <i>Open-Vendor</i> descriptor with
+              the <i>Vendor ID</i> field set to all-zeroes, and the
+              <i>Sub-Selector</i> field set to 0xFFFE, and the
+              <i>Optional Sub-Selector version</i> field set to 0x0001; the
+              <i>Optional Vendor Sub-Selector Data</i> field will contain the
+              list of <i>Vendor IDs</i> supported.
+            </dd>
+            <dt>
+              Querying if one or more specific <i>Vendor ID</i> are supported in
+              <i>Open-Vendor</i> descriptors:
+            </dt>
+            <dd>
+              This uses the same mechanism, unless that the servent A will
+              insert one or more <i>Vendor ID</i> values in the
+              <i>Optional Vendor Sub-Selector Data</i> field. The servent B will
+              reply by listing only those Vendor IDs values that are supported
+              in the requested set. If B does not support any of these value, it
+              can explicitly reply with an empty list of <i>Vendor ID</i> values
+              in the <i>Optional Vendor Sub-Selector Data</i> field of its
+              answer. This type of request allows restricting the volume of data
+              exchanged between servents because the servent B may support a
+              large set of Vendor-specific extensions.
+            </dd>
+            <dt>
+              Querying the list of <i>Open-Vendor Sub-selectors</i> supported
+              for a specific <i>Vendor ID</i>:
+            </dt>
+            <dd>
+              One servent A can query which <i>Sub-Selectors</i> the remote
+              servent B support: it sends an <i>Open-Vendor</i> descriptor with
+              the <i>Vendor ID</i> field set according to the Sub-Selectors to
+              query, and sets the <i>Sub-Selector</i> field to 0xFFFF and
+              <i>Version</i> field to 0x0001. If B supports
+              <i>Open-Vendor </i>descriptors for that <i>Vendor ID</i>, it will
+              answer by sending back another <i>Open-Vendor</i> descriptor with
+              that same <i>Vendor ID</i>, and the <i>Sub-Selector</i> field set
+              to 0xFFFE, and the <i>Optional Sub-Selector version</i> field set
+              to 0X0001; the <i>Optional Vendor Sub-Selector Data</i> field will
+              contain the list of Sub-Selectors supported with that Vendor ID.
+            </dd>
+            <dd>
+              A more precise query that takes version fields or identification
+              fields into account may be used with
+              <i>Sub-Selector Version</i> field set to 0x0002, in the 0xFFFF
+              "Feature Query" <i>Sub-Selector</i>, or in the 0xFFFE "Feature
+              Answer" <i>Sub-Selector</i>. In that case, each
+              <i>Sub-Selector</i> value listed in the
+              <i>Optional Vendor Sub-Selector Data</i> field will be followed by
+              a length byte and the version information.
+            </dd>
+          </dl>
+        </blockquote>
+        <h4>
+          <a name="t3-2-8"></a>3.2.8. Standard-Vendor (0x32) Extension
+          Descriptor Payload
+        </h4>
+        <blockquote>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Vendor ID</td>
+                <td align="center">Sub-Selector</td>
+                <td align="center"><i>Optional Sub-Selector Version</i></td>
+                <td align="center"><i>Optional Vendor Sub-Selector Data</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...3</td>
+                <td align="center">4...5</td>
+                <td align="center"><i>6...7</i></td>
+                <td align="center"><i>6...L-1</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            The structure of this descriptor is completely identical to the
+            structure of the 0x31 descriptor type. In fact it is highly
+            recommended that servents that implement any 0x32 descriptor also
+            accepts receiving its 0x31 experimental variant with exactly the
+            same Payload. The <b>feature query</b> mechanism can also be used to
+            see if a legacy servent supports the approved 0x32 variant. However
+            a servent that implements the approved 0x32 variant should no more
+            reply with the experimental 0x31 variant of the descriptor.
+          </p>
+          <p>
+            This descriptor was not specified in the original 0.4 protocol.
+            Implementing it in servents is optional. It allows servents to send
+            experimental vendor-specific messages, for networking enhancements
+            without breaking other existing servent implementations, but it
+            restricts its definition to a stable and documented specification.
+            Experimental <i>Open-Vendor</i> 0x31 descriptors may be safely
+            ignored, but detecting a <i>Standard-Vendor</i> 0x32 message gives a
+            hint to the implementor about which <i>Open-Vendor</i> descriptor
+            they should monitor and implement in their next releases as per the
+            available specification.
+          </p>
+          <p>
+            This descriptor may have special routing strategies. In that case,
+            this descriptor MUST be sent with <i>TTL</i>=1 and <i>Hops</i>=0,
+            and its unique 128-bit <i>Descriptor ID</i> MAY be used for other
+            purpose. If the <i>Standard-Vendor</i> descriptor uses a standard
+            forwarding strategy, it should include a unique 128-bit
+            <i>Descriptor ID</i> which MUST be preserved while incrementing the
+            <i>Hops</i> field and decrementing the <i>TTL</i> field.
+            Implementing effectively an <i>Standard-Vendor</i> descriptor MAY
+            require complex caching strategies. For testing purposes, and to
+            limit the impact of possible bugs, all tests SHOULD be performed
+            using the Experimental <i>Open-Vendor</i> descriptors, so that it
+            won't harm other conforming servents.
+          </p>
+          <p>
+            Only when the implementation passes the specification compliance
+            tests with other major servent implementations present on the
+            network that implement this <i>Open-Vendor</i> message, the
+            implementor SHOULD replace any occurence of experimental 0x31
+            descriptors for that <i>Vendor ID</i> and <i>Sub-Selector</i> by
+            0x32 descriptors in requests and in replies to incoming approved
+            0x32 descriptors. Going to the <i>Standard-Vendor</i> state will
+            allow more reachability of this <i>Open-Vendor</i> descriptor on the
+            network.
+          </p>
+          <p>
+            When answering to an incoming <i>Open-Vendor</i> 0x31 descriptor,
+            <i>Standard-Vendor</i>
+            0x32 descriptors MUST NOT be used, whatever its content, unless the
+            incoming
+            <i>Vendor ID</i> matches the receiving servent implementation and
+            the receiving servent is fully compliant to the <i>Standard</i
+            ><i>-Vendor</i> descriptor specification.
+          </p>
+          <p>
+            When answering to an incoming <i>Standard-Vendor</i> 0x32
+            descriptor, <i>Open-Vendor</i> 0x31 descriptors SHOULD NOT be used,
+            other <i>Standard-Vendor</i> 0x32 descriptors SHOULD be used
+            instead. Other type of answers MAY include other descriptors such as
+            <i>Ping</i>, <i>Pong</i>, <i>Query</i>, <i>QueryHits</i>,
+            <i>Push</i> and <i>Bye</i>, or any other action defined in the
+            <i>Standard-Vendor</i> descriptor.
+          </p>
+        </blockquote>
+      </blockquote>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2><a name="t4"></a>4. Descriptor Routing</h2>
+    <blockquote>
+      <p>
+        The peer-to-peer nature of the Gnutella network REQUIRES servents to
+        route network traffic (queries, query replies, push requests, etc.)
+        appropriately. A well-behaved Gnutella servent MUST route protocol
+        descriptors according to the following rules:
+      </p>
+      <ol>
+        <li>
+          <b>Pong</b> descriptors MAY ONLY be sent along the
+          <b>same path</b> that carried the incoming <b>Ping</b> descriptor.
+          This ensures that only those servents that routed the Ping descriptor
+          will see the Pong descriptor in response. A servent that receives a
+          Pong descriptor with Descriptor ID = <i>n</i>, but has not seen a Ping
+          descriptor with Descriptor ID = <i>n</i> SHOULD remove the Pong
+          descriptor from the network and not forward it to any connected
+          servent.
+        </li>
+        <li>
+          <b>QueryHit</b> descriptors MAY ONLY be sent along the
+          <b>same path</b> that carried the incoming <b>Query</b> descriptor.
+          This ensures that only those servents that routed the Query descriptor
+          will see the QueryHit descriptor in response. A servent that receives
+          a QueryHit descriptor with Descriptor ID = <i>n</i>, but has not seen
+          a Query descriptor with Descriptor ID = <i>n</i> SHOULD remove the
+          QueryHit descriptor from the network.
+        </li>
+        <li>
+          <b>Push</b> descriptors MAY ONLY be sent along the
+          <b>same path</b> that carried the incoming <b>QueryHit</b> descriptor.
+          This ensures that only those servents that routed the QueryHit
+          descriptor will see the Push descriptor. A servent that receives a
+          Push descriptor with Servent Identifier = <i>n</i>, but has not seen a
+          QueryHit descriptor with Servent Identifier = <i>n</i> SHOULD remove
+          the Push descriptor from the network. Push descriptors MUST be routed
+          by Servent Identifier, not by Descriptor Id
+          <i
+            >(this id is not related to the Descriptor Id of any Query or Query
+            Hit descriptor, it is used only to identify the push request when
+            the uploader servent will try to connect to the downloader, so it
+            MAY be related to the local servent GUID that initiates the Push
+            descriptor)</i
+          >.
+        </li>
+        <li>
+          A servent SHOULD <b>forward</b> incoming Ping and Query descriptors to
+          ALL of its directly connected servents, <b>except</b> the one that
+          delivered the incoming Ping or Query.
+        </li>
+        <li>
+          A servent MUST decrement a descriptor header&#8217;s <b>TTL</b> field,
+          and increment its <b>Hops</b> field, <b>before</b> it forwards the
+          descriptor to any directly connected servent. If, after decrementing
+          the header&#8217;s TTL field, the TTL field is found to be zero, the
+          descriptor is not forwarded along any connection.
+        </li>
+        <li>
+          A servent receiving a descriptor with the
+          <b>same Payload Descriptor and Descriptor ID</b> as one it has
+          received before, SHOULD attempt to avoid forwarding the descriptor to
+          any connected servent. Its intended recipients have already received
+          such a descriptor, and sending it again merely wastes network
+          bandwidth.
+        </li>
+      </ol>
+      <p align="center">
+        <img
+          border="0"
+          src="GnutellaProtocol-v0.4-r1.6_files/gnutella-ping-pong-routing.gif"
+          width="574"
+          height="246"
+        /><br />
+        <b
+          >Example 1. Ping/Pong routing, with duplicate descriptors filtering</b
+        >
+      </p>
+      <p align="center">
+        <img
+          border="0"
+          src="GnutellaProtocol-v0.4-r1.6_files/gnutella-query-reply-routing.gif"
+          width="669"
+          height="239"
+        /><br />
+        <b>Example 2. Query/QueryHit/Push routing</b>
+      </p>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2><a name="t5"></a>5. File Downloads</h2>
+    <blockquote>
+      <p>
+        Once a servent receives a QueryHit descriptor, it may initiate the
+        direct download of one of the files described by the descriptor&#8217;s
+        Result Set. Files are downloaded out-of-network i.e. a direct connection
+        between the source and target servent is established in order to perform
+        the data transfer. File data is never transferred over the Gnutella
+        network.
+      </p>
+      <p>The file download protocol is HTTP.</p>
+      <blockquote>
+        <p>
+          Important note: This document is not normative as regard to the HTTP
+          protocol. It only defines the <b>minimum HTTP support</b> REQUIRED to
+          implement compliant servents. Any compliant HTTP/1.0 or HTTP/1.1
+          client or server MAY be used. For further reference, please
+          consult:<br />
+          [1] <b>RFC 2616</b> "Hypertext Transport Protocol - HTTP/1.1", by
+          Irvine, Gettys, Compaq, W3C, MIT &amp; al. (2<sup>nd</sup> release,
+          June 1999), Standard Track, edited by W3C, available in HTML format on
+          <a href="http://www.w3.org/Protocols/rfc2616/rfc2616.html"
+            >http://www.w3.org/Protocols/rfc2616/rfc2616.html</a
+          ><br />
+          <i
+            >This version obsoletes the previous:<br />
+            [2] RFC 2068 "Hypertext Transport Protocol - HTTP/1.1", by Fielding,
+            Irvine, MIT &amp; al. (1<sup>st</sup> release, January 1997),
+            Proposed Standard, edited by IETF.</i
+          ><br />
+          [3]<b>RFC 1945</b> "Hypertext Transport Protocol - HTTP/1.0", by
+          Berners-Lee, Fielding, Frystyk &amp; MIT/LCS (May 1996),
+          Informational, edited by IESG, available in ASCII text format on
+          <a href="http://www.ietf.org/rfc/rfc1945.txt"
+            >http://www.ietf.org/rfc/rfc1945.txt</a
+          >
+        </p>
+      </blockquote>
+      <p>
+        The servent initiating the download sends a HTTP request string of the
+        following form to the target server:
+      </p>
+      <pre>GET /get/<i>&lt;File Index&gt;</i>/<i>&lt;File Name&gt;</i>/ HTTP/1.0\r\n
+User-Agent: Gnutella/0.4\r\n <sup>(3)</sup>
+Range: bytes=<i>&lt;Start Offset&gt;</i>-\r\n
+Connection: Keep-Alive\r\n
+\r\n</pre>
+      <p>
+        where <i>&lt;File Index&gt;</i> and <i>&lt;File Name&gt;</i> are one of
+        the File Index/File Name pairs from a
+        <i>QueryHits</i> descriptor&#8217;s <i>Result Set</i>. For example, if
+        the <i>Result Set</i> from a <i>QueryHits</i> descriptor contained the
+        following <i>Result</i> entry:
+      </p>
+      <table border="1" cellspacing="0">
+        <tbody>
+          <tr>
+            <th align="left">File Index</th>
+            <td>2468</td>
+          </tr>
+          <tr>
+            <th align="left">File Size</th>
+            <td>4356789</td>
+          </tr>
+          <tr>
+            <th align="left">File Name</th>
+            <td>Foobar.mp3\x00</td>
+          </tr>
+          <tr>
+            <th align="left">Result Data</th>
+            <td>\x00</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        then a download request for the file described by this entry would be
+        initiated as follows:
+      </p>
+      <pre>
+GET /get/<b>2468</b>/<b>Foobar.mp3</b>/ HTTP/1.0\r\n
+User-Agent: Gnutella/0.4\r\n <sup>(3)</sup>
+Range: bytes=<b>0</b>-\r\n
+Connection: Keep-Alive\r\n
+\r\n</pre
+      >
+      <blockquote>
+        <p>
+          <i
+            >Note that some characters (such as spaces) in the filename may need
+            to be encoded with %hh hexadecimal sequences to comply with the URI
+            standard referred by the HTTP protocol standard.</i
+          >
+        </p>
+        <p>
+          <i
+            >Note also that the incoming HTTP version MAY be 1.1 instead of 1.0.
+            Support for HTTP/1.1 is not mandatory within servents, which can
+            still respond with the HTTP/1.0 protocol.</i
+          >
+        </p>
+        <p>
+          <i
+            >The "Connection: Keep-Alive" header MAY also be omitted in
+            HTTP/1.0, but SHOULD be present in HTTP/1.1. The "Range:" header MAY
+            also be omitted if the request specifies the full file content. Note
+            also the double CRLF sequence required at end of headers, when
+            emitting and parsing HTTP request headers.</i
+          >
+        </p>
+      </blockquote>
+      <p>
+        The server receiving this download request responds with HTTP 1.0
+        compliant headers such as:
+      </p>
+      <pre>
+HTTP/1.0 200 OK\r\n
+Server: Gnutella/0.4\r\n <sup>(3)</sup>
+Content-Type: application/binary\r\n
+Content-Length: <b>4356789</b>\r\n
+\r\n</pre
+      >
+      <blockquote>
+        <p>
+          <i
+            >Note that some legacy servents may also respond with a different
+            status line (before the HTTP headers), which does not fully comply
+            to the HTTP 1.0 or 0.9 standard, but to a very deprecated legacy
+            standard, as they may omit the version suffix (this is a consequence
+            of an error in the previous revision of this document) :</i
+          >
+        </p>
+        <pre><i>HTTP 200 OK\r\n</i></pre>
+        <p>
+          <i
+            >Note also that the "Content-Type:" header may also be missing on
+            incoming requests, but all servents SHOULD emit it when uploading
+            files, for compatibility with some HTTP proxies.� Note also the
+            double CRLF sequence required at end of headers, when emitting and
+            parsing HTTP answer headers.</i
+          >
+        </p>
+      </blockquote>
+      <p>
+        The file data then follows and should be read up to, and including, the
+        number of bytes specified in the "Content-Length:" provided in the
+        server&#8217;s HTTP response.
+      </p>
+      <blockquote>
+        <p>
+          <i
+            >Note that if there's no "Content-Length:" specified, the
+            downloading servent has no other choice than HAVING TO read the file
+            data up to the detection of the end of the TCP connection, and abort
+            the download if there's a file size mismatch. So all servents SHALL
+            include this header.</i
+          >
+        </p>
+      </blockquote>
+      <p>
+        The Gnutella protocol provides support for the HTTP "Range:" parameter,
+        so that interrupted downloads may be resumed at the point at which they
+        terminated.
+      </p>
+      <blockquote>
+        <p>
+          <i
+            >If the connection does not terminate immediately when the download
+            completes, the downloading servent MAY initiate another "Range:"
+            download by emitting another HTTP GET request for the same file (the
+            uploading servent MAY elect not to honor it and return an HTTP BUSY
+            error).</i
+          >
+        </p>
+        <p>
+          <i
+            >Once the HTTP transactions are finished or if the uploading server
+            returns any error, the downloading client SHOULD immediately close
+            the connection. A fast uploading servent SHOULD keep the connection
+            open for a limited time before forcing the connection close (this
+            will avoid exhaustion of available socket system control blocks on
+            fast servents that accept many incoming requests).</i
+          >
+        </p>
+      </blockquote>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2><a name="t6"></a>6. Firewalled Servents</h2>
+    <blockquote>
+      <p>
+        It is not always possible to establish a direct connection to a Gnutella
+        servent in an attempt to initiate a file download. The servent may, for
+        example, be behind a firewall that does not permit incoming connections
+        to its Gnutella port. If a direct connection cannot be established, the
+        servent attempting the file download may request that the servent
+        sharing the file "push" the file instead. A servent can request a file
+        push by routing a Push request back to the servent that sent the
+        QueryHit descriptor describing the target file. The servent that is the
+        target of the Push request (identified by the Servent Identifier field
+        of the Push descriptor) should, upon receipt of the Push descriptor,
+        attempt to establish a new TCP/IP connection to the requesting servent
+        (identified by the IP Address and Port fields of the Push descriptor).
+        If this direct connection cannot be established, then it is likely that
+        the servent that issued the Push request is itself behind a firewall. In
+        this case, file transfer cannot take place.
+      </p>
+      <p>
+        If a direct connection can be established from the firewalled servent to
+        the servent that initiated the Push request, the firewalled servent
+        should immediately send the following:
+      </p>
+      <pre>GIV <i>&lt;File Index&gt;</i>:<i>&lt;Servent Identifier&gt;</i>/<i>&lt;File Name&gt;</i>\n\n</pre>
+      <p>
+        Where <i>&lt;File Index&gt;</i> and
+        <i>&lt;Servent Identifier&gt;</i> are the values of the
+        <i>File Index</i> and <i>Servent Identifier</i> fields respectively from
+        the Push request received, and <i>&lt;File Name&gt;</i> is the name of
+        the file in the local file table whose file index number is
+        <i>&lt;File Index&gt;</i>. The servent receiving the <i>GIV</i> request
+        header (i.e. the Push requester) should extract the
+        <i>&lt;File Index&gt;</i> and <i>&lt;File Name&gt;</i> fields from the
+        header and construct an <i>HTTP GET</i> request of the following form:
+      </p>
+      <pre>GET /get/<i>&lt;File Index&gt;</i>/<i>&lt;File Name&gt;</i>/ HTTP/1.0\r\n
+User-Agent: Gnutella/0.4\r\n <sup>(3)</sup>
+Range: bytes=0-\r\n
+Connection: Keep-Alive\r\n
+\r\n</pre>
+      <p>
+        The remainder of the file download process is identical to that
+        described in the section entitled "File Downloads" above.
+      </p>
+      <dl compact>
+        <hr align="left" size="1" width="50%" />
+        <dt><sup>(3)</sup></dt>
+        <dd>
+          The allowable values of the User-Agent string are defined by the HTTP
+          standard. Servent developers cannot make any assumptions about the
+          value here. The use of &#8216;Gnutella&#8217; is for illustration
+          purposes only.
+        </dd>
+      </dl>
+    </blockquote>
+    <hr align="left" size="1" />
+    <h2><a name="tA"></a>Appendix: Gnutella Protocol Extensions</h2>
+    <blockquote>
+      <h3><a name="tA-1"></a>A.1. Extended Query Hit Descriptor (EQHD)</h3>
+      <blockquote>
+        <p>(Description Updated 03/15/2001)</p>
+        <h4><a name="tA-1-1"></a>A.1.1. EQHD common format</h4>
+        <blockquote>
+          <p>
+            First introduced by BearShare v1.3.0, the <i>Extended </i
+            ><i>QueryHits</i> Descriptor extends the original Gnutella
+            <i>QueryHits</i> descriptor by placing extra data between the last
+            double-nul terminated filename of the <i>Result Set</i> and the
+            <i>Servent Identifier</i>. An <i>Extended QueryHit</i> descriptor
+            (0x81) will have the following payload structure:
+          </p>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Number of Hits</td>
+                <td align="center">Port</td>
+                <td align="center">IP Address</td>
+                <td align="center">Speed</td>
+                <td align="center">Result Set</td>
+                <td align="center"><i>Optional QHD Data</i></td>
+                <td align="center">Servent Identifier</td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0</td>
+                <td align="center">1...2</td>
+                <td align="center">3...6</td>
+                <td align="center">7...10</td>
+                <td align="center">11&#8230;N</td>
+                <td align="center"><i>N+1...L-17</i></td>
+                <td align="center">L-16...L-1</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            One way for developers to handle the <i>QHD Data</i> extensions is
+            to
+          </p>
+          <p>
+            1) Be aware that an incoming <i>QueryHits</i> descriptor may or may
+            not contain additional data after the <i>Result Set</i> and before
+            the <i>Servent Identifier</i>. No complete specification exists for
+            the number of bytes that may be present, or their content. Use the
+            <i>Payload Length</i> field and count bytes as they are read from
+            the stream to determine whether the extension bytes are present.
+          </p>
+          <p>
+            2) If they are, read them from the stream, leaving 16 bytes for the
+            <i>Servent Identifier</i>.
+          </p>
+          <p>3) Process the <i>QueryHit</i> as usual.</p>
+        </blockquote>
+        <h4><a name="tA-1-2"></a>A.1.2. BearShareTrailer EQHD</h4>
+        <blockquote>
+          <p>
+            The <i>BearShareTrailer</i> field stored in the
+            <i>Optional QHD Data</i> field has the following structure:
+          </p>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">Trailer Vendor Code</td>
+                <td align="center">Open Data Size</td>
+                <td align="center">Open Data</td>
+                <td align="center"><i>Optional Private Data</i></td>
+                <td align="center"><i>Optional Signature Binary Data</i></td>
+                <td align="center"><i>Optional Signature Size</i></td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...3</td>
+                <td align="center">4...5</td>
+                <td align="center">6...6+n-1</td>
+                <td align="center"><i>6+n...L-17-N-(s+1)</i></td>
+                <td align="center"><i>L-17-N-s...L-17-N-1</i></td>
+                <td align="center"><i>L-17-N</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <dl>
+            <dt><b>Vendor Code</b></dt>
+            <dd>
+              Four case-insensitive characters representing a vendor code. (Some
+              recognized vendor codes are listed in section
+              <a href="#tA-1-3">A.1.3</a>).
+            </dd>
+            <dd></dd>
+            <dt><b>Open Data Size</b></dt>
+            <dd>Contains the length (in bytes) of the Open Data field.</dd>
+            <dt><b>Open Data</b></dt>
+            <dd>
+              Contains two 1-byte flags fields with the following layout and in
+              the specified order:
+            </dd>
+            <dd>
+              <table border="1" cellspacing="0">
+                <tbody>
+                  <tr>
+                    <th>Fields</th>
+                    <td align="center">Flag1</td>
+                    <td align="center">Flag2</td>
+                    <td align="center"><i>Optional XML Data Length</i></td>
+                    <td align="center"><i>Optional XML Data</i></td>
+                    <td align="center"><i>Optional Vendor Data</i></td>
+                  </tr>
+                  <tr>
+                    <th>Byte offset</th>
+                    <td align="center">0</td>
+                    <td align="center">1</td>
+                    <td align="center"><i>2...3</i></td>
+                    <td align="center"><i>4...4+s-1</i></td>
+                    <td align="center"><i>4+s...n-1</i></td>
+                  </tr>
+                </tbody>
+              </table>
+              <dl>
+                <dt><b>Flag1</b></dt>
+                <dd>
+                  <table border="1" cellspacing="0">
+                    <tbody>
+                      <tr>
+                        <th>flags</th>
+                        <td align="center"><i>r</i></td>
+                        <td align="center"><i>r</i></td>
+                        <td align="center"><i>r</i></td>
+                        <td align="center">setUploadSpeed</td>
+                        <td align="center">setHaveUploaded</td>
+                        <td align="center">setBusy</td>
+                        <td align="center"><i>r</i></td>
+                        <td align="center">flagPush</td>
+                      </tr>
+                      <tr>
+                        <th>Bit number</th>
+                        <td align="center">7</td>
+                        <td align="center">6</td>
+                        <td align="center">5</td>
+                        <td align="center">4</td>
+                        <td align="center">3</td>
+                        <td align="center">2</td>
+                        <td align="center">1</td>
+                        <td align="center">0</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </dd>
+                <dd>
+                  <i>setUploadSpeed</i> = 1 if and only if the
+                  <i>flagUploadSpeed</i> flag in the <i>Flags2</i> field is
+                  meaningful.
+                </dd>
+                <dd>
+                  <i>setHaveUploaded</i> = 1 if and only if the
+                  <i>flagUploaded</i> flag in the <i>Flags2</i> field is
+                  meaningful.
+                </dd>
+                <dd>
+                  <i>setBusy</i> = 1 if and only if the <i>flagBusy</i> flag in
+                  the <i>Flags2</i> field is meaningful.
+                </dd>
+                <dd>
+                  <i>flagPush</i> = 1 if and only if the servent is firewalled
+                  or has not yet accepted an incoming connection.
+                </dd>
+                <dd><i>r</i> = reserved for future use.</dd>
+                <dt><b>Flags2</b></dt>
+                <dd>
+                  <table border="1" cellspacing="0">
+                    <tbody>
+                      <tr>
+                        <th>flags</th>
+                        <td align="center"><i>r</i></td>
+                        <td align="center"><i>r</i></td>
+                        <td align="center"><i>r</i></td>
+                        <td align="center">flagUploadSpeed</td>
+                        <td align="center">flagHaveUploaded</td>
+                        <td align="center">flagBusy</td>
+                        <td align="center"><i>r</i></td>
+                        <td align="center">setPush</td>
+                      </tr>
+                      <tr>
+                        <th>Bit number</th>
+                        <td align="center">7</td>
+                        <td align="center">6</td>
+                        <td align="center">5</td>
+                        <td align="center">4</td>
+                        <td align="center">3</td>
+                        <td align="center">2</td>
+                        <td align="center">1</td>
+                        <td align="center">0</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </dd>
+                <dd>
+                  <i>flagUploadSpeed</i> = 1 if and only if the
+                  <i>Speed</i> field of the <i>QueryHits</i> descriptor contains
+                  the highest average transfer rate (in kilobits per second) of
+                  the last 10 uploads.
+                </dd>
+                <dd>
+                  <i>flagHaveUploaded</i> = 1 if and only if the servent has
+                  successfully uploaded at least one file.
+                </dd>
+                <dd>
+                  <i>flagBusy</i> = 1 if and only if the all of the
+                  servent&#8217;s upload slots are currently full.
+                </dd>
+                <dd>
+                  <i>setPush</i> = 1 if and only if the <i>flagPush</i> flag in
+                  the <i>Flags1</i> field is meaningful.
+                </dd>
+                <dd><i>r</i> = reserved for future use.</dd>
+                <dt>
+                  <b><i>Optional XML Data Length</i></b>
+                </dt>
+                <dd>
+                  This little-endian 16-bit field, introduced in LimeWire 1.8
+                  and later, includes the length of the Optional XML Data field
+                  that may follow it. It must be set to 0 if no
+                  <i>XML Data</i> is used but other
+                  <i>Optional Vendor Data</i> must be used.
+                </dd>
+                <dt>
+                  <i><b>Optional XML Data</b></i>
+                </dt>
+                <dd>
+                  This optional field contains XML encoded meta-data for the
+                  files referred to by the Result structures of the QueryHits.
+                  The presence of textual XML can be inferred to by the leading
+                  byte which SHOULD be an ASCII "&lt;" for an XML declaration,
+                  comment or root element. A leading non-printable ASCII
+                  character implies that the field is not encoded with textual
+                  XML, but uses some other binary format.
+                </dd>
+                <dt>
+                  <i><b>Optional Vendor Data</b></i>
+                </dt>
+                <dd>
+                  This optional field other vendor-specific data for the
+                  <i>QueryHits</i> Descriptor. It may use binary format and it
+                  is bound by the Value of the <i>Open Data Size</i> field. This
+                  vendor-specific field is deprecated in favor of set of
+                  GGEP-style extensions in the
+                  <i>Optional Private Data</i> field described below.
+                </dd>
+              </dl>
+            </dd>
+            <dt>
+              <b><i>Optional Private Data</i></b>
+            </dt>
+            <dd>
+              Undocumented BearShare-specific data. The length of this field can
+              be determined as follows:
+            </dd>
+            <dd>
+              <pre><i>&lt;QueryHit Descriptor Payload Size&gt;</i> - ( <i>&lt;Open Data Size&gt;</i> + 4 + 1 ).</pre>
+            </dd>
+            <dd>
+              For interoperability with many newer servents, this field SHOULD
+              NOT start with the magic byte 0xC3 or include the magic bytes
+              sequence (0x1C, 0xC3) that delimits GGEP extensions. This field is
+              deprecated in favor of sets of GGEP extensions, which allow using
+              extensions from multiple vendors, stored in this Private Data
+              field. In that case, the set of GGEP extension is self delimited,
+              and strictly bound to the above size limit.
+            </dd>
+            <dt>
+              <b><i>Optional Signature Binary Data</i></b>
+            </dt>
+            <dd>
+              Undocumented BearShare-specific data used to sign QueryHits
+              descriptors against fake hits coming from malicious servents. This
+              field always comes after all extensions in the optional Private
+              Data field, and is only present if the next field is also present,
+              and its size is determined by the last field:
+            </dd>
+            <dt>
+              <b><i>Optional Signature Size</i></b>
+            </dt>
+            <dd>
+              BearShare servents using the authentication mechanism can add this
+              field and the previous one to sign QueryHits descriptors so that
+              fake QueryHits can be detected, and it may include other
+              BearShare-specific information. This extension is still
+              experimental. This field is a single unsigned byte, it indicates
+              the size of the previous Signature Binary Data field. For
+              compatibility, the signature field will always follow a set of
+              GGEP extensions that must be terminated by a NUL GGEP extension.
+              There should be only one set of GGEP extensions in the Private
+              Data.
+            </dd>
+          </dl>
+        </blockquote>
+        <h4><a name="tA-1-3"></a>A.1.3. Vendor codes</h4>
+        <blockquote>
+          <p>
+            These codes are used in several extensions of the Gnutella protocol.
+            They were first introduced to be used in the BearShareTrailer EQHD,
+            but they are now commonly used in other extensions as well.
+          </p>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th valign="top">Vendor Code</th>
+                <th valign="top">Application Name <sup>(4)</sup></th>
+              </tr>
+              <tr>
+                <td valign="top"><b>BEAR</b> <sup>(5)</sup></td>
+                <td valign="top">BearShare</td>
+              </tr>
+              <tr>
+                <td valign="top">CULT <sup>(5)</sup></td>
+                <td valign="top">Cultiv8r (Emixode)</td>
+              </tr>
+              <tr>
+                <td valign="top"><b>GNUC</b> <sup>(5)</sup></td>
+                <td valign="top">Gnucleus</td>
+              </tr>
+              <tr>
+                <td valign="top"><b>GTKG</b> <sup>(5)</sup></td>
+                <td valign="top">Gtk-Gnutella</td>
+              </tr>
+              <tr>
+                <td valign="top"><b>LIME</b> <sup>(5)</sup></td>
+                <td valign="top">LimeWire</td>
+              </tr>
+              <tr>
+                <td valign="top"><b>RAZA</b> <sup>(5)</sup></td>
+                <td valign="top">Shareaza</td>
+              </tr>
+              <tr>
+                <td valign="top"><b>SWAP</b> <sup>(5)</sup></td>
+                <td valign="top">Swapper</td>
+              </tr>
+              <tr>
+                <td valign="top"><b>ACQX</b> <sup>(6)</sup></td>
+                <td valign="top"><i>Acquisition</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><b>ARES</b> <sup>(6)</sup></td>
+                <td valign="top"><i>Ares (SoftGap)</i></td>
+              </tr>
+              <tr>
+                <td valign="top">MACT <sup>(6)</sup></td>
+                <td valign="top"><i>Mactella</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><b>MMMM</b> <sup>(6)</sup></td>
+                <td valign="top"><i>Morpheus (v2.0+)</i></td>
+              </tr>
+              <tr>
+                <td valign="top">MNAP <sup>(6)</sup></td>
+                <td valign="top"><i>MyNapster</i></td>
+              </tr>
+              <tr>
+                <td valign="top">MRPH <sup>(6)</sup></td>
+                <td valign="top"><i>Morpheus (Old)</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><b>MUTE</b> <sup>(6)</sup></td>
+                <td valign="top"><i>Mutella</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><b>NAPS</b> <sup>(6)</sup></td>
+                <td valign="top"><i>NapShare</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><b>PHEX</b> <sup>(6)</sup></td>
+                <td valign="top"><i>Phex</i></td>
+              </tr>
+              <tr>
+                <td valign="top">QTEL <sup>(6)</sup></td>
+                <td valign="top"><i>Qtella</i></td>
+              </tr>
+              <tr>
+                <td valign="top">TGWC <sup>(6)</sup></td>
+                <td valign="top"><i>???</i></td>
+              </tr>
+              <tr>
+                <td valign="top">TOAD <sup>(6)</sup></td>
+                <td valign="top"><i>ToadNode</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><b>XOLO</b> <sup>(6)</sup></td>
+                <td valign="top"><i>Xolox</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>FISH</i></td>
+                <td valign="top"><i>PEERanha</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>GNOT</i></td>
+                <td valign="top"><i>Gnotella</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>GNUT</i></td>
+                <td valign="top"><i>Gnut</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>GNEW</i></td>
+                <td valign="top"><i>Gnewtellium</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>HSLG</i></td>
+                <td valign="top"><i>Hagelslag</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>OCFG</i></td>
+                <td valign="top"><i>OpenCola</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>OPRA</i></td>
+                <td valign="top"><i>Opera</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>SALM</i></td>
+                <td valign="top"><i>Salmonella</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>SNUT</i></td>
+                <td valign="top"><i>SwapNut</i></td>
+              </tr>
+              <tr>
+                <td valign="top"><i>ZIGA</i></td>
+                <td valign="top"><i>Ziga</i></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            <sup>(4)</sup> More information on these applications can be found
+            at
+            <a href="http://www.gnutelliums.com/">http://www.gnutelliums.com/</a
+            >.<br />
+            <sup>(5)</sup> Servents that currently are very frequently found on
+            the GNet, and using their own core engine.<br />
+            <sup>(6)</sup> Servents that currently are commonly found on the
+            GNet, and/or using a core engine from another vendor.<br />
+            Vendors should register their peer code on the Database section of
+            the following forum
+            <a href="http://groups.yahoo.com/the_gdf/database/"
+              >http://groups.yahoo.com/the_gdf/</a
+            >
+            where the protocol status and its revisions and extensions are
+            discussed. This list only includes servents which registered with a
+            released and active status.
+          </p>
+        </blockquote>
+      </blockquote>
+      <h3><a name="tA-2"></a>A.2. Extended Result Data extensions</h3>
+      <blockquote>
+        <h4><a name="tA-2-1"></a>A.2.1. Extended Result structure</h4>
+        <blockquote>
+          <p>
+            An extended Result Structure contains additional
+            <i>Optional Result Data</i> between the two NUL terminators:
+          </p>
+          <table border="1" cellspacing="0">
+            <tbody>
+              <tr>
+                <th align="center">Fields</th>
+                <td align="center">File Index</td>
+                <td align="center">File Size</td>
+                <td align="center">Shared File Name</td>
+                <td align="center">NUL (0x0) Terminator</td>
+                <td align="center"><i>Optional Result�Data</i></td>
+                <td align="center">NUL (0x0) Terminator</td>
+              </tr>
+              <tr>
+                <th align="center">Byte offset</th>
+                <td align="center">0...3</td>
+                <td align="center">4...7</td>
+                <td align="center">8...7+K</td>
+                <td align="center">8+K</td>
+                <td align="center"><i>9+K...R-2</i></td>
+                <td align="center">R-1</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Some servents may process extended <i>QueryHits</i> descriptors
+            without adverse consequences by simply disregarding data between
+            nuls. Others may, upon not finding an element of the result
+            terminated as expected, improperly read the descriptor. Once
+            misread, it may be subsequently mishandled, and the connection that
+            delivered it may be disconnected.
+          </p>
+          <p>
+            The <i>Optional Result Data</i> field MAY NOT include any binary NUL
+            byte. But for interoperability with other extensions, they may not
+            include an ASCII FS (0x1c=28) character, which is used now to
+            delimit multiple extensions in this field, and each extension should
+            start with at least a magic byte characteristic of its content type.
+          </p>
+          <p>
+            This extension mechanism in this field using the FS separator is
+            known as the Generic Extension Mechanism (GEM). Since the
+            introduction of GGEP, no GEM extension in that field should start
+            with a byte 0xC3 that delimits the start of a set of GGEP binary
+            extensions, encoded with COBS (to avoid the presence of NUL bytes in
+            the binary extension). IF GGEP extensions are present, no other GEM
+            extension may follow it (the presence of a FS byte in the
+            COBS-encoded GGEP set must not be detected as a new GEM extension).
+          </p>
+        </blockquote>
+        <h4><a name="tA-2-2"></a>A.2.2. Gnotella Result Data extension</h4>
+        <blockquote>
+          <p>
+            Versions of the Gnotella client at least as early as 0.73 (released
+            July 30, 2000) place extra data in <i>QueryHit</i> descriptors.
+            According to the Gnutella 0.4 protocol specification, each element
+            of the <i>Result Set</i> in a <i>QueryHit</i> descriptor is
+            terminated by a double-nul. Gnotella may place extra data between
+            the two nuls.
+          </p>
+          <p>
+            Although its exact layout is unknown, this data represents the
+            bit-rate, sample rate, and playing time of the MP3 file described by
+            the result set entry. If the file described by the result set entry
+            is not an MP3 file, there is no data placed between the nuls.
+          </p>
+          <p>
+            This extension is now deprecated, as it lacks a properly defined
+            structure with a recognizable content type.
+          </p>
+        </blockquote>
+        <h4>
+          <a name="tA-2-3"></a>A.2.3. LimeWire Meta-Data Result Data extension
+        </h4>
+        <blockquote>
+          <p>
+            Versions of LimeWire 1.8 or later can include meta-data for each
+            Result inserted in a <i>QueryHits</i> descriptor. This meta-data
+            consists in XML encoded items, and they are recognizable by their
+            leading byte which is an ASCII "&lt;" that starts an XML
+            declaration, or XML comment, or the starting tag of the XML root
+            element.
+          </p>
+          <p>
+            The root element MUST NOT be a simple text element, but an
+            explicitly named element that encapsulates all the XML document,
+            which must contain a element for each tagged set of meta-data, whose
+            name qualifies the XML schema definition used to create each
+            meta-data field, encoded as indicated in the corresponding schema
+            (for now, all meta-data information item is encoded as a separate
+            sub-element, instead of attributes of the container element
+            qualifying the schema).
+          </p>
+          <p>
+            This XML extension has no defined length, but consists only in
+            printable ASCII bytes and bytes in the range 0x80 to 0xFE using the
+            default UTF-8 encoding or another character encoding declared in a
+            leading XML declaration; this extension is terminated on the first
+            ASCII FS or NUL character that follows it.
+          </p>
+          <p>
+            <b>Important interoperability notice</b>: The
+            <a href="http://www.w3.org/TR/REC-xml">XML standard</a> (see section
+            2.8 of the XML 1.0 standard related to the "Prolog and Document Type
+            Declaration", and section 4.3.3 for "Character Encoding in
+            Entities") implies that the "<b>UTF-8</b>" charset is
+            <b>implied by default</b> in all <b>conforming</b> XML documents, in
+            absence of an explicit &lt;?xml encoding="..."?&gt; declaration at
+            the beginning of the document (or without an leading "byte order
+            mark" which may indicate "UTF-16", or
+            "<code>ISO-10646-UCS-4"</code>). Also the default XML version is
+            "1.0". Typical servents won't send this XML declaration.
+          </p>
+          <p>
+            So the "ISO-8859-1" character set MUST NOT be implied, but the 7-bit
+            "US-ASCII" encoding can be used without any explicit declaration, as
+            it is a common subset of both the "ISO-8859-1" and "UTF-8"
+            encodings. Forgetting this conformance rule may simply invalidate
+            the XML meta-data which won't be parsable by classic XML parsers
+            such as Xerces for C or Java, or MSXML for Windows servents (so the
+            XML meta-data will be ignored by the recipient). If an application
+            does not wish to use the UTF-8 encoding, and prefer to use a legacy
+            "ISO-8859-1" encoding for non "US-ASCII" characters, the XML
+            meta-data document MUST start with one of the following explicit
+            declarations:
+          </p>
+          <blockquote>
+            <p>
+              &lt;?xml encoding="ISO-8859-1"?&gt;<br />
+              &lt;?xml version="1.0" encoding="ISO-8859-1"?&gt;
+            </p>
+          </blockquote>
+          <p>
+            Note that this XML extension may include 0xC3 bytes &#8212; needed
+            for the UTF-8 encoding of Unicode characters in range U+00C0 to
+            U+00FF, or if the ISO-8859-1 character set is declared, for encoding
+            a "�" character (uppercase Latin letter A with tilde) &#8212; that
+            MUST NOT be interpreted as prefixing a set of GGEP extensions.
+          </p>
+          <p>
+            <b>Native encoding issues</b><b>:</b> Applications written in C/C++
+            (notably on Windows) MUST NOT assume that the system encoding is
+            necessarily based on ISO-8859-1: extended characters in the range
+            0x80 to 0x9F are NOT part of ISO-8859-1
+            <i
+              >(to use them, you'll need to encode your document with Unicode
+              and serialize it in UTF-8, or specify an explicit "windows-1252"
+              encoding)</i
+            >, and the various native Windows "ANSI" codepages may be based on
+            other ISO-8859 encodings
+            <i
+              >(notably ISO-8859-2 or ISO-8859-4 in Central Europe, ISO-8859-5
+              in Russia, ISO-8859-7 in Greece, ISO-8859-9 in Turkey, ISO-8859-8
+              in Israel, ISO-8859-6 in North Africa and Middle-East...)</i
+            >, or on other Asian standards
+            <i
+              >(Shift-JIS in Japan, KSC5601 in Korea, GBK in China and
+              Singapore, Big5 in Taiwan and Hong Kong, ISCII in India, TIS-620
+              in Thailand, VISCII in Vietnam)</i
+            >. On Windows, applications can use the "GetACP()" Win32 API to get
+            the "ANSI" codepage used on the system (for references about Windows
+            codepages see
+            <a href="http://www.microsoft.com/globaldev/reference/cphome.mspx"
+              >http://www.microsoft.com/globaldev/reference/cphome.mspx</a
+            >). Applications written in Java internally use a Unicode
+            representation for characters and strings independently of the
+            supporting platform (so characters may be present outside of the
+            ISO-8859-1 range).
+          </p>
+          <p>
+            <b>Unicode representation issues:</b> Unicode allows representing
+            some characters in different ways, with a precombined form where a
+            single codepoint represent a single character, or a decomposed form
+            where multiple codepoints represent a single character as a base
+            character and one or several combining characters. For
+            interoperability of XML, the Unicode standard mandates using the
+            canonical NFC "Normalized Form with Composed characters" in all XML
+            documents. This may be an issue for interoperability, as some system
+            APIs will return decomposed characters, but other will only operate
+            with precomposed characters in NFC form (See
+            <a href="http://www.unicode.org/reports/tr15/"
+              >http://www.unicode.org/reports/tr15/</a
+            >
+            for the Unicode Technical Report #15 about "Unicode Normalization
+            Forms", and
+            <a href="http://www.unicode.org/reports/tr20/"
+              >http://www.unicode.org/reports/tr20/</a
+            >
+            for the Unicode Technical Report #20 about "Unicode in XML and other
+            Markup Languages").
+          </p>
+          <p>
+            <b>UTF-8 serialization issues for Unicode:</b> the UTF-8 encoding
+            was initially used to serialize Unicode which used a single 16-bit
+            code unit for each codepoint. However, the Unicode codepoints are
+            now 21-bit entities (from a larger 32-bit "UCS4" set defined in
+            ISO-10646), and some Unicode characters can only be represented in
+            16-bit code units using "surrogate" pairs, with a leading high
+            surrogate in range 0xD800 to 0xDBFF, and a trailing surrogate in
+            range 0xDC00 to 0xDFFF. These surrogates are NOT characters
+            individually, so they MUST NOT be serialized to UTF-8 (using 3
+            encoding bytes for each surrogate). Instead, the surrogate pair must
+            be converted as a whole, by first converting the pair to a 21 bit
+            codepoint in range 0x10000 to 0x10FFFF, and then applying the UTF-8
+            serialization (which will return 4 encoding bytes, and not 6, for
+            the whole character). This is important for compatibility with the
+            new mandatory Chinese standard GB18030, which allocates characters
+            out of the BMP. (See
+            <a href="http://www.unicode.org/reports/tr26/"
+              >http://www.unicode.org/reports/tr26/</a
+            >
+            for details about the Unicode Technical Report #26 about
+            "Compatibility Encoding Scheme for UTF-16: 8-Bit (CESU-8)", but
+            don't use this "CESU-8" encoding representation which is not widely
+            interoperable, and don't use this representation by assuming it is
+            conforming to "UTF-8").
+          </p>
+        </blockquote>
+        <h4>
+          <a name="tA-2-4"></a>A.2.4. URI Result Data extension and URI Extended
+          Query extension
+        </h4>
+        <blockquote>
+          <p>
+            Newer versions of servents that implement the "HUGE" extended
+            protocol that enable identification of files by their content to
+            provide accurate downloads from a mesh of servents, will include a
+            URI for each Result inserted in a QueryHits descriptor.
+          </p>
+          <p>
+            An encoded URN are location independant and searchable on the
+            network. An encoded URL will allow alternate download locations or
+            download protocols.
+          </p>
+          <p>
+            URNs are recognizable by their leading byte, an ASCII "u" character
+            that starts the URN encoding scheme. URLs MAY also be used, but they
+            should only use well-known and registered schemes (such as "http:"
+            or "ftp:").
+          </p>
+          <p>
+            Servents SHOULD only generate a URI in the Optional Result Data
+            field of QueryHits Result structures only if requested to do so by
+            using an URI Extended Query Data extension. In Query descriptors, no
+            URI is inserted, only the URI encoding scheme is needed in the
+            <i>Optional Query Data</i> extension field.
+          </p>
+          <p>
+            These URI extensions have no defined length, but consist only in
+            printable ASCII bytes, and will terminate on the first ASCII FS or
+            NUL character that follows each of them in QueryHits Result
+            structures, and also by the end of the Payload of a Query
+            Descriptor.
+          </p>
+        </blockquote>
+      </blockquote>
+    </blockquote>
+    <!-- #EndEditable -->
+    <p style="text-align: center">&nbsp;</p>
+    <p style="text-align: center">&nbsp;</p>
+    <p style="text-align: center">&nbsp;</p>
+    <p style="text-align: center"></p>
+    <center>
+      <a href="../../index.html">Home </a>::<a href="../index.html">
+        Developer </a
+      >:: <a href="../../press/index.html">Press </a>::
+      <a href="../../research/index.html">Research</a> ::
+      <a href="../../servents/index.html">Servents</a>
+      <p>
+        <a href="http://sourceforge.net">
+          <img
+            src="http://sourceforge.net/sflogo.php?group_id=37004&amp;type=5"
+            width="210"
+            height="62"
+            border="0"
+            alt="SourceForge.net Logo"
+        /></a>
+      </p>
+    </center>
+  </body>
+  <!-- #EndTemplate -->
+</html>

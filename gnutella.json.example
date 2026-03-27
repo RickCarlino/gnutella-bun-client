@@ -1,0 +1,39 @@
+{
+  "config": {
+    "listenHost": "0.0.0.0",
+    "listenPort": 6346,
+    "advertisedHost": "127.0.0.1",
+    "advertisedPort": 6346,
+    "sharedDir": "./shared",
+    "downloadsDir": "./downloads",
+    "maxConnections": 8,
+    "connectTimeoutMs": 5000,
+    "pingIntervalSec": 60,
+    "reconnectIntervalSec": 15,
+    "rescanSharesSec": 30,
+    "routeTtlSec": 600,
+    "seenTtlSec": 600,
+    "maxPayloadBytes": 1048576,
+    "maxTtl": 7,
+    "defaultPingTtl": 1,
+    "defaultQueryTtl": 3,
+    "advertisedSpeedKBps": 512,
+    "downloadTimeoutMs": 15000,
+    "pushWaitMs": 15000,
+    "maxResultsPerQuery": 50,
+    "peers": ["127.0.0.1:6346"],
+    "userAgent": "GnutellaBun/0.6",
+    "queryRoutingVersion": "0.1",
+    "enableCompression": true,
+    "enableQrp": true,
+    "enableBye": true,
+    "enablePongCaching": true,
+    "enableGgep": true,
+    "advertiseUltrapeer": false,
+    "serveUriRes": true,
+    "vendorCode": "GBUN"
+  },
+  "state": {
+    "serventIdHex": "00112233445566778899aabbccddeeff"
+  }
+}
