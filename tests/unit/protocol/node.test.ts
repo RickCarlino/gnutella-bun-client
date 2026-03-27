@@ -1130,6 +1130,102 @@ describe("protocol node", () => {
     });
   });
 
+  test("start schedules recurring work and reports maintenance failures", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      const events: Array<{
+        type: string;
+        operation?: string;
+        message?: string;
+      }> = [];
+      const node = new GnutellaServent(configPath, doc, {
+        onEvent: (event) =>
+          events.push(event as unknown as (typeof events)[number]),
+      });
+      const scheduled: Array<{ ms: number; fn: () => void }> = [];
+      const pingTtls: number[] = [];
+      let refreshCalls = 0;
+      let reconnectCalls = 0;
+      let saveCalls = 0;
+      let startServerCalls = 0;
+      let pruneCalls = 0;
+
+      (node as any).refreshShares = async () => {
+        refreshCalls += 1;
+        if (refreshCalls > 1) throw new Error("rescan failed");
+      };
+      (node as any).startServer = async () => {
+        startServerCalls += 1;
+      };
+      (node as any).schedule = (ms: number, fn: () => void) => {
+        scheduled.push({ ms, fn });
+      };
+      (node as any).connectKnownPeers = async () => {
+        reconnectCalls += 1;
+        throw new Error(
+          reconnectCalls === 1
+            ? "initial reconnect failed"
+            : "scheduled reconnect failed",
+        );
+      };
+      (node as any).sendPing = (ttl: number) => {
+        pingTtls.push(ttl);
+      };
+      (node as any).pruneMaps = () => {
+        pruneCalls += 1;
+      };
+      (node as any).save = async () => {
+        saveCalls += 1;
+        throw new Error("save failed");
+      };
+
+      await node.start();
+      await Promise.resolve();
+
+      expect(startServerCalls).toBe(1);
+      expect(refreshCalls).toBe(1);
+      expect(scheduled.map((entry) => entry.ms)).toEqual([
+        doc.config.rescanSharesSec * 1000,
+        5000,
+        doc.config.reconnectIntervalSec * 1000,
+        doc.config.pingIntervalSec * 1000,
+        15000,
+      ]);
+
+      for (const entry of scheduled) entry.fn();
+      await Promise.resolve();
+
+      expect(refreshCalls).toBe(2);
+      expect(reconnectCalls).toBe(2);
+      expect(pruneCalls).toBe(1);
+      expect(saveCalls).toBe(1);
+      expect(pingTtls).toEqual([doc.config.defaultPingTtl]);
+
+      const maintenance = events.filter(
+        (event) => event.type === "MAINTENANCE_ERROR",
+      );
+      expect(maintenance).toEqual([
+        expect.objectContaining({
+          operation: "RECONNECT",
+          message: "initial reconnect failed",
+        }),
+        expect.objectContaining({
+          operation: "SHARE_RESCAN",
+          message: "rescan failed",
+        }),
+        expect.objectContaining({
+          operation: "RECONNECT",
+          message: "scheduled reconnect failed",
+        }),
+        expect.objectContaining({
+          operation: "SAVE",
+          message: "save failed",
+        }),
+      ]);
+    });
+  });
+
   test("emits inbound peer message events for received descriptors", async () => {
     await withTempDir(async (dir) => {
       const configPath = path.join(dir, "protocol.json");
