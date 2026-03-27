@@ -140,6 +140,7 @@ async function runCommand(
       );
       return true;
     case "query":
+    case "search":
       node.sendQuery(args.slice(1).join(" "));
       return true;
     case "download":
