@@ -71,6 +71,7 @@ function makePeer(label = "1.2.3.4:6346") {
       parts: new Map<number, Buffer>(),
     },
     lastPingAt: 0,
+    connectedAt: Date.now(),
   };
 }
 
@@ -79,45 +80,46 @@ describe("protocol config and public helpers", () => {
     await withTempDir(async (dir) => {
       const configPath = path.join(dir, "nested", "protocol.json");
       const created = await loadDoc(configPath);
+      const createdRuntime = new GnutellaServent(
+        configPath,
+        created,
+      ).config();
 
-      expect(created.config.sharedDir).toBe(
-        path.join(dir, "nested", "shared"),
-      );
-      expect(created.config.downloadsDir).toBe(
-        path.join(dir, "nested", "downloads"),
-      );
+      expect(created.config.dataDir).toBe(path.join(dir, "nested"));
+      expect(created.config.advertisedHost).toBeUndefined();
+      expect(created.config.advertisedPort).toBeUndefined();
       await expect(fs.stat(configPath)).resolves.toBeDefined();
       await expect(
-        fs.stat(created.config.sharedDir),
-      ).resolves.toBeDefined();
-      await expect(
-        fs.stat(created.config.downloadsDir),
+        fs.stat(createdRuntime.downloadsDir),
       ).resolves.toBeDefined();
 
-      created.config.peers = [
-        "1.2.3.4:6346",
-        "1.2.3.4:6346",
-        "9.9.9.9:6346",
-      ];
+      created.state.peers = {
+        "1.2.3.4:6346": 0,
+        "9.9.9.9:6346": 123.9,
+        invalid: 55,
+      } as never;
       created.state.serventIdHex = "not-a-valid-id";
 
       await writeDoc(configPath, created);
-      await fs.rm(created.config.sharedDir, {
+      await fs.rm(createdRuntime.downloadsDir, {
         recursive: true,
         force: true,
       });
 
       const loaded = await loadDoc(configPath);
-      expect(loaded.config.peers).toEqual([
-        "1.2.3.4:6346",
-        "9.9.9.9:6346",
-      ]);
+      const loadedRuntime = new GnutellaServent(
+        configPath,
+        loaded,
+      ).config();
+      expect(loaded.state.peers).toEqual({
+        "9.9.9.9:6346": 123,
+        "1.2.3.4:6346": 0,
+      });
+      expect(loaded.config.dataDir).toBe(path.join(dir, "nested"));
+      expect(loaded.config.advertisedHost).toBeUndefined();
       expect(loaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
       await expect(
-        fs.stat(loaded.config.sharedDir),
-      ).resolves.toBeDefined();
-      await expect(
-        fs.stat(loaded.config.downloadsDir),
+        fs.stat(loadedRuntime.downloadsDir),
       ).resolves.toBeDefined();
     });
   });
@@ -145,6 +147,40 @@ describe("protocol config and public helpers", () => {
 
       expect(loaded.state).toEqual({
         serventIdHex: "ab".repeat(16),
+        peers: {},
+      });
+    });
+  });
+
+  test("migrates legacy peer arrays into the unified peer state map", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      await fs.writeFile(
+        configPath,
+        `${JSON.stringify(
+          {
+            config: {
+              peers: ["1.2.3.4:6346", "9.9.9.9:6346"],
+            },
+            state: {
+              serventIdHex: "ab".repeat(16),
+              knownPeers: ["7.7.7.7:7777"],
+              goodPeers: ["8.8.8.8:8888"],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const loaded = await loadDoc(configPath);
+
+      expect(loaded.state.peers).toEqual({
+        "8.8.8.8:8888": 0,
+        "7.7.7.7:7777": 0,
+        "9.9.9.9:6346": 0,
+        "1.2.3.4:6346": 0,
       });
     });
   });
@@ -248,7 +284,10 @@ describe("protocol config and public helpers", () => {
 
       expect(events).toEqual(["MAINTENANCE_ERROR"]);
       expect(node.peerCount()).toBe(0);
-      expect(node.config()).toBe(doc.config);
+      expect(node.config()).toMatchObject({
+        dataDir: dir,
+        downloadsDir: path.join(dir, "downloads"),
+      });
 
       node.dialing.add("1.2.3.4:6346");
       expect(node.peerDialState("1.2.3.4", 6346)).toBe("dialing");

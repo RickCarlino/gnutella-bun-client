@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  displayResultCount,
   errMsg,
   parseCli,
   printPeers,
@@ -11,9 +12,7 @@ import {
 } from "../../../src/cli_shared";
 import type { CliNode } from "../../../src/types";
 
-function makeNode(
-  overrides: Partial<CliNode> = {},
-): CliNode {
+function makeNode(overrides: Partial<CliNode> = {}): CliNode {
   return {
     getPeers: () => [],
     getResults: () => [],
@@ -44,13 +43,11 @@ describe("cli_shared", () => {
           outbound: false,
         },
       ],
-      getShares: () => [
-        { index: 1, size: 123, rel: 'folder/"song".mp3' },
-      ],
+      getShares: () => [{ index: 1, size: 123, rel: 'folder/"song".mp3' }],
       getStatus: () => ({
         peers: 2,
         shares: 1,
-        results: 0,
+        results: 1234,
         knownPeers: 9,
       }),
     });
@@ -66,7 +63,7 @@ describe("cli_shared", () => {
     printResults(makeNode(), (msg) => logs.push(msg));
 
     expect(logs).toEqual([
-      "peers=2 shares=1 results=0 knownPeers=9",
+      "peers=2 shares=1 results=999 knownPeers=9",
       "no peers",
       "1.2.3.4:6346 1.2.3.4:6346 outbound",
       "5.6.7.8:6346 5.6.7.8:6346 inbound",
@@ -112,11 +109,19 @@ describe("cli_shared", () => {
           fileName: "12345678901234567890123Xabcdefghijklmnopqrstuvw",
           serventIdHex: "dd".repeat(16),
         },
+        {
+          resultNo: 21,
+          remoteHost: "7.7.7.7",
+          remotePort: 6346,
+          fileSize: 3758096384,
+          fileName: "giant.iso",
+          serventIdHex: "ee".repeat(16),
+        },
       ],
       getStatus: () => ({
         peers: 0,
         shares: 0,
-        results: 4,
+        results: 5,
         knownPeers: 0,
       }),
     });
@@ -125,14 +130,23 @@ describe("cli_shared", () => {
 
     expect(logs).toEqual([
       [
-        "No  File                                                Size  IP",
-        "--  ------------------------------------------------  ------  --------",
-        " 2  alpha.txt                                            99B  9.8.7.6",
-        " 7  beta file.bin                                     2,048B  1.2.3.4",
-        " 8  12345678901234567890123..abcdefghijklmnopqrstuvw  7,777B  8.8.8.8",
-        "12  zz-top.bin                                        1,200B  10.0.0.2",
+        "No  File                                               Size  IP",
+        "--  ------------------------------------------------  -----  --------",
+        " 2  alpha.txt                                           99B  9.8.7.6",
+        " 7  beta file.bin                                       2KB  1.2.3.4",
+        " 8  12345678901234567890123..abcdefghijklmnopqrstuvw  7.6KB  8.8.8.8",
+        "12  zz-top.bin                                        1.2KB  10.0.0.2",
+        "21  giant.iso                                         3.5GB  7.7.7.7",
       ].join("\n"),
     ]);
+  });
+
+  test("caps displayed result counts at 999", () => {
+    expect(displayResultCount(-5)).toBe(0);
+    expect(displayResultCount(17)).toBe(17);
+    expect(displayResultCount(999)).toBe(999);
+    expect(displayResultCount(1000)).toBe(999);
+    expect(displayResultCount(1234.9)).toBe(999);
   });
 
   test("parses CLI args with config overrides and queued exec commands", () => {

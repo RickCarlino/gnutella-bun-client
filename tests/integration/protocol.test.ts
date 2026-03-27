@@ -10,8 +10,9 @@ import {
   loadDoc,
   writeDoc,
 } from "../../src/protocol";
+import { withFakeNet } from "../helpers/fake_net";
 import { sleep } from "../../src/shared";
-import type { GnutellaEvent } from "../../src/types";
+import type { GnutellaEvent, RuntimeConfig } from "../../src/types";
 
 async function withTempDir<T>(
   fn: (dir: string) => Promise<T>,
@@ -91,7 +92,6 @@ type MeshNodeName = "A" | "B" | "C";
 type MeshNode = {
   name: MeshNodeName;
   configPath: string;
-  sharedDir: string;
   downloadsDir: string;
   listenPort: number;
   advertisedPort: number;
@@ -109,7 +109,7 @@ async function writeShare(
   rel: string,
   contents: string,
 ): Promise<void> {
-  const abs = path.join(node.sharedDir, rel);
+  const abs = path.join(node.downloadsDir, rel);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, contents, "utf8");
 }
@@ -128,6 +128,23 @@ function newResults(node: MeshNode, fromIndex: number) {
   return node.node.getResults().slice(fromIndex);
 }
 
+function overrideRuntimeConfig(
+  node: GnutellaServent,
+  patch: Partial<RuntimeConfig>,
+): void {
+  const original = node.config.bind(node);
+  (node as unknown as { config: () => RuntimeConfig }).config = () => ({
+    ...original(),
+    ...patch,
+  });
+}
+
+function peerState(
+  entries: Array<[string, number]>,
+): Record<string, number> {
+  return Object.fromEntries(entries);
+}
+
 async function createMeshNode(
   root: string,
   name: MeshNodeName,
@@ -141,43 +158,23 @@ async function createMeshNode(
 ): Promise<MeshNode> {
   const dir = path.join(root, name.toLowerCase());
   const configPath = path.join(dir, "protocol.json");
-  const sharedDir = path.join(dir, "shared");
   const downloadsDir = path.join(dir, "downloads");
 
-  await fs.mkdir(sharedDir, { recursive: true });
   await fs.mkdir(downloadsDir, { recursive: true });
   for (const [rel, contents] of Object.entries(options.shares)) {
-    const abs = path.join(sharedDir, rel);
+    const abs = path.join(downloadsDir, rel);
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, contents, "utf8");
   }
 
   const doc = defaultDoc(configPath);
+  const nowSec = Math.floor(Date.now() / 1000);
   doc.config.listenHost = "127.0.0.1";
   doc.config.listenPort = options.listenPort;
   doc.config.advertisedHost = "127.0.0.1";
   doc.config.advertisedPort = options.advertisedPort;
-  doc.config.sharedDir = sharedDir;
-  doc.config.downloadsDir = downloadsDir;
-  doc.config.maxConnections = 4;
-  doc.config.connectTimeoutMs = 1_000;
-  doc.config.pingIntervalSec = 3_600;
-  doc.config.reconnectIntervalSec = 3_600;
-  doc.config.rescanSharesSec = 3_600;
-  doc.config.routeTtlSec = 60;
-  doc.config.seenTtlSec = 60;
-  doc.config.defaultPingTtl = 2;
-  doc.config.defaultQueryTtl = 2;
-  doc.config.downloadTimeoutMs = 1_500;
-  doc.config.pushWaitMs = 1_500;
-  doc.config.maxResultsPerQuery = 10;
-  doc.config.advertisedSpeedKBps = options.advertisedSpeedKBps;
-  doc.config.peers = options.peers;
-  doc.config.enableCompression = false;
-  doc.config.enableQrp = false;
-  doc.config.enableBye = true;
-  doc.config.enablePongCaching = true;
-  doc.config.enableGgep = true;
+  doc.config.dataDir = dir;
+  doc.state.peers = peerState(options.peers.map((peer) => [peer, nowSec]));
 
   await writeDoc(configPath, doc);
   const loaded = await loadDoc(configPath);
@@ -185,11 +182,30 @@ async function createMeshNode(
   const node = new GnutellaServent(configPath, loaded, {
     onEvent: (event) => events.push(event),
   });
+  overrideRuntimeConfig(node, {
+    maxConnections: 4,
+    connectTimeoutMs: 1_000,
+    pingIntervalSec: 3_600,
+    reconnectIntervalSec: 3_600,
+    rescanSharesSec: 3_600,
+    routeTtlSec: 60,
+    seenTtlSec: 60,
+    defaultPingTtl: 2,
+    defaultQueryTtl: 2,
+    downloadTimeoutMs: 1_500,
+    pushWaitMs: 1_500,
+    maxResultsPerQuery: 10,
+    advertisedSpeedKBps: options.advertisedSpeedKBps,
+    enableCompression: false,
+    enableQrp: false,
+    enableBye: true,
+    enablePongCaching: true,
+    enableGgep: true,
+  });
 
   return {
     name,
     configPath,
-    sharedDir,
     downloadsDir,
     listenPort: options.listenPort,
     advertisedPort: options.advertisedPort,
@@ -270,64 +286,72 @@ async function withMesh<T>(fn: (mesh: Mesh) => Promise<T>): Promise<T> {
   });
 }
 
+async function withFakeMesh<T>(
+  fn: (mesh: Mesh) => Promise<T>,
+): Promise<T> {
+  return await withFakeNet(async () => await withMesh(fn));
+}
+
 describe("Integration suite (0.6)", () => {
   test("connects peers added while already running", async () => {
-    await withTempDir(async (root) => {
-      const [aPort, bPort] = await Promise.all([
-        getFreePort(),
-        getFreePort(),
-      ]);
-      const a = await createMeshNode(root, "A", {
-        listenPort: aPort,
-        advertisedPort: aPort,
-        advertisedSpeedKBps: 256,
-        peers: [],
-        shares: {},
-      });
-      const b = await createMeshNode(root, "B", {
-        listenPort: bPort,
-        advertisedPort: bPort,
-        advertisedSpeedKBps: 128,
-        peers: [],
-        shares: {
-          "live-connect.txt": "connected at runtime",
-        },
-      });
-
-      try {
-        await b.node.start();
-        await a.node.start();
-        expect(a.node.peerCount()).toBe(0);
-
-        await expect(
-          a.node.connectToPeer(`127.0.0.1:${bPort}`),
-        ).resolves.toEqual({
-          peer: `127.0.0.1:${bPort}`,
-          status: "connected",
+    await withFakeNet(async () => {
+      await withTempDir(async (root) => {
+        const [aPort, bPort] = await Promise.all([
+          getFreePort(),
+          getFreePort(),
+        ]);
+        const a = await createMeshNode(root, "A", {
+          listenPort: aPort,
+          advertisedPort: aPort,
+          advertisedSpeedKBps: 256,
+          peers: [],
+          shares: {},
+        });
+        const b = await createMeshNode(root, "B", {
+          listenPort: bPort,
+          advertisedPort: bPort,
+          advertisedSpeedKBps: 128,
+          peers: [],
+          shares: {
+            "live-connect.txt": "connected at runtime",
+          },
         });
 
-        await waitFor(
-          () => a.node.peerCount() === 1 && b.node.peerCount() === 1,
-          "runtime 0.6 peer connection to come online",
-        );
+        try {
+          await b.node.start();
+          await a.node.start();
+          expect(a.node.peerCount()).toBe(0);
 
-        const before = a.node.getResults().length;
-        a.node.sendQuery("live-connect", 1);
-        await waitFor(
-          () =>
-            newResults(a, before).some(
-              (hit) => hit.fileName === "live-connect.txt",
-            ),
-          "runtime-connected 0.6 peer to answer a query",
-        );
-      } finally {
-        await Promise.allSettled([a.node.stop(), b.node.stop()]);
-      }
+          await expect(
+            a.node.connectToPeer(`127.0.0.1:${bPort}`),
+          ).resolves.toEqual({
+            peer: `127.0.0.1:${bPort}`,
+            status: "connected",
+          });
+
+          await waitFor(
+            () => a.node.peerCount() === 1 && b.node.peerCount() === 1,
+            "runtime 0.6 peer connection to come online",
+          );
+
+          const before = a.node.getResults().length;
+          a.node.sendQuery("live-connect", 1);
+          await waitFor(
+            () =>
+              newResults(a, before).some(
+                (hit) => hit.fileName === "live-connect.txt",
+              ),
+            "runtime-connected 0.6 peer to answer a query",
+          );
+        } finally {
+          await Promise.allSettled([a.node.stop(), b.node.stop()]);
+        }
+      });
     });
   });
 
   test("routes ping/pong, refresh, and query traffic across A -> B -> C", async () => {
-    await withMesh(async ({ nodes }) => {
+    await withFakeMesh(async ({ nodes }) => {
       const { A, B, C } = nodes;
       const peerToB = A.node.getPeers()[0];
 
@@ -445,7 +469,7 @@ describe("Integration suite (0.6)", () => {
   });
 
   test("covers range downloads, direct resume, push fallback, and persisted state", async () => {
-    await withMesh(async ({ nodes, badPort }) => {
+    await withFakeMesh(async ({ nodes, badPort }) => {
       const { A, B, C } = nodes;
 
       const pingCount = eventsOfType(A, "PONG").length;
@@ -566,11 +590,11 @@ describe("Integration suite (0.6)", () => {
 
       await A.node.save();
       const saved = JSON.parse(await fs.readFile(A.configPath, "utf8"));
-      expect(saved.config.peers).toEqual(
-        expect.arrayContaining([
-          `127.0.0.1:${B.listenPort}`,
-          `127.0.0.1:${badPort}`,
-        ]),
+      expect(saved.state.peers).toEqual(
+        expect.objectContaining({
+          [`127.0.0.1:${B.listenPort}`]: expect.any(Number),
+          [`127.0.0.1:${badPort}`]: expect.any(Number),
+        }),
       );
       expect(saved.state.downloads).toBeUndefined();
       expect(A.node.getDownloads()).toEqual(

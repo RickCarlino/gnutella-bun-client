@@ -1,7 +1,29 @@
 import { RESULT_NAME_WIDTH_MAX } from "./const";
 import type { CliNode, ParsedCli } from "./types";
 
-const SIZE_FORMAT = new Intl.NumberFormat("en-US");
+const SIZE_FORMAT = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+});
+const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
+const RESULT_COUNT_DISPLAY_MAX = 999;
+
+function formatSize(bytes: number): string {
+  const safeBytes =
+    Number.isFinite(bytes) && bytes > 0 ? Math.floor(bytes) : 0;
+  let value = safeBytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < SIZE_UNITS.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${SIZE_FORMAT.format(value)}${SIZE_UNITS[unitIndex]}`;
+}
+
+export function displayResultCount(count: number): number {
+  const safeCount =
+    Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+  return Math.min(RESULT_COUNT_DISPLAY_MAX, safeCount);
+}
 
 export function errMsg(e: any): string {
   return e instanceof Error ? e.message : String(e);
@@ -13,7 +35,7 @@ export function printStatus(
 ): void {
   const status = node.getStatus();
   log(
-    `peers=${status.peers} shares=${status.shares} results=${status.results} knownPeers=${status.knownPeers}`,
+    `peers=${status.peers} shares=${status.shares} results=${displayResultCount(status.results)} knownPeers=${status.knownPeers}`,
   );
 }
 
@@ -65,7 +87,7 @@ export function printResults(
     .map((result) => ({
       resultNo: String(result.resultNo),
       fileName: result.fileName.replace(/[\r\n\t]/g, " "),
-      fileSize: `${SIZE_FORMAT.format(result.fileSize)}B`,
+      fileSize: formatSize(result.fileSize),
       remoteHost: result.remoteHost,
     }));
 

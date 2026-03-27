@@ -8,6 +8,7 @@ import {
   PROMPT_THROBBER_INTERVAL_MS,
 } from "./const";
 import {
+  displayResultCount,
   errMsg,
   parseCli,
   printPeers,
@@ -18,7 +19,7 @@ import {
 } from "./cli_shared";
 import { GnutellaServent, loadDoc, writeDoc } from "./protocol";
 import { sleep, splitArgs } from "./shared";
-import type { GnutellaEvent } from "./types";
+import type { ConnectPeerResult, GnutellaEvent } from "./types";
 
 let activeRl: readline.Interface | null = null;
 let activeNode: GnutellaServent | null = null;
@@ -37,7 +38,7 @@ function promptThrobber(): string {
 
 function promptText(node: GnutellaServent): string {
   const status = node.getStatus();
-  return `[${padNum(status.peers, 2)}/${padNum(node.config().maxConnections, 2)}${promptThrobber()}${padNum(status.results, 6)}] Gnutella> `;
+  return `[${padNum(status.peers, 2)}/${padNum(node.config().maxConnections, 2)}${promptThrobber()}${padNum(displayResultCount(status.results), 3)}] Gnutella> `;
 }
 
 function stopPromptThrobber(): void {
@@ -92,80 +93,125 @@ function printHelp(): void {
   for (const line of CLI_HELP_LINES) log(line);
 }
 
+function logConnectResult(result: ConnectPeerResult): void {
+  switch (result.status) {
+    case "connected":
+      log(`peer ${result.peer} connected`);
+      return;
+    case "already-connected":
+      log(`peer ${result.peer} already connected`);
+      return;
+    case "dialing":
+      log(`peer ${result.peer} already dialing`);
+      return;
+    case "saved":
+      log(
+        `peer ${result.peer} saved for retry; connect failed: ${result.message}`,
+      );
+      return;
+  }
+}
+
+async function handleConnectCommand(
+  node: GnutellaServent,
+  args: string[],
+): Promise<boolean> {
+  if (args.length !== 2) throw new Error("usage: connect <host:port>");
+  logConnectResult(await node.connectToPeer(args[1]));
+  return true;
+}
+
+async function handleDownloadCommand(
+  node: GnutellaServent,
+  args: string[],
+): Promise<boolean> {
+  if (args.length < 2)
+    throw new Error("usage: download <resultNo> [destPath]");
+  await node.downloadResult(Number(args[1]), args[2]);
+  return true;
+}
+
+function pingTtlFor(node: GnutellaServent, args: string[]): number {
+  return args[1] ? Number(args[1]) : node.config().defaultPingTtl;
+}
+
+type CommandHandler = (
+  node: GnutellaServent,
+  args: string[],
+) => Promise<boolean>;
+
+const COMMAND_ALIASES: Record<string, string> = {
+  exit: "quit",
+  search: "query",
+};
+
+const COMMAND_HANDLERS: Record<string, CommandHandler> = {
+  help: async () => {
+    printHelp();
+    return true;
+  },
+  status: async (node) => {
+    printStatus(node, log);
+    return true;
+  },
+  peers: async (node) => {
+    printPeers(node, log);
+    return true;
+  },
+  connect: handleConnectCommand,
+  shares: async (node) => {
+    printShares(node, log);
+    return true;
+  },
+  results: async (node) => {
+    printResults(node, log);
+    return true;
+  },
+  clear: async (node) => {
+    node.clearResults();
+    log("results cleared");
+    return true;
+  },
+  ping: async (node, args) => {
+    node.sendPing(pingTtlFor(node, args));
+    return true;
+  },
+  query: async (node, args) => {
+    node.sendQuery(args.slice(1).join(" "));
+    return true;
+  },
+  download: handleDownloadCommand,
+  rescan: async (node) => {
+    await node.refreshShares();
+    printStatus(node, log);
+    return true;
+  },
+  save: async (node) => {
+    await node.save();
+    log("saved");
+    return true;
+  },
+  sleep: async (_node, args) => {
+    await sleep(Number(args[1] || 0) * 1000);
+    return true;
+  },
+  quit: async (node) => {
+    await node.stop();
+    return false;
+  },
+};
+
 async function runCommand(
   node: GnutellaServent,
   line: string,
 ): Promise<boolean> {
   const args = splitArgs(line.trim());
   if (!args.length) return true;
-  const cmd = args[0].toLowerCase();
-  switch (cmd) {
-    case "help":
-      printHelp();
-      return true;
-    case "status":
-      printStatus(node, log);
-      return true;
-    case "peers":
-      printPeers(node, log);
-      return true;
-    case "connect": {
-      if (args.length !== 2) throw new Error("usage: connect <host:port>");
-      const result = await node.connectToPeer(args[1]);
-      if (result.status === "connected")
-        log(`peer ${result.peer} connected`);
-      else if (result.status === "already-connected")
-        log(`peer ${result.peer} already connected`);
-      else if (result.status === "dialing")
-        log(`peer ${result.peer} already dialing`);
-      else
-        log(
-          `peer ${result.peer} saved for retry; connect failed: ${result.message}`,
-        );
-      return true;
-    }
-    case "shares":
-      printShares(node, log);
-      return true;
-    case "results":
-      printResults(node, log);
-      return true;
-    case "clear":
-      node.clearResults();
-      log("results cleared");
-      return true;
-    case "ping":
-      node.sendPing(
-        args[1] ? Number(args[1]) : node.config().defaultPingTtl,
-      );
-      return true;
-    case "query":
-    case "search":
-      node.sendQuery(args.slice(1).join(" "));
-      return true;
-    case "download":
-      if (args.length < 2)
-        throw new Error("usage: download <resultNo> [destPath]");
-      await node.downloadResult(Number(args[1]), args[2]);
-      return true;
-    case "rescan":
-      await node.refreshShares();
-      printStatus(node, log);
-      return true;
-    case "save":
-      await node.save();
-      log("saved");
-      return true;
-    case "sleep":
-      await sleep(Number(args[1] || 0) * 1000);
-      return true;
-    case "quit":
-    case "exit":
-      await node.stop();
-      return false;
-    default:
-      throw new Error(`unknown command: ${cmd}`);
-  }
+  const rawCommand = args[0].toLowerCase();
+  const command = COMMAND_ALIASES[rawCommand] || rawCommand;
+  const handler = COMMAND_HANDLERS[command];
+  if (!handler) throw new Error(`unknown command: ${rawCommand}`);
+  return await handler(node, args);
 }
 
 function startRepl(

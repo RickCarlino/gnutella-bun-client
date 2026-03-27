@@ -40,7 +40,7 @@ If you want a library, this gives you:
 
 ### Search Features
 
-- local indexing of a shared directory
+- local indexing of the download directory
 - recursive share scanning
 - SHA-1 URN generation for shared files
 - keyword-based query matching
@@ -62,7 +62,6 @@ If you want a library, this gives you:
 - Query Routing Protocol
 - GGEP-aware query behavior
 - pong caching
-- ultrapeer-related handshake headers
 
 ## Quick Start
 
@@ -74,9 +73,11 @@ bun run gnutella.ts init --config gnutella.json
 
 Edit `gnutella.json`:
 
-- set `advertisedHost` and `advertisedPort` to values other peers can reach
-- add one or more bootstrap peers to `config.peers`
-- put files you want to share in `config.sharedDir`
+- add one or more bootstrap peers to `state.peers`, for example `"127.0.0.1:6346": 0`
+- put files you want to share in `<dataDir>/downloads`
+- downloads also go to `<dataDir>/downloads`
+- set `advertisedPort` if your external port differs from `listenPort`
+- optionally set `advertisedHost` only when you need to override automatic `Remote-IP` learning
 
 Run the client:
 
@@ -87,7 +88,7 @@ bun run gnutella.ts run --config gnutella.json
 The prompt shows:
 
 - connected peers
-- configured max peers
+- max peers
 - inbound activity
 - buffered result count
 
@@ -105,7 +106,7 @@ The prompt shows:
 | `ping [ttl]`                     | Send a ping.                                                  |
 | `query <terms...>`               | Search the network.                                           |
 | `download <resultNo> [destPath]` | Download one result by its local result number.               |
-| `rescan`                         | Rebuild the shared-file index.                                |
+| `rescan`                         | Rebuild the local file index.                                 |
 | `save`                           | Write the current config to disk.                             |
 | `sleep`                          | Pause during scripted runs.                                   |
 | `quit` / `exit`                  | Stop the node cleanly.                                        |
@@ -152,14 +153,14 @@ If the destination file already exists, the node resumes from the current file s
 
 ## Peer Management
 
-The node builds its peer list from several places:
+The node keeps one persistent peer store in `state.peers`.
 
-- peers you put in `config.peers`
 - peers you connect to manually with `connect`
 - peers discovered from `PONG`
 - peers discovered from `X-Try`
+- peers discovered from gwebcache fallback bootstrapping
 
-Known peers are saved in the config so the node can reconnect on the next start.
+The keys are normalized `host:port` strings. The values are Unix timestamps for the last stable connection, or `0` until the node has stayed connected to that peer long enough to trust it. Startup dialing sorts this map from most recently stable peer to least recent, with `0` entries last.
 
 ## Configuration
 
@@ -168,57 +169,22 @@ The config file has two top-level keys:
 - `config`: runtime settings
 - `state`: persistent runtime identity
 
-The only persistent runtime state kept by default is `serventIdHex`.
+Persistent runtime state includes `serventIdHex` and the `peers` map.
 
 ### Network Identity
 
-| Field                               | Meaning                                                               |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| `listenHost` / `listenPort`         | Where the node listens locally.                                       |
-| `advertisedHost` / `advertisedPort` | What the node tells peers to use when connecting back or downloading. |
-| `peers`                             | Bootstrap peers to try on startup and reconnect.                      |
-| `userAgent`                         | User-agent string sent in the handshake.                              |
-| `vendorCode`                        | Vendor code placed in query-hit metadata.                             |
+| Field                               | Meaning                                                                                                                                                                                                        |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listenHost` / `listenPort`         | Where the node listens locally.                                                                                                                                                                                |
+| `advertisedHost` / `advertisedPort` | Optional overrides for what the node tells peers to use when connecting back or downloading. By default it learns the host from peer `Remote-IP` reports and uses `listenPort` unless `advertisedPort` is set. |
 
 ### Sharing and Downloads
 
-| Field                 | Meaning                                                 |
-| --------------------- | ------------------------------------------------------- |
-| `sharedDir`           | Directory to share recursively.                         |
-| `downloadsDir`        | Default destination for downloads.                      |
-| `rescanSharesSec`     | How often the share index is refreshed.                 |
-| `downloadTimeoutMs`   | Timeout for direct downloads and push callbacks.        |
-| `pushWaitMs`          | How long to wait for a push callback before giving up.  |
-| `serveUriRes`         | Whether the node serves and requests URI-RES downloads. |
-| `advertisedSpeedKBps` | Speed reported in query hits.                           |
+| Field     | Meaning                                                                                                     |
+| --------- | ----------------------------------------------------------------------------------------------------------- |
+| `dataDir` | Root directory for runtime data. Files you share and files you download both live in `<dataDir>/downloads`. |
 
-### Connectivity and Routing
-
-| Field                  | Meaning                                                |
-| ---------------------- | ------------------------------------------------------ |
-| `maxConnections`       | Maximum live peer connections.                         |
-| `connectTimeoutMs`     | Timeout for normal outbound peer dials.                |
-| `reconnectIntervalSec` | How often to retry known peers.                        |
-| `pingIntervalSec`      | How often to send automatic pings.                     |
-| `routeTtlSec`          | How long routes stay valid.                            |
-| `seenTtlSec`           | How long duplicate-suppression entries stay valid.     |
-| `maxPayloadBytes`      | Maximum accepted descriptor payload size.              |
-| `maxTtl`               | Maximum TTL allowed for forwarded traffic.             |
-| `defaultPingTtl`       | Default TTL used by the CLI `ping` command.            |
-| `defaultQueryTtl`      | Default TTL used by `query`.                           |
-| `maxResultsPerQuery`   | Maximum number of local results returned to one query. |
-
-### Optional Protocol Flags
-
-| Field                 | Meaning                                |
-| --------------------- | -------------------------------------- |
-| `enableCompression`   | Enable negotiated deflate compression. |
-| `enableQrp`           | Enable Query Routing Protocol support. |
-| `enableBye`           | Send and honor `BYE`.                  |
-| `enablePongCaching`   | Cache recent pong payloads.            |
-| `enableGgep`          | Enable GGEP-related query behavior.    |
-| `queryRoutingVersion` | Advertised QRP version string.         |
-| `advertiseUltrapeer`  | Advertise ultrapeer-related headers.   |
+All other networking, timing, feature, and protocol tuning values are compile-time constants in the codebase.
 
 ## Library Use
 
@@ -317,8 +283,8 @@ bun run gnutella.ts run --config b.json
 
 Then:
 
-- add each node to the other node's `config.peers`
-- put one test file in each `sharedDir`
+- add each node to the other node's `state.peers` map with a value of `0`
+- put one test file in each node's `<dataDir>/shared`
 - search from one side with `query <name>`
 - view results with `results`
 - fetch one with `download <resultNo>`

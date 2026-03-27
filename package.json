@@ -2,13 +2,28 @@
   "private": true,
   "dependencies": {},
   "devDependencies": {
+    "@babel/core": "^7.27.1",
+    "@babel/eslint-parser": "^7.27.1",
+    "@babel/preset-typescript": "^7.27.1",
     "@types/node": "^25.5.0",
     "bun-types": "^1.3.11",
+    "eslint": "^9.24.0",
+    "jscpd": "^4.0.8",
+    "prettier": "^3.5.3",
+    "ts-unused-exports": "^11.0.1",
     "typescript": "^6.0.2"
   },
   "scripts": {
+    "build:all": "./scripts/build-all-targets.sh",
+    "dupcheck": "jscpd",
+    "format:check": "prettier --check AGENTS.md README.md gnutella.ts package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
+    "format:write": "prettier --write AGENTS.md README.md gnutella.ts package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
+    "lint": "eslint gnutella.ts src tests --ext .ts",
     "test": "bun test",
     "test:integration": "bun test tests/integration/protocol.test.ts",
-    "typecheck": "tsc --noEmit"
+    "test:unit": "bun test tests/unit",
+    "typecheck": "tsc --noEmit",
+    "unused-exports": "ts-unused-exports tsconfig.json --exitWithCount",
+    "verify": "./scripts/verify-all.sh"
   }
 }

@@ -30,6 +30,7 @@ export type ParsedCli = {
 };
 
 export type PeerAddr = { host: string; port: number };
+export type PeerState = Record<string, number>;
 export type Route = { peerKey: string; ts: number };
 
 export type RemoteQrpState = {
@@ -153,40 +154,49 @@ export type ConfigDoc = {
   config: {
     listenHost: string;
     listenPort: number;
-    advertisedHost: string;
-    advertisedPort: number;
-    sharedDir: string;
-    downloadsDir: string;
-    maxConnections: number;
-    connectTimeoutMs: number;
-    pingIntervalSec: number;
-    reconnectIntervalSec: number;
-    rescanSharesSec: number;
-    routeTtlSec: number;
-    seenTtlSec: number;
-    maxPayloadBytes: number;
-    maxTtl: number;
-    defaultPingTtl: number;
-    defaultQueryTtl: number;
-    advertisedSpeedKBps: number;
-    downloadTimeoutMs: number;
-    pushWaitMs: number;
-    maxResultsPerQuery: number;
-    peers: string[];
-    userAgent?: string;
-    queryRoutingVersion?: "0.1" | "0.2";
-    enableCompression?: boolean;
-    enableQrp?: boolean;
-    enableBye?: boolean;
-    enablePongCaching?: boolean;
-    enableGgep?: boolean;
-    advertiseUltrapeer?: boolean;
-    serveUriRes?: boolean;
-    vendorCode?: string;
+    advertisedHost?: string;
+    advertisedPort?: number;
+    dataDir: string;
   };
   state: {
     serventIdHex: string;
+    peers: PeerState;
   };
+};
+
+export type RuntimeConfig = {
+  listenHost: string;
+  listenPort: number;
+  advertisedHost?: string;
+  advertisedPort?: number;
+  dataDir: string;
+  downloadsDir: string;
+  peers: string[];
+  peerSeenThresholdSec: number;
+  maxConnections: number;
+  connectTimeoutMs: number;
+  pingIntervalSec: number;
+  reconnectIntervalSec: number;
+  rescanSharesSec: number;
+  routeTtlSec: number;
+  seenTtlSec: number;
+  maxPayloadBytes: number;
+  maxTtl: number;
+  defaultPingTtl: number;
+  defaultQueryTtl: number;
+  advertisedSpeedKBps: number;
+  downloadTimeoutMs: number;
+  pushWaitMs: number;
+  maxResultsPerQuery: number;
+  userAgent: string;
+  queryRoutingVersion: "0.1" | "0.2";
+  enableCompression: boolean;
+  enableQrp: boolean;
+  enableBye: boolean;
+  enablePongCaching: boolean;
+  enableGgep: boolean;
+  serveUriRes: boolean;
+  vendorCode: string;
 };
 
 export type PeerInfo = {
@@ -218,7 +228,11 @@ export type GnutellaEvent =
       totalKBytes: number;
     })
   | (EventBase<"MAINTENANCE_ERROR"> & {
-      operation: "SHARE_RESCAN" | "RECONNECT" | "SAVE";
+      operation:
+        | "SHARE_RESCAN"
+        | "RECONNECT"
+        | "SAVE"
+        | "GWEBCACHE_UPDATE";
       message: string;
     })
   | (EventBase<"PROBE_REJECTED"> & {
