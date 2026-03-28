@@ -1,305 +1,249 @@
-# Cleanup Report
+# Cleanup Plan
 
 ## Purpose
 
-This report captures the current maintainability risks in the codebase and a practical cleanup plan to address them before the next major feature. The code is still working and `bun run verify` is passing, but several structural issues are already visible. If left alone, the next feature will likely make the project harder to reason about, harder to test, and slower to change safely.
+This document reflects the current cleanup state of the repo after the large protocol and GWebCache extraction pass.
+
+The earlier version of this document was accurate for the pre-extraction codebase, but it is no longer a good description of the current tree. The goal now is not "break up the two giant files." That work is mostly done. The goal now is to finish the boundary work so the extracted modules stay maintainable.
 
 ## Executive Summary
 
-The main problem is not correctness. The main problem is concentration of responsibility.
+The codebase is in better shape than the original report described:
 
-Two files carry too much of the system:
+- `src/protocol.ts` is now a thin public facade.
+- `src/gwebcache_client.ts` is now a thin public facade.
+- protocol and GWebCache logic are distributed across focused internal modules.
+- most of the contributor guardrails from the original report now live in `AGENTS.md`.
 
-- `src/protocol.ts`
-- `src/gwebcache_client.ts`
+The main cleanup work left is different:
 
-The first is a god-module and the second is trending in the same direction. `GnutellaServent` in particular has become a god-object. It owns config loading, runtime state, peer management, handshake behavior, protocol routing, HTTP serving, downloads, bootstrap behavior, timers, and event emission. That makes it the default destination for every new feature, which is exactly how codebases get sloppy.
+- `GnutellaServent` still owns both persisted state and transient runtime state.
+- tests still patch internals with `as any` and `unknown as` instead of using stable seams.
+- a few production `any` remain, and helper ownership is still slightly fuzzy.
+- the CLI still relies on module-level session state.
+- `bun run verify` still mutates the worktree.
 
-The second major problem is weak boundaries. Tests frequently patch internal methods and internal state with `as any` and `unknown as`. That is not just a test smell. It is evidence that the production design does not expose the right seams.
-
-The third problem is that some typing and ownership discipline is starting to soften exactly where complexity is highest. There are still `any`-heavy signatures, duplicated helpers, and shared modules with fuzzy ownership.
-
-The project is still in a recoverable state. This is the right time to clean it up.
+This is no longer a monolith emergency. It is now a seam-hardening and ownership cleanup pass.
 
 ## Current Shape
 
-Approximate file sizes:
+Current line counts for the most relevant files:
 
-- `src/protocol.ts`: 4117 lines
-- `src/gwebcache_client.ts`: 1087 lines
-- `src/cli.ts`: 283 lines
-- `src/shared.ts`: 214 lines
-- `src/types.ts`: 321 lines
+- `src/protocol.ts`: 20
+- `src/gwebcache_client.ts`: 13
+- `src/protocol/node_protocol_runtime.ts`: 918
+- `src/protocol/node_transfer.ts`: 669
+- `src/protocol/node_state.ts`: 635
+- `src/protocol/codec.ts`: 569
+- `src/protocol/peer_state.ts`: 489
+- `src/protocol/node_handshake.ts`: 465
+- `src/gwebcache/bootstrap.ts`: 487
+- `src/gwebcache/response.ts`: 372
+- `src/cli.ts`: 283
 
-This is the clearest signal in the repo. The complexity is heavily concentrated, not distributed.
+The complexity is now distributed instead of being concentrated in two entry modules. That is good progress.
 
-## Primary Findings
+The remaining concentration point is the `GnutellaServent` object and the set of modules that still treat it as the place where every kind of state and side effect lives.
 
-### 1. `src/protocol.ts` is carrying too many responsibilities
+## What Is Already Done
 
-`src/protocol.ts` currently contains:
+### 1. `src/protocol.ts` is now a facade
 
-- config document loading and migration
-- runtime config derivation
-- packet encoders and decoders
-- handshake parsing and formatting
-- peer connection lifecycle
-- routing and deduplication
-- QRP logic
-- HTTP serving logic
-- HTTP client download logic
-- push download logic
-- bootstrap orchestration
-- node lifecycle and scheduled maintenance
+This part of the original plan is complete in substance.
 
-Representative sections:
+The public protocol entrypoint now re-exports from internal modules instead of implementing the protocol directly:
 
-- `src/protocol.ts#L1618`
-- `src/protocol.ts#L2350`
-- `src/protocol.ts#L2996`
-- `src/protocol.ts#L3289`
-- `src/protocol.ts#L3799`
-- `src/protocol.ts#L3960`
+- `src/protocol/codec.ts`
+- `src/protocol/qrp.ts`
+- `src/protocol/peer_state.ts`
+- `src/protocol/node.ts`
+- `src/protocol/node_handshake.ts`
+- `src/protocol/node_lifecycle.ts`
+- `src/protocol/node_protocol_runtime.ts`
+- `src/protocol/node_transfer.ts`
+- `src/protocol/node_state.ts`
 
-This file is still understandable only because the code style is disciplined. The structure itself is no longer disciplined enough.
+That extraction already achieved the main goal of reducing the amount of context required to work on the protocol layer.
 
-### 2. `GnutellaServent` is both runtime engine and storage model
+### 2. `src/gwebcache_client.ts` is now a facade
 
-The class stores `doc`, mutates `doc`, derives config from `doc`, and also owns all transient runtime state.
+This part of the original plan is also complete in substance.
 
-Examples:
+The GWebCache entrypoint now delegates to:
 
-- `src/protocol.ts#L1620`
-- `src/protocol.ts#L1720`
-- `src/protocol.ts#L1870`
-- `src/protocol.ts#L1904`
+- `src/gwebcache/bootstrap.ts`
+- `src/gwebcache/response.ts`
+- `src/gwebcache/shared.ts`
+- `src/gwebcache/types.ts`
 
-That leads to several problems:
+There is still optional cleanup available inside those modules, but the original "second giant all-purpose helper" concern has largely been addressed.
 
-- persisted state and live state are mixed together
-- it is hard to tell which mutations are in-memory only and which are intended to persist
-- `config()` reconstructs runtime config on demand instead of exposing a stable runtime configuration object
-- future features will be tempted to keep hanging new mutable state off the same class
+### 3. The maintainability guardrails were adopted
 
-This is manageable at small scale, but it becomes error-prone once the runtime grows further.
+The most important contributor-facing rules from the original report now exist in `AGENTS.md`, including:
 
-### 3. The test seams are too weak
+- keep `src/protocol.ts` as a public facade
+- avoid turning `src/gwebcache_client.ts` into a catch-all
+- prefer extraction over growth
+- avoid new production `any`
+- prefer explicit seams over monkeypatching
+- keep helper ownership tight
 
-The tests often patch internals directly rather than depending on stable collaborators. Examples:
+That means this document no longer needs to act as the only place where those rules are written down.
 
-- `tests/unit/protocol/node.test.ts#L238`
-- `tests/unit/protocol/node.test.ts#L344`
-- `tests/unit/protocol/node.test.ts#L1646`
-- `tests/integration/protocol.test.ts#L136`
+## Primary Remaining Findings
 
-This usually means:
+### 1. `GnutellaServent` still mixes persisted and runtime state
 
-- the class has too many responsibilities
-- important behaviors are trapped behind private implementation details
-- dependencies are not injectable
-- tests are forced to mock methods instead of collaborating through interfaces
+`GnutellaServent` is no longer a giant implementation file, but it still acts as the central storage object for too many unrelated concerns.
 
-This matters because weak seams slow down refactors. Every structural improvement becomes harder when the test suite is coupled to implementation details.
+Today it still owns:
 
-### 4. `src/gwebcache_client.ts` is a second concentration point
+- persisted config document data through `doc`
+- runtime peer maps and dedupe/routing state
+- downloads and pending push queues
+- GWebCache bootstrap/report state
+- advertised host learning state
+- timers, listeners, and server handles
 
-This file currently owns:
+This is better than the original monolith, but it still blurs the boundary between:
 
-- request URL building
-- response parsing
-- timeout and signal handling
-- bootstrap fetch behavior
-- bootstrap retry policy
-- bootstrap state mutation
-- self-report behavior
+- on-disk state
+- stable runtime configuration
+- transient routing/runtime state
+- transfer state
+- side-effect collaborators
 
-Representative sections:
+The most obvious signal is that `config()` still derives a `RuntimeConfig` from `doc` on demand instead of exposing a stable runtime config object.
 
-- `src/gwebcache_client.ts#L183`
-- `src/gwebcache_client.ts#L620`
-- `src/gwebcache_client.ts#L773`
-- `src/gwebcache_client.ts#L925`
-- `src/gwebcache_client.ts#L1030`
+### 2. The test seams are still too weak
 
-It is not yet as problematic as `src/protocol.ts`, but it is heading the same way. If left as-is, the next feature involving peer discovery or remote metadata will probably be dumped into this file too.
+This is now the highest-value remaining cleanup item.
 
-### 5. Type discipline is weaker than it should be in the hardest code
+The tests still replace internals directly in several places, for example by monkeypatching methods on `GnutellaServent` or replacing `config()` in helpers. That makes the tests workable, but it also means the production design still does not expose the right seams for:
 
-There are still important `any`-based or weakly typed areas in production code, for example:
+- scheduling
+- time
+- network creation
+- bootstrap behavior
+- selected protocol actions
 
-- `src/protocol.ts#L1674`
-- `src/protocol.ts#L2897`
-- `src/protocol.ts#L3504`
-- `src/protocol.ts#L3691`
-- `src/types.ts#L139`
-- `src/shared.ts#L9`
-- `src/cli_shared.ts#L28`
+This matters more than file size now. If the seams stay weak, future refactors will still be expensive even though the code is split into more files.
 
-This is the wrong place to give up type precision. These are core pathways:
+### 3. Type cleanup is not finished
 
-- descriptor dispatch
-- download flows
-- event/error propagation
-- pending push bookkeeping
+The biggest type cleanup from the original report was completed. For example, the old descriptor-header complaint is effectively addressed by the typed protocol module layout.
 
-Loose typing here means future refactors will have less compiler support exactly where they need the most support.
+But a few important cleanup items remain:
 
-### 6. Utility ownership is getting fuzzy
+- `PendingPush` still uses `resolve: (v: any) => void`
+- `PendingPush` still uses `reject: (e: any) => void`
+- `errMsg` still accepts `any`
+- `errMsg` still exists in both `src/shared.ts` and `src/cli_shared.ts`
 
-`errMsg` exists in two places:
+These are small compared with the old monolith problem, but they are still exactly the kind of drift that weakens a codebase over time.
 
-- `src/shared.ts#L9`
-- `src/cli_shared.ts#L28`
+### 4. The CLI state model is still implicit
 
-This is a small issue, but it is a warning sign. Shared modules should not accumulate overlapping helpers with unclear ownership. That is how projects slowly drift into “I think there is already a helper for this somewhere” territory.
+`src/cli.ts` is not large, but it still stores session state in module-level mutable variables for:
 
-### 7. The CLI is not large, but its state model is implicit
+- the active readline interface
+- the active node
+- prompt throbber frame state
+- prompt throbber timers
 
-`src/cli.ts` is still manageable, but it keeps session state in module-level mutable variables:
+This is still manageable, but a small `CliSession` object would make ownership and lifecycle clearer and would make the module easier to test.
 
-- `src/cli.ts#L24`
-- `src/cli.ts#L73`
-- `src/cli.ts#L217`
+### 5. `verify` still mixes checks and mutation
 
-This is workable for a single process with one session, but it makes reuse and testing less clear than it needs to be. A small `CliSession` object would make ownership of prompt state, timers, and REPL lifecycle more explicit.
+This is still an open item from the original report.
 
-### 8. `verify` mixes validation and mutation
+`scripts/verify-all.sh` still runs `format:write` during `bun run verify`. That means verification is not read-only, which has a few downsides:
 
-`scripts/verify-all.sh` currently runs `format:write` as part of `verify`:
+- running verification can change local diffs
+- CI semantics are less clear than they should be
+- "check" and "fix" are still blended together
 
-- `scripts/verify-all.sh#L16`
+This is not a difficult cleanup, but it is still worth doing.
 
-That is convenient locally, but it is not ideal workflow design. A verification command should be read-only. Otherwise:
+### 6. Some modules should be watched, not immediately split
 
-- local diffs get changed during verification
-- CI semantics become less clear
-- users cannot easily distinguish “check” from “fix”
+The original plan called for a large extraction pass. That is no longer the right next move.
 
-This is a smaller problem than the structural ones, but it is worth correcting.
+The more realistic stance now is:
 
-## What This Means for the Next Feature
+- do not proactively split modules just because they are the biggest remaining ones
+- do split them if the next feature would push them across a clear responsibility boundary
 
-If the next large feature lands before cleanup, the most likely outcome is:
+The main watch-list modules are:
 
-1. More code gets added to `src/protocol.ts`
-2. Tests patch even more internals
-3. More state ends up on `GnutellaServent`
-4. It becomes harder to tell where protocol logic ends and application/runtime logic begins
-5. Feature work slows down because every change requires broad context
+- `src/protocol/node_protocol_runtime.ts`
+- `src/protocol/node_state.ts`
+- `src/protocol/node_transfer.ts`
+- `src/gwebcache/bootstrap.ts`
+- `src/gwebcache/response.ts`
 
-The project will still work, but each feature will cost more to add and more to verify.
+None of these are a crisis today. They are just the most likely places to accumulate the next round of design debt if left unguarded.
 
-## Recommended Cleanup Direction
+## Updated Cleanup Direction
 
-The right approach is not a rewrite. The right approach is staged extraction with stable public APIs.
+### Stage 1: Preserve the facade structure
 
-### Stage 1: Turn `src/protocol.ts` into a facade
+Treat this as already done and non-negotiable:
 
-Keep the current public exports stable, but move implementation into submodules under `src/protocol/`.
+- `src/protocol.ts` stays export-only except for tiny facade wiring
+- `src/gwebcache_client.ts` stays export-only except for tiny facade wiring
 
-Suggested layout:
-
-```text
-src/protocol/
-  codec.ts
-  config_doc.ts
-  handshake.ts
-  http_transfer.ts
-  peer_store.ts
-  query_match.ts
-  qrp.ts
-  routing.ts
-  node.ts
-```
-
-Suggested ownership:
-
-- `codec.ts`: encoders, decoders, header parsing, byte-range parsing
-- `config_doc.ts`: config defaults, migration, persistence helpers
-- `handshake.ts`: handshake parsing, formatting, capability building
-- `http_transfer.ts`: inbound `/get` serving and outbound HTTP download flows
-- `peer_store.ts`: persisted peer state handling and ranking
-- `query_match.ts`: indexing and query matching helpers
-- `qrp.ts`: QRP table logic
-- `routing.ts`: seen cache, routes, push routes, pong cache
-- `node.ts`: orchestration only
-
-The important rule is this: `node.ts` should coordinate collaborators, not implement everything itself.
+The cleanup plan should not reopen the old monolith shape.
 
 ### Stage 2: Separate persisted state from runtime state
 
-Right now, the storage model and runtime model are too tightly coupled.
+This is the most important structural item still open.
 
-Recommended split:
+Recommended direction:
 
-- `ConfigDoc`: strictly on-disk shape
-- `RuntimeConfig`: stable in-memory config
-- `PeerStore`: persisted known-peer management
-- `RouteStore`: transient message routing and dedupe state
-- `TransferState`: downloads, pending pushes, active auto-paths
-- `AdvertisedAddressTracker`: learned/pending advertised host logic
+- keep `ConfigDoc` strictly about on-disk shape
+- introduce a stable runtime config object instead of recomputing from `doc`
+- move persisted peer bookkeeping behind explicit peer-state helpers
+- isolate transient routing/download/bootstrap state from persisted state
+- reduce the number of places that mutate `node.doc` directly
 
-This gives each area a clear owner and makes it much easier to reason about save/load behavior.
+The goal is not a framework. The goal is to make save/load behavior and transient runtime behavior easy to distinguish.
 
 ### Stage 3: Add explicit collaborators for side effects
 
-Instead of forcing tests to patch methods on `GnutellaServent`, expose injectable collaborators.
+Instead of making tests patch instance methods, add a small collaborator bag to the node runtime.
 
-Examples:
+The likely collaborators are:
 
 - `clock.now()`
 - `scheduler.setTimeout()`
+- `scheduler.clearTimeout()`
 - `scheduler.setInterval()`
+- `scheduler.clearInterval()`
 - `netFactory.createConnection()`
+- `netFactory.createServer()`
 - `bootstrapClient.connectBootstrapPeers()`
-- `bootstrapClient.reportSelf()`
+- `bootstrapClient.reportSelfToGWebCaches()`
 
-This does not need a full dependency injection framework. A small options bag is enough.
+This does not need a dependency-injection framework. A simple options bag on construction is enough.
 
-Benefits:
+This is the cleanup that would pay down the most `as any` usage in the tests.
 
-- tests stop monkeypatching internals
-- behavior becomes easier to isolate
-- future refactors get safer
-
-### Stage 4: Split `src/gwebcache_client.ts`
-
-Suggested layout:
-
-```text
-src/gwebcache/
-  parse.ts
-  request.ts
-  bootstrap.ts
-  report.ts
-  state.ts
-```
-
-Suggested ownership:
-
-- `parse.ts`: line parsing and response models
-- `request.ts`: URL building, fetch execution, timeout handling
-- `bootstrap.ts`: peer fetch and retry orchestration
-- `report.ts`: self-report/update behavior
-- `state.ts`: bootstrap state helpers
-
-The protocol layer should not depend on a giant all-purpose helper module.
-
-### Stage 5: Tighten types in core paths
+### Stage 4: Tighten remaining types and unify helpers
 
 Specific targets:
 
-- replace `hdr: any` with a typed descriptor header shape
-- replace `Promise<any>` in download flows with explicit result types
-- replace loose `resolve/reject` callbacks in `PendingPush`
-- centralize error formatting in one utility
-- remove production `any` unless there is a real interop reason
+- replace `PendingPush` callback `any` types with explicit signatures
+- make error-formatting helpers accept `unknown`
+- centralize `errMsg` in one module
+- remove the remaining production `any` unless there is a real interop reason
 
-This will improve refactor confidence immediately.
+This is a good companion task to the seam work because both changes improve refactor confidence.
 
-### Stage 6: Encapsulate CLI state
+### Stage 5: Encapsulate CLI session state
 
-Wrap the CLI globals in a small session object, for example:
+Wrap the module-level CLI globals in a small session object, for example:
 
 ```text
 type CliSession = {
@@ -311,95 +255,67 @@ type CliSession = {
 };
 ```
 
-This is not urgent, but it is an easy cleanup and makes the REPL lifecycle clearer.
+This is not urgent, but it is a clean and low-risk follow-up once the higher-value runtime seams are in place.
 
-### Stage 7: Make verification read-only
+### Stage 6: Make verification read-only
 
-Recommended scripts:
+Recommended command split:
 
-- `bun run verify`: check only
-- `bun run fix`: format and maybe auto-fix lint issues
+- `bun run verify`: checks only
+- `bun run fix`: formatting and other safe auto-fixes
 
-That split is easier to reason about and works better in CI and local review.
+At minimum, move `format:write` out of `verify` and keep `format:check` inside it.
 
-## Priority Order
+### Stage 7: Only split the remaining larger modules when a boundary is clear
 
-If time is limited, these are the highest-value cleanups:
+Do not create extraction work just to create extraction work.
+
+Good examples of justified follow-up splits would be:
+
+- route-cache and descriptor-dispatch logic separating from `node_protocol_runtime.ts`
+- transfer-session state separating from `node_transfer.ts`
+- self-report/update behavior separating from `gwebcache/bootstrap.ts`
+- request execution separating from response parsing in `gwebcache/response.ts`
+
+Those are worthwhile only if feature work starts pushing those files across a real responsibility boundary.
+
+## Updated Priority Order
 
 ### Priority 1
 
-- split `src/protocol.ts` into facade plus internal modules
-- separate persisted state from runtime state
-- add injectable collaborators so tests stop patching internals
+- add explicit collaborators so tests stop patching internals
+- separate persisted state from transient runtime state
+- remove the remaining production `any` and helper duplication around `errMsg`
 
 ### Priority 2
 
-- split `src/gwebcache_client.ts`
-- tighten types in descriptor and transfer flows
-- remove duplicated/shared helper drift
+- make `verify` read-only
+- encapsulate CLI session state
+- reduce direct `doc` mutation points
 
 ### Priority 3
 
-- encapsulate CLI session state
-- make `verify` read-only
-- add lightweight architecture notes for major modules
+- add short architecture notes for the remaining protocol submodules
+- split the current larger internal modules only when feature work forces a real boundary
 
-## Suggested Rules for Future Changes
+## A Practical Next Milestone
 
-These are good guardrails to add to `AGENTS.md` or another contributor-facing document.
-
-### Module Size Rules
-
-- No new source file should exceed roughly 800 lines without a very strong reason.
-- Any file over 1000 lines is presumed to need decomposition.
-
-### Type Rules
-
-- No new production `any`.
-- `Promise<any>` is not allowed in production code.
-- If a type is not obvious, define it once instead of repeating inline object literals.
-
-### Testing Rules
-
-- Tests should prefer dependency injection and public seams over monkeypatching class internals.
-- If a test needs `as any` to replace a method, treat that as a design smell and consider adding a seam.
-
-### Ownership Rules
-
-- `shared.ts` should contain only clearly generic helpers.
-- Protocol-specific helpers belong under `src/protocol/`.
-- GWebCache-specific helpers belong under `src/gwebcache/`.
-
-### Feature Rules
-
-- New protocol features should not be added directly to `src/protocol.ts` unless they are tiny exports or facade wiring.
-- New peer-discovery behavior should not go into `src/gwebcache_client.ts` unless it clearly belongs to an existing extracted module.
-
-## A Practical First Cleanup Milestone
-
-The best first milestone is a zero-behavior-change extraction pass.
-
-Goal:
-
-- no feature changes
-- no protocol behavior changes
-- same public exports
-- mostly file moves plus import rewiring
+The best next milestone is not another extraction sweep. It is a zero-behavior boundary pass.
 
 Recommended first pass:
 
-1. Extract packet codecs and parsers from `src/protocol.ts`
-2. Extract config doc load/save/migration helpers
-3. Extract QRP logic
-4. Extract HTTP serving/download helpers
-5. Leave `GnutellaServent` as the facade/orchestrator
+1. Add a small collaborator/options bag to `GnutellaServent` for clock, scheduler, net, and bootstrap side effects.
+2. Convert the tests that currently monkeypatch methods to use those collaborators instead.
+3. Replace the remaining production `any` in `PendingPush` and error formatting.
+4. Centralize `errMsg`.
+5. Split `verify` and `fix`.
 
-That first pass will already reduce the amount of context required to work on the codebase.
+That milestone would remove the most misleading cleanup debt left in the repo without reopening the architecture.
 
 ## Final Assessment
 
-The codebase is not sloppy in the sense of being careless. It is sloppy in the sense of accumulating too much responsibility in too few places. That is a structural issue, not a style issue.
+The old plan correctly identified that responsibility was too concentrated, but the repo has already moved past the worst version of that problem.
 
-The good news is that the current code is still organized enough to refactor safely. The tests pass, the modules have recognizable internal clusters, and the public surface is small enough to preserve while internals are cleaned up.
+Today the main risk is not "two giant entrypoint files." The main risk is that the extracted modules still share a runtime object with weak seams, mixed state ownership, and a few lingering type/utility shortcuts.
 
-The main objective now should be to stop `GnutellaServent` and the two large modules from absorbing any more unrelated behavior. If that happens before the next major feature, the project will stay understandable and much easier to evolve.
+That is a much healthier problem to have. The cleanup plan should now focus on making the current design easier to test and safer to evolve, not on repeating the extraction work that has already been completed.

@@ -5,6 +5,8 @@ export type CliNode = {
     key: string;
     remoteLabel: string;
     outbound: boolean;
+    dialTarget?: string;
+    userAgent?: string;
   }>;
   getResults(): Array<{
     resultNo: number;
@@ -204,6 +206,7 @@ export type PeerInfo = {
   remoteLabel: string;
   outbound: boolean;
   dialTarget?: string;
+  userAgent?: string;
 };
 
 export type NodeStatus = {

@@ -118,12 +118,15 @@ export function cancelTimeout(
 }
 
 export function peerInfo(_node: GnutellaServent, peer: Peer): PeerInfo {
-  return {
+  const info: PeerInfo = {
     key: peer.key,
     remoteLabel: peer.remoteLabel,
     outbound: peer.outbound,
     dialTarget: peer.dialTarget,
   };
+  if (peer.capabilities.userAgent)
+    info.userAgent = peer.capabilities.userAgent;
+  return info;
 }
 
 export function peerCount(node: GnutellaServent): number {

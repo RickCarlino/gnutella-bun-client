@@ -6,6 +6,8 @@ const SIZE_FORMAT = new Intl.NumberFormat("en-US", {
 });
 const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
 const RESULT_COUNT_DISPLAY_MAX = 999;
+const PEER_TABLE_WIDTH_MAX = 80;
+const PEER_TABLE_GAP_WIDTH = 4;
 
 function formatSize(bytes: number): string {
   const safeBytes =
@@ -29,6 +31,23 @@ export function errMsg(e: any): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function sanitizeTableCell(
+  value: string | undefined,
+  fallback = "",
+): string {
+  const safe = (value || "").replace(/[\r\n\t]/g, " ").trim();
+  return safe || fallback;
+}
+
+function fitTableCell(value: string, width: number): string {
+  if (value.length <= width) return value.padEnd(width, " ");
+  if (width <= 2) return value.slice(0, width);
+  const kept = width - 2;
+  const head = Math.floor(kept / 2);
+  const tail = kept - head;
+  return `${value.slice(0, head)}..${value.slice(-tail)}`;
+}
+
 export function printStatus(
   node: CliNode,
   log: (msg: string) => void,
@@ -48,10 +67,70 @@ export function printPeers(
     log("no peers");
     return;
   }
-  for (const peer of peers)
-    log(
-      `${peer.key} ${peer.remoteLabel}${peer.outbound ? " outbound" : " inbound"}`,
-    );
+  const rows = peers.map((peer) => ({
+    direction: peer.outbound ? "out" : "in",
+    remoteLabel: sanitizeTableCell(peer.remoteLabel, "?"),
+    userAgent: sanitizeTableCell(peer.userAgent, "-"),
+  }));
+
+  const direction = Math.max(
+    "Dir".length,
+    ...rows.map((row) => row.direction.length),
+  );
+  const desiredRemoteLabel = Math.max(
+    "Peer".length,
+    ...rows.map((row) => row.remoteLabel.length),
+  );
+  const desiredUserAgent = Math.max(
+    "Agent".length,
+    ...rows.map((row) => row.userAgent.length),
+  );
+  const available = Math.max(
+    "Peer".length + "Agent".length,
+    PEER_TABLE_WIDTH_MAX - direction - PEER_TABLE_GAP_WIDTH,
+  );
+
+  let remoteLabel = Math.min(
+    desiredRemoteLabel,
+    Math.floor(available / 2),
+  );
+  let userAgent = Math.min(desiredUserAgent, available - remoteLabel);
+  let remaining = available - remoteLabel - userAgent;
+  if (remaining > 0 && desiredUserAgent > userAgent) {
+    const extra = Math.min(remaining, desiredUserAgent - userAgent);
+    userAgent += extra;
+    remaining -= extra;
+  }
+  if (remaining > 0 && desiredRemoteLabel > remoteLabel) {
+    remoteLabel += Math.min(remaining, desiredRemoteLabel - remoteLabel);
+  }
+
+  const widths = {
+    direction,
+    remoteLabel,
+    userAgent,
+  };
+
+  const line = (
+    direction: string,
+    remoteLabel: string,
+    userAgent: string,
+  ) =>
+    `${direction.padEnd(widths.direction, " ")}  ${fitTableCell(remoteLabel, widths.remoteLabel)}  ${fitTableCell(userAgent, widths.userAgent)}`.trimEnd();
+
+  log(
+    [
+      line("Dir", "Peer", "Agent"),
+      line(
+        "-".repeat(widths.direction),
+        "-".repeat(widths.remoteLabel),
+        "-".repeat(widths.userAgent),
+      ),
+      ...rows.map((row) =>
+        line(row.direction, row.remoteLabel, row.userAgent),
+      ),
+    ].join("\n"),
+  );
 }
 
 export function printShares(
@@ -86,7 +165,7 @@ export function printResults(
     )
     .map((result) => ({
       resultNo: String(result.resultNo),
-      fileName: result.fileName.replace(/[\r\n\t]/g, " "),
+      fileName: sanitizeTableCell(result.fileName),
       fileSize: formatSize(result.fileSize),
       remoteHost: result.remoteHost,
     }));
@@ -107,6 +186,14 @@ export function printResults(
     ),
   };
 
+  const line = (
+    resultNo: string,
+    fileName: string,
+    fileSize: string,
+    remoteHost: string,
+  ) =>
+    `${resultNo.padStart(widths.resultNo, " ")}  ${fileName}  ${fileSize.padStart(widths.fileSize, " ")}  ${remoteHost}`.trimEnd();
+
   const fitName = (fileName: string): string => {
     if (fileName.length <= widths.fileName - 2)
       return fileName.padEnd(widths.fileName, " ");
@@ -116,14 +203,6 @@ export function printResults(
     const tail = kept - head;
     return `${fileName.slice(0, head)}..${fileName.slice(-tail)}`;
   };
-
-  const line = (
-    resultNo: string,
-    fileName: string,
-    fileSize: string,
-    remoteHost: string,
-  ) =>
-    `${resultNo.padStart(widths.resultNo, " ")}  ${fileName}  ${fileSize.padStart(widths.fileSize, " ")}  ${remoteHost}`.trimEnd();
 
   log(
     [

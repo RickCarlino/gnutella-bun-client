@@ -36,6 +36,7 @@ describe("cli_shared", () => {
           key: "1.2.3.4:6346",
           remoteLabel: "1.2.3.4:6346",
           outbound: true,
+          userAgent: "Peer/1.0",
         },
         {
           key: "5.6.7.8:6346",
@@ -65,8 +66,12 @@ describe("cli_shared", () => {
     expect(logs).toEqual([
       "peers=2 shares=1 results=999 knownPeers=9",
       "no peers",
-      "1.2.3.4:6346 1.2.3.4:6346 outbound",
-      "5.6.7.8:6346 5.6.7.8:6346 inbound",
+      [
+        "Dir  Peer          Agent",
+        "---  ------------  --------",
+        "out  1.2.3.4:6346  Peer/1.0",
+        "in   5.6.7.8:6346  -",
+      ].join("\n"),
       "no shared files",
       '#1 123B "folder/\\"song\\".mp3"',
       "no results",

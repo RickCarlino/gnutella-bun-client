@@ -23,6 +23,7 @@ import {
   safeFileName,
   splitArgs,
 } from "../../../src/shared";
+import type { Peer } from "../../../src/protocol/node_types";
 
 async function withTempDir<T>(
   fn: (dir: string) => Promise<T>,
@@ -35,7 +36,7 @@ async function withTempDir<T>(
   }
 }
 
-function makePeer(label = "1.2.3.4:6346") {
+function makePeer(label = "1.2.3.4:6346"): Peer {
   return {
     key: label,
     socket: {
@@ -121,6 +122,27 @@ describe("protocol config and public helpers", () => {
       await expect(
         fs.stat(loadedRuntime.downloadsDir),
       ).resolves.toBeDefined();
+    });
+  });
+
+  test("exposes peer user agents through public peer info", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const node = new GnutellaServent(configPath, defaultDoc(configPath));
+      const peer = makePeer("1.2.3.4:6346");
+
+      peer.capabilities.userAgent = "Peer/1.0";
+      node.peers.set(peer.key, peer as never);
+
+      expect(node.getPeers()).toEqual([
+        {
+          key: "1.2.3.4:6346",
+          remoteLabel: "1.2.3.4:6346",
+          outbound: false,
+          dialTarget: "1.2.3.4:6346",
+          userAgent: "Peer/1.0",
+        },
+      ]);
     });
   });
 
