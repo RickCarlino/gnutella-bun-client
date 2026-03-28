@@ -10,16 +10,22 @@ import {
   defaultDoc,
   encodePong,
   encodePush,
+  encodeQuery,
   GnutellaServent,
   loadDoc,
   parseHeader,
   parsePong,
   parsePush,
+  parseQuery,
   writeDoc,
 } from "../../../src/protocol";
+import { parseByteRange } from "../../../src/protocol/codec";
+import { detectLocalAdvertisedIpv4 } from "../../../src/protocol/peer_state";
 import {
   bytesToIpLE,
+  ensureDir,
   ipToBytesLE,
+  normalizeIpv4,
   safeFileName,
   splitArgs,
 } from "../../../src/shared";
@@ -344,6 +350,89 @@ describe("protocol config and public helpers", () => {
     });
   });
 
+  test("detects advertised ipv4 addresses in routable-private-loopback order", () => {
+    const original = os.networkInterfaces;
+
+    try {
+      expect(detectLocalAdvertisedIpv4("46.110.123.127")).toBe(
+        "46.110.123.127",
+      );
+
+      (
+        os as unknown as {
+          networkInterfaces: typeof os.networkInterfaces;
+        }
+      ).networkInterfaces = () =>
+        ({
+          eth0: [
+            {
+              address: "10.0.0.5",
+              family: "IPv4",
+              internal: false,
+            },
+            {
+              address: "46.110.123.127",
+              family: "IPv4",
+              internal: false,
+            },
+          ],
+          lo: [
+            {
+              address: "127.0.0.1",
+              family: "IPv4",
+              internal: true,
+            },
+          ],
+        }) as unknown as ReturnType<typeof os.networkInterfaces>;
+      expect(detectLocalAdvertisedIpv4("0.0.0.0")).toBe("46.110.123.127");
+
+      (
+        os as unknown as {
+          networkInterfaces: typeof os.networkInterfaces;
+        }
+      ).networkInterfaces = () =>
+        ({
+          eth0: [
+            {
+              address: "10.0.0.5",
+              family: "IPv4",
+              internal: false,
+            },
+          ],
+          lo: [
+            {
+              address: "127.0.0.1",
+              family: "IPv4",
+              internal: true,
+            },
+          ],
+        }) as unknown as ReturnType<typeof os.networkInterfaces>;
+      expect(detectLocalAdvertisedIpv4("0.0.0.0")).toBe("10.0.0.5");
+
+      (
+        os as unknown as {
+          networkInterfaces: typeof os.networkInterfaces;
+        }
+      ).networkInterfaces = () =>
+        ({
+          lo: [
+            {
+              address: "127.0.0.1",
+              family: "IPv4",
+              internal: true,
+            },
+          ],
+        }) as unknown as ReturnType<typeof os.networkInterfaces>;
+      expect(detectLocalAdvertisedIpv4("0.0.0.0")).toBe("127.0.0.1");
+    } finally {
+      (
+        os as unknown as {
+          networkInterfaces: typeof os.networkInterfaces;
+        }
+      ).networkInterfaces = original;
+    }
+  });
+
   test("builds GET requests with Host headers and splits quoted args", () => {
     expect(
       buildGetRequest(12, "dir#/file name.txt", 128, "1.2.3.4", 6346),
@@ -368,6 +457,107 @@ describe("protocol config and public helpers", () => {
       "two  words",
       "plain space",
     ]);
+  });
+
+  test("parses query extensions, suffix byte ranges, and mapped ipv4 hosts", () => {
+    const query = parseQuery(
+      encodeQuery("", {
+        urns: ["urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"],
+        xmlBlocks: ["<xml/>", "{meta:true}"],
+        requesterFirewalled: true,
+        wantsXml: true,
+        leafGuidedDynamic: true,
+        ggepHAllowed: true,
+        outOfBand: true,
+        maxHits: 999,
+      }),
+    );
+
+    expect(query.search).toBe("");
+    expect(query.urns).toEqual([
+      "urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    ]);
+    expect(query.xmlBlocks).toEqual(["<xml/>", "{meta:true}"]);
+    expect(query.requesterFirewalled).toBe(true);
+    expect(query.wantsXml).toBe(true);
+    expect(query.leafGuidedDynamic).toBe(true);
+    expect(query.ggepHAllowed).toBe(true);
+    expect(query.outOfBand).toBe(true);
+    expect(query.maxHits).toBe(0x1ff);
+
+    expect(parseByteRange("bytes=-5", 10)).toEqual({
+      start: 5,
+      end: 9,
+      partial: true,
+    });
+    expect(parseByteRange("bytes=-20", 10)).toEqual({
+      start: 0,
+      end: 9,
+      partial: false,
+    });
+    expect(parseByteRange("bytes=-0", 10)).toBeNull();
+
+    expect(normalizeIpv4(" ::ffff:1.2.3.4 ")).toBe("1.2.3.4");
+    expect(normalizeIpv4("::ffff:999.2.3.4")).toBeUndefined();
+  });
+
+  test("tolerates existing directories from mkdir races", async () => {
+    const originalMkdir = fs.mkdir;
+    const originalStat = fs.stat;
+
+    try {
+      (
+        fs as unknown as {
+          mkdir: typeof fs.mkdir;
+          stat: typeof fs.stat;
+        }
+      ).mkdir = (async () => {
+        const error = Object.assign(new Error("exists"), {
+          code: "EEXIST",
+        });
+        throw error;
+      }) as typeof fs.mkdir;
+      (
+        fs as unknown as {
+          mkdir: typeof fs.mkdir;
+          stat: typeof fs.stat;
+        }
+      ).stat = (async () =>
+        ({
+          isDirectory: () => true,
+        }) as never) as typeof fs.stat;
+
+      await expect(
+        ensureDir("/tmp/existing-dir"),
+      ).resolves.toBeUndefined();
+
+      (
+        fs as unknown as {
+          mkdir: typeof fs.mkdir;
+          stat: typeof fs.stat;
+        }
+      ).stat = (async () =>
+        ({
+          isDirectory: () => false,
+        }) as never) as typeof fs.stat;
+
+      await expect(ensureDir("/tmp/existing-file")).rejects.toThrow(
+        "exists",
+      );
+    } finally {
+      (
+        fs as unknown as {
+          mkdir: typeof fs.mkdir;
+          stat: typeof fs.stat;
+        }
+      ).mkdir = originalMkdir;
+      (
+        fs as unknown as {
+          mkdir: typeof fs.mkdir;
+          stat: typeof fs.stat;
+        }
+      ).stat = originalStat;
+    }
   });
 
   test("round-trips public protocol helpers and sanitizes filenames", () => {

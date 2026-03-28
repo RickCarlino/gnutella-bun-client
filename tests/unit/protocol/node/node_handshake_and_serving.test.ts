@@ -17,6 +17,7 @@ import {
   makePeer,
   makeShare,
   MockSocket,
+  overrideRuntimeConfig,
   peerState,
   withMockNetworkInterfaces,
   withTempDir,
@@ -395,6 +396,45 @@ describe("protocol node", () => {
     });
   });
 
+  test("updates ultrapeer handshake headers as mesh and leaf slots fill", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      node.doc.config.ultrapeer = true;
+      overrideRuntimeConfig(node, {
+        maxConnections: 1,
+        maxLeafConnections: 1,
+      });
+
+      expect(node.baseHandshakeHeaders()).toMatchObject({
+        "x-ultrapeer": "True",
+        "x-ultrapeer-needed": "True",
+        "x-ultrapeer-query-routing": "0.1",
+      });
+
+      const meshPeer = makePeer("11.11.11.11:1111");
+      meshPeer.role = "ultrapeer";
+      meshPeer.capabilities.isUltrapeer = true;
+      node.peers.set(meshPeer.key, meshPeer);
+
+      expect(node.baseHandshakeHeaders()).toMatchObject({
+        "x-ultrapeer": "True",
+        "x-ultrapeer-needed": "False",
+        "x-ultrapeer-query-routing": "0.1",
+      });
+
+      const leafPeer = makePeer("12.12.12.12:1212");
+      node.peers.set(leafPeer.key, leafPeer);
+
+      expect(node.baseHandshakeHeaders()).toMatchObject({
+        "x-ultrapeer": "True",
+        "x-ultrapeer-query-routing": "0.1",
+      });
+      expect(
+        node.baseHandshakeHeaders()["x-ultrapeer-needed"],
+      ).toBeUndefined();
+    });
+  });
+
   test("learns a public advertised host from agreed Remote-IP reports", async () => {
     await withTempDir(async (dir) => {
       await withMockNetworkInterfaces(async () => {
@@ -536,6 +576,85 @@ describe("protocol node", () => {
           ).createConnection = originalCreateConnection;
         }
       });
+    });
+  });
+
+  test("routes and rejects inbound probe protocols", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const probeMessages: string[] = [];
+      const httpHeads: Array<{ head: string; rest: string }> = [];
+      const givHeads: string[] = [];
+      node.subscribe((event) => {
+        if (event.type === "PROBE_REJECTED") {
+          probeMessages.push(event.message);
+        }
+      });
+      (node as any).startHttpSession = (
+        _socket: net.Socket,
+        head: string,
+        rest: Buffer,
+      ) => {
+        httpHeads.push({ head, rest: rest.toString("latin1") });
+      };
+      (node as any).handleIncomingGiv = async (
+        _socket: net.Socket,
+        head: string,
+      ) => {
+        givHeads.push(head);
+        throw new Error("giv failed");
+      };
+
+      const httpSocket = new MockSocket();
+      node.handleProbe(httpSocket as never);
+      httpSocket.emit(
+        "data",
+        "GET /uri-res/N2R?urn:sha1:TEST HTTP/1.1\r\nHost: example\r\n\r\nbody",
+      );
+      expect(httpHeads).toEqual([
+        {
+          head: "GET /uri-res/N2R?urn:sha1:TEST HTTP/1.1\r\nHost: example\r\n\r\n",
+          rest: "body",
+        },
+      ]);
+
+      const givSocket = new MockSocket();
+      node.handleProbe(givSocket as never);
+      givSocket.emit("data", "GIV 0:1:alpha.txt\r\n\r\n");
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(givHeads).toEqual(["GIV 0:1:alpha.txt\r\n\r\n"]);
+      expect(givSocket.destroyed).toBe(true);
+
+      const legacySocket = new MockSocket();
+      node.handleProbe(legacySocket as never);
+      legacySocket.emit(
+        "data",
+        "GNUTELLA CONNECT/0.4\r\nUser-Agent: OldPeer\r\n\r\n",
+      );
+      expect(legacySocket.destroyed).toBe(true);
+
+      const unknownSocket = new MockSocket();
+      node.handleProbe(unknownSocket as never);
+      unknownSocket.emit("data", "x".repeat(8203));
+      expect(unknownSocket.destroyed).toBe(true);
+
+      const leafRejectSocket = new MockSocket();
+      node.handleProbe(leafRejectSocket as never);
+      leafRejectSocket.emit(
+        "data",
+        "GNUTELLA CONNECT/0.6\r\nUser-Agent: LeafPeer\r\nX-Ultrapeer: False\r\n\r\n",
+      );
+      const rejection = Buffer.concat(leafRejectSocket.writes).toString(
+        "latin1",
+      );
+      expect(rejection).toContain("GNUTELLA/0.6 503 Shielded leaf node");
+      expect(leafRejectSocket.ended).toBe(true);
+
+      expect(probeMessages).toEqual([
+        "unsupported inbound handshake: GNUTELLA CONNECT/0.4",
+        "unknown inbound protocol",
+      ]);
     });
   });
 

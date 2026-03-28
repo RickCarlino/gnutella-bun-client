@@ -10,6 +10,10 @@ import {
   reportSelfToGWebCaches,
   requestGWebCache,
 } from "../../src/gwebcache_client";
+import {
+  describeHttpError,
+  describeUpdateError,
+} from "../../src/gwebcache/response";
 
 describe("gwebcache client", () => {
   test("builds spec2 request URLs with update parameters", () => {
@@ -102,6 +106,74 @@ describe("gwebcache client", () => {
     ]);
   });
 
+  test("describes update errors and fallback update warnings", () => {
+    const warningResult = parseGWebCacheResponse(`
+      I|pong|ExampleCache 2.0|gnutella
+      I|update|WARNING|Slow down
+    `);
+    expect(warningResult.update).toEqual({
+      ok: false,
+      warning: "Slow down",
+      values: ["WARNING", "Slow down"],
+    });
+
+    const fallbackResult = parseGWebCacheResponse(`
+      I|pong|ExampleCache 2.0|gnutella
+      I|update|queued|OK|WARNING: Try later
+    `);
+    expect(fallbackResult.update).toEqual({
+      ok: true,
+      warning: "queued|OK|WARNING: Try later",
+      values: ["queued", "OK", "WARNING: Try later"],
+    });
+
+    expect(
+      describeHttpError({
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        rawLines: ["Required network not accepted"],
+      } as never),
+    ).toBe("HTTP 503: Required network not accepted");
+    expect(
+      describeUpdateError({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        rawLines: [],
+        spec: 2,
+        update: warningResult.update,
+      } as never),
+    ).toBe("Slow down");
+    expect(
+      describeUpdateError({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        rawLines: [],
+        spec: 2,
+        update: fallbackResult.update,
+      } as never),
+    ).toBe("queued|OK|WARNING: Try later");
+    expect(
+      describeUpdateError({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        rawLines: [],
+      } as never),
+    ).toBe("unexpected non-spec2 gwebcache response");
+    expect(
+      describeUpdateError({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        rawLines: [],
+        spec: 2,
+      } as never),
+    ).toBe("missing spec2 gwebcache update response");
+  });
+
   test("fetches and parses a gwebcache response", async () => {
     const seen: string[] = [];
     const fetchImpl = async (input: string | URL | Request) => {
@@ -122,6 +194,53 @@ describe("gwebcache client", () => {
     expect(result.status).toBe(200);
     expect(result.peers).toEqual(["66.132.55.12:6346"]);
     expect(new URL(seen[0]).searchParams.get("get")).toBe("1");
+  });
+
+  test("propagates external aborts and request timeouts", async () => {
+    const preAborted = new AbortController();
+    preAborted.abort(new Error("stopped"));
+    await expect(
+      requestGWebCache("http://cache.example/gwc.php", {
+        signal: preAborted.signal,
+        timeoutMs: 0,
+        fetchImpl: async (_input, init) => {
+          const signal = init?.signal as AbortSignal;
+          expect(signal.aborted).toBe(true);
+          throw signal.reason;
+        },
+      }),
+    ).rejects.toThrow("stopped");
+
+    const externalAbort = new AbortController();
+    await expect(
+      requestGWebCache("http://cache.example/gwc.php", {
+        signal: externalAbort.signal,
+        timeoutMs: 0,
+        fetchImpl: async (_input, init) =>
+          await new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal as AbortSignal;
+            signal.addEventListener("abort", () => reject(signal.reason), {
+              once: true,
+            });
+            queueMicrotask(() =>
+              externalAbort.abort(new Error("cancelled")),
+            );
+          }),
+      }),
+    ).rejects.toThrow("cancelled");
+
+    await expect(
+      requestGWebCache("http://cache.example/gwc.php", {
+        timeoutMs: 1,
+        fetchImpl: async (_input, init) =>
+          await new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal as AbortSignal;
+            signal.addEventListener("abort", () => reject(signal.reason), {
+              once: true,
+            });
+          }),
+      }),
+    ).rejects.toThrow("gwebcache request timed out after 1ms");
   });
 
   test("bootstraps peers from spec2 caches only", async () => {
@@ -186,6 +305,27 @@ describe("gwebcache client", () => {
     expect(first.searchParams.get("ping")).toBe("1");
     expect(first.searchParams.get("client")).toBe("GBUN");
     expect(first.searchParams.get("version")).toBe("GnutellaBun/0.6");
+  });
+
+  test("fetchBootstrapData records thrown cache request errors", async () => {
+    const result = await fetchBootstrapData({
+      caches: ["http://cache-a.example/gwc.php"],
+      fetchImpl: async () => {
+        throw new Error("network down");
+      },
+    });
+
+    expect(result.peers).toEqual([]);
+    expect(result.caches).toEqual([]);
+    expect(result.queriedCaches).toEqual([
+      "http://cache-a.example/gwc.php",
+    ]);
+    expect(result.errors).toEqual([
+      {
+        cache: "http://cache-a.example/gwc.php",
+        message: "network down",
+      },
+    ]);
   });
 
   test("getMorePeers returns only the bootstrap peers", async () => {
@@ -403,5 +543,41 @@ describe("gwebcache client", () => {
     expect(second.searchParams.get("url")).toBe(
       "http://cache-a.example/gwc.php",
     );
+  });
+
+  test("reportSelfToGWebCaches handles empty and rejected cache updates", async () => {
+    await expect(
+      reportSelfToGWebCaches({
+        ip: "66.132.55.12:6346",
+        caches: ["not-a-cache-url"],
+      }),
+    ).resolves.toEqual({
+      referenceCache: undefined,
+      attemptedCaches: [],
+      reportedCaches: [],
+      errors: [],
+    });
+
+    const rejected = await reportSelfToGWebCaches({
+      ip: "66.132.55.12:6346",
+      caches: ["http://cache-a.example/gwc.php"],
+      fetchImpl: async () =>
+        new Response(
+          "I|pong|ModernCache 2.0|gnutella\nI|update|WARNING|Try later\n",
+          {
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+    });
+
+    expect(rejected.referenceCache).toBe("http://cache-a.example/gwc.php");
+    expect(rejected.reportedCaches).toEqual([]);
+    expect(rejected.errors).toEqual([
+      {
+        cache: "http://cache-a.example/gwc.php",
+        message: "Try later",
+      },
+    ]);
   });
 });
