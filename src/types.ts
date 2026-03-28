@@ -176,6 +176,9 @@ export type ConfigDoc = {
     advertisedHost?: string;
     advertisedPort?: number;
     ultrapeer: boolean;
+    maxConnections?: number;
+    maxUltrapeerConnections?: number;
+    maxLeafConnections?: number;
     monitorIgnoreEvents?: string[];
     dataDir: string;
   };

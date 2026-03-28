@@ -95,6 +95,7 @@ Edit `gnutella.json`:
 - set `advertised_port` if your external port differs from `listen_port`
 - optionally set `advertised_host` only when you need to override automatic `Remote-IP` learning
 - set `config.ultrapeer` to `true` to run as an ultrapeer or `false` to force leaf mode
+- adjust `max_connections`, `max_leaf_connections`, and `max_ultrapeer_connections` if you want a smaller or larger peer footprint than the defaults
 - set `config.log_ignore` if you want `monitor` to suppress noisy event classes such as `PING` and `PONG`
 
 Run the client:
@@ -271,9 +272,15 @@ Persistent runtime state includes `servent_id_hex` and the `peers` map.
 - `false`: run as a leaf
 - omitted: default to leaf mode
 
-When running as an ultrapeer, the node advertises ultrapeer capability in the handshake, accepts both mesh peers and leaves, relays traffic, and uses Query Routing Protocol updates for attached peers. The default connection caps mirror gtk-gnutella-style operating limits: up to `50` mesh peers plus `300` leaves.
+When running as an ultrapeer, the node advertises ultrapeer capability in the handshake, accepts both mesh peers and leaves, relays traffic, and uses Query Routing Protocol updates for attached peers. The default connection caps are intentionally conservative for smaller hosts: up to `12` mesh peers plus `24` leaves.
 
-When running as a leaf, the node behaves as a shielded client and keeps up to `4` ultrapeer connections.
+When running as a leaf, the node behaves as a shielded client and keeps up to `4` ultrapeer connections by default.
+
+| Field                       | Meaning                                     |
+| --------------------------- | ------------------------------------------- |
+| `max_connections`           | Mesh-peer cap when running as an ultrapeer. |
+| `max_leaf_connections`      | Leaf-peer cap when running as an ultrapeer. |
+| `max_ultrapeer_connections` | Ultrapeer cap when running as a leaf.       |
 
 ### TLS and Monitoring
 
@@ -285,7 +292,7 @@ Peer-link TLS is opportunistic by default. The node advertises `Upgrade: TLS/1.0
 
 On-disk config uses snake_case only.
 
-All other networking, timing, feature, and protocol tuning values are compile-time constants in the codebase.
+Most other networking, timing, feature, and protocol tuning values are compile-time constants in the codebase.
 
 ## Library Use
 

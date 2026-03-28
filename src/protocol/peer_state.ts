@@ -54,6 +54,9 @@ type PersistedConfig = {
   advertised_host?: unknown;
   advertised_port?: unknown;
   ultrapeer?: unknown;
+  max_connections?: unknown;
+  max_ultrapeer_connections?: unknown;
+  max_leaf_connections?: unknown;
   log_ignore?: unknown;
   data_dir?: unknown;
 };
@@ -280,9 +283,15 @@ export function runtimeConfigFor(
     downloadsDir: path.join(dataDir, DATA_DOWNLOADS_DIRNAME),
     peers: peerStateTargets(peers),
     peerSeenThresholdSec: PEER_SEEN_THRESHOLD_SEC,
-    maxConnections: MAX_CONNECTIONS,
-    maxUltrapeerConnections: MAX_ULTRAPEER_CONNECTIONS,
-    maxLeafConnections: MAX_LEAF_CONNECTIONS,
+    maxConnections:
+      positiveIntegerOrUndefined(doc.config.maxConnections) ||
+      MAX_CONNECTIONS,
+    maxUltrapeerConnections:
+      positiveIntegerOrUndefined(doc.config.maxUltrapeerConnections) ||
+      MAX_ULTRAPEER_CONNECTIONS,
+    maxLeafConnections:
+      positiveIntegerOrUndefined(doc.config.maxLeafConnections) ||
+      MAX_LEAF_CONNECTIONS,
     connectTimeoutMs: CONNECT_TIMEOUT_MS,
     pingIntervalSec: PING_INTERVAL_SEC,
     reconnectIntervalSec: RECONNECT_INTERVAL_SEC,
@@ -354,6 +363,9 @@ export function defaultDoc(configPath: string): ConfigDoc {
       listenHost: DEFAULT_LISTEN_HOST,
       listenPort: DEFAULT_LISTEN_PORT,
       ultrapeer: false,
+      maxConnections: MAX_CONNECTIONS,
+      maxUltrapeerConnections: MAX_ULTRAPEER_CONNECTIONS,
+      maxLeafConnections: MAX_LEAF_CONNECTIONS,
       dataDir: base,
     },
     state: {
@@ -384,6 +396,20 @@ function applyOptionalLoadedConfig(
   );
   if (advertisedPort) doc.config.advertisedPort = advertisedPort;
   doc.config.ultrapeer = config.ultrapeer === true;
+  const maxConnections = positiveIntegerOrUndefined(
+    config.max_connections,
+  );
+  if (maxConnections) doc.config.maxConnections = maxConnections;
+  const maxUltrapeerConnections = positiveIntegerOrUndefined(
+    config.max_ultrapeer_connections,
+  );
+  if (maxUltrapeerConnections)
+    doc.config.maxUltrapeerConnections = maxUltrapeerConnections;
+  const maxLeafConnections = positiveIntegerOrUndefined(
+    config.max_leaf_connections,
+  );
+  if (maxLeafConnections)
+    doc.config.maxLeafConnections = maxLeafConnections;
   const monitorIgnoreEvents = normalizedMonitorIgnoreEvents(
     config.log_ignore,
   );
@@ -407,6 +433,9 @@ function buildLoadedDoc(
         positiveIntegerOrUndefined(config.listen_port) ||
         defaults.config.listenPort,
       ultrapeer: config.ultrapeer === true,
+      maxConnections: defaults.config.maxConnections,
+      maxUltrapeerConnections: defaults.config.maxUltrapeerConnections,
+      maxLeafConnections: defaults.config.maxLeafConnections,
       dataDir: resolveDataDir(configPath, config),
     },
     state: {
@@ -449,6 +478,9 @@ export async function writeDoc(
     listen_host: runtime.listenHost,
     listen_port: runtime.listenPort,
     ultrapeer: runtime.ultrapeer,
+    max_connections: runtime.maxConnections,
+    max_ultrapeer_connections: runtime.maxUltrapeerConnections,
+    max_leaf_connections: runtime.maxLeafConnections,
     data_dir: runtime.dataDir,
   };
   const cleanState: PersistedState = {

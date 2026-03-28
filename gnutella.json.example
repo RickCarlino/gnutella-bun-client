@@ -3,6 +3,9 @@
     "listen_host": "0.0.0.0",
     "listen_port": 6346,
     "ultrapeer": false,
+    "max_connections": 12,
+    "max_ultrapeer_connections": 4,
+    "max_leaf_connections": 24,
     "log_ignore": [],
     "data_dir": "."
   },
