@@ -147,11 +147,13 @@ describe("protocol node", () => {
         expect(events).toContainEqual(
           expect.objectContaining({
             type: "PEER_MESSAGE_RECEIVED",
-            peer: {
+            peer: expect.objectContaining({
               key: "9.8.7.6:4321",
               remoteLabel: "9.8.7.6:4321",
               outbound: false,
-            },
+              compression: false,
+              tls: false,
+            }),
             payloadType: TYPE.PING,
             payloadTypeName: "PING",
             descriptorIdHex: "aa".repeat(16),
@@ -188,11 +190,13 @@ describe("protocol node", () => {
         expect(events).toEqual([
           expect.objectContaining({
             type: "PEER_MESSAGE_SENT",
-            peer: {
+            peer: expect.objectContaining({
               key: "9.8.7.6:4321",
               remoteLabel: "9.8.7.6:4321",
               outbound: false,
-            },
+              compression: false,
+              tls: false,
+            }),
             payloadType: TYPE.PING,
             payloadTypeName: "PING",
             descriptorIdHex: "bb".repeat(16),

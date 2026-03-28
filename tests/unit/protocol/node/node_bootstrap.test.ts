@@ -85,6 +85,7 @@ describe("protocol node", () => {
   test("connectKnownPeers prioritizes the most recently stable peers", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
+      node.doc.config.ultrapeer = true;
       const nowSec = Math.floor(Date.now() / 1000);
       node.doc.state.peers = peerState([
         ["9.9.9.9:9999", nowSec],
@@ -154,6 +155,7 @@ describe("protocol node", () => {
   test("connectKnownPeers bootstraps multiple peer dials in parallel", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
+      node.doc.config.ultrapeer = true;
       const nowSec = Math.floor(Date.now() / 1000);
       node.doc.state.peers = peerState([
         ["1.1.1.1:1111", nowSec],

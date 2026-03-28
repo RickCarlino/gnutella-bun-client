@@ -47,6 +47,7 @@ describe("protocol node", () => {
   test("normalizes query TTL plus hops and drops excessive query TTL values", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
+      node.doc.config.ultrapeer = true;
       const peer = makePeer("source-peer");
       const other = makePeer("other-peer");
       other.role = "ultrapeer";
@@ -280,11 +281,39 @@ describe("protocol node", () => {
           "remote-ip": "9.8.7.6",
         });
         expect(
+          node.buildServerHandshakeHeaders(
+            {
+              upgrade: "TLS/1.0",
+              "accept-encoding": "gzip, deflate",
+            },
+            "9.8.7.6",
+          ),
+        ).toMatchObject({
+          upgrade: "TLS/1.0",
+          connection: "Upgrade",
+          "content-encoding": "deflate",
+          "remote-ip": "9.8.7.6",
+        });
+        expect(
           node.buildClientFinalHeaders(
             { "accept-encoding": "deflate" },
             "9.8.7.6",
           ),
         ).toEqual({
+          "content-encoding": "deflate",
+          "remote-ip": "9.8.7.6",
+        });
+        expect(
+          node.buildClientFinalHeaders(
+            {
+              upgrade: "TLS/1.0",
+              connection: "Upgrade",
+              "accept-encoding": "deflate",
+            },
+            "9.8.7.6",
+          ),
+        ).toEqual({
+          connection: "Upgrade",
           "content-encoding": "deflate",
           "remote-ip": "9.8.7.6",
         });
@@ -294,6 +323,7 @@ describe("protocol node", () => {
           {
             "User-Agent": "Peer/1.0",
             "Accept-Encoding": "gzip, deflate",
+            Upgrade: "TLS/1.0",
             "X-Ultrapeer": "True",
             "X-Ultrapeer-Needed": "false",
             "Listen-IP": "9.8.7.6:6346",
@@ -312,6 +342,7 @@ describe("protocol node", () => {
           supportsPongCaching: true,
           supportsBye: true,
           supportsCompression: true,
+          supportsTls: true,
           compressIn: true,
           compressOut: false,
           isUltrapeer: true,
@@ -428,6 +459,14 @@ describe("protocol node", () => {
     await withTempDir(async (dir) => {
       await withMockNetworkInterfaces(async () => {
         const node = makeNode(path.join(dir, "protocol.json"));
+        const debugEvents: Array<{ phase: string; message: string }> = [];
+        node.subscribe((event) => {
+          if (event.type !== "HANDSHAKE_DEBUG") return;
+          debugEvents.push({
+            phase: event.phase,
+            message: event.message,
+          });
+        });
         const originalCreateConnection = net.createConnection;
         const responses = [
           "GNUTELLA/0.6 503 Busy\r\nX-Try: 9.8.7.6:4321\r\n\r\n",
@@ -466,7 +505,28 @@ describe("protocol node", () => {
           await expect(
             node.connectPeer06("127.0.0.1", 6347),
           ).rejects.toThrow(
-            "unsupported legacy handshake response from 127.0.0.1:6347: GNUTELLA OK",
+            "unsupported 0.4 handshake response from 127.0.0.1:6347: GNUTELLA OK",
+          );
+          expect(debugEvents).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                phase: "dial-start",
+                message: "timeoutMs=5000",
+              }),
+              expect.objectContaining({
+                phase: "connect-sent",
+              }),
+              expect.objectContaining({
+                phase: "response-recv",
+                message: expect.stringContaining("GNUTELLA/0.6 503 Busy"),
+              }),
+              expect.objectContaining({
+                phase: "failed",
+                message: expect.stringContaining(
+                  "0.6 handshake rejected by 127.0.0.1:6346",
+                ),
+              }),
+            ]),
           );
         } finally {
           (

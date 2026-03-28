@@ -10,6 +10,8 @@ export type ProbeCtx = {
   mode: "undecided" | "await-final-0.6" | "done";
   requestHeaders?: Record<string, string>;
   serverHeaders?: Record<string, string>;
+  onData?: (chunk: string | Buffer) => void;
+  onError?: (error: unknown) => void;
 };
 
 export type HttpSession = {

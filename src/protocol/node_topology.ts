@@ -18,17 +18,10 @@ export function classifyPeerRole(
   const mode = node.nodeMode();
 
   if (mode === "ultrapeer") {
-    if (remoteIsUltrapeer === false) return "leaf";
-    return remoteIsUltrapeer === true ? "ultrapeer" : "legacy";
+    return remoteIsUltrapeer === true ? "ultrapeer" : "leaf";
   }
 
-  if (mode === "leaf") {
-    return remoteIsUltrapeer === true ? "ultrapeer" : "legacy";
-  }
-
-  if (remoteIsUltrapeer === true) return "ultrapeer";
-  if (remoteIsUltrapeer === false) return "leaf";
-  return "legacy";
+  return remoteIsUltrapeer === true ? "ultrapeer" : "leaf";
 }
 
 export function peerRole(
@@ -69,17 +62,11 @@ export function availableDialSlots(node: GnutellaServent): number {
       c.maxConnections - node.connectedMeshPeerCount() - node.dialing.size,
     );
   }
-  if (node.nodeMode() === "leaf") {
-    return Math.max(
-      0,
-      c.maxUltrapeerConnections -
-        node.connectedMeshPeerCount() -
-        node.dialing.size,
-    );
-  }
   return Math.max(
     0,
-    c.maxConnections - node.peerCount() - node.dialing.size,
+    c.maxUltrapeerConnections -
+      node.connectedMeshPeerCount() -
+      node.dialing.size,
   );
 }
 
@@ -89,13 +76,6 @@ export function canAcceptPeerRole(
 ): { ok: true } | { ok: false; code: number; reason: string } {
   const c = node.config();
   const mode = node.nodeMode();
-
-  if (mode === "legacy") {
-    if (node.peerCount() >= c.maxConnections) {
-      return { ok: false, code: 503, reason: "Busy" };
-    }
-    return { ok: true };
-  }
 
   if (mode === "leaf") {
     if (role === "leaf") {
@@ -137,11 +117,11 @@ export function canAcceptPeerRole(
 }
 
 export function shouldRelayQueries(node: GnutellaServent): boolean {
-  return node.nodeMode() !== "leaf";
+  return node.nodeMode() === "ultrapeer";
 }
 
 export function shouldRelayPings(node: GnutellaServent): boolean {
-  return node.nodeMode() !== "leaf";
+  return node.nodeMode() === "ultrapeer";
 }
 
 export function isLeafPeer(

@@ -117,12 +117,15 @@ export function cancelTimeout(
   node.timeouts = node.timeouts.filter((candidate) => candidate !== timer);
 }
 
-export function peerInfo(_node: GnutellaServent, peer: Peer): PeerInfo {
+export function peerInfo(node: GnutellaServent, peer: Peer): PeerInfo {
   const info: PeerInfo = {
     key: peer.key,
     remoteLabel: peer.remoteLabel,
     outbound: peer.outbound,
     dialTarget: peer.dialTarget,
+    compression:
+      !!peer.capabilities.compressIn || !!peer.capabilities.compressOut,
+    tls: node.socketUsesTls(peer.socket),
   };
   if (peer.capabilities.userAgent)
     info.userAgent = peer.capabilities.userAgent;

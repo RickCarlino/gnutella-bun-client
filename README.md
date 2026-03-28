@@ -42,7 +42,7 @@ If you want a library, this gives you:
 ### Core Network Features
 
 - Gnutella 0.6 inbound and outbound handshake
-- legacy, leaf, and ultrapeer node modes
+- leaf and ultrapeer node modes
 - `PING` and `PONG`
 - `QUERY` and `QUERY_HIT`
 - `PUSH`
@@ -73,6 +73,7 @@ If you want a library, this gives you:
 
 ### Optional Protocol Features
 
+- opportunistic peer-link TLS
 - deflate compression
 - Query Routing Protocol
 - GGEP-aware query behavior
@@ -89,11 +90,12 @@ bun run gnutella.ts init --config gnutella.json
 Edit `gnutella.json`:
 
 - add one or more bootstrap peers to `state.peers`, for example `"127.0.0.1:6346": 0`
-- put files you want to share in `<dataDir>/downloads`
-- downloads also go to `<dataDir>/downloads`
-- set `advertisedPort` if your external port differs from `listenPort`
-- optionally set `advertisedHost` only when you need to override automatic `Remote-IP` learning
+- put files you want to share in `<data_dir>/downloads`
+- downloads also go to `<data_dir>/downloads`
+- set `advertised_port` if your external port differs from `listen_port`
+- optionally set `advertised_host` only when you need to override automatic `Remote-IP` learning
 - set `config.ultrapeer` to `true` to run as an ultrapeer or `false` to force leaf mode
+- set `config.log_ignore` if you want `monitor` to suppress noisy event classes such as `PING` and `PONG`
 
 Run the client:
 
@@ -110,25 +112,33 @@ The prompt shows:
 
 ## CLI Commands
 
-| Command                          | What it does                                                  |
-| -------------------------------- | ------------------------------------------------------------- |
-| `monitor`                        | Toggle verbose live protocol logging.                         |
-| `help`                           | Show the command list.                                        |
-| `status`                         | Show peer, share, result, and known-peer counts.              |
-| `peers`                          | List connected peers.                                         |
-| `connect <host:port>`            | Connect to a peer and remember it for future boots.           |
-| `shares`                         | List the files currently being shared.                        |
-| `results`                        | Show the current search-result table.                         |
-| `clear`                          | Clear the current result buffer and restart result numbering. |
-| `ping [ttl]`                     | Send a ping.                                                  |
-| `query <terms...>`               | Search the network. Supports quoted args, escapes, and URNs.  |
-| `browse`                         | Send the Gnutella index query used for browse-host responses. |
-| `info <resultNo>`                | Show detailed information for one buffered result.            |
-| `download <resultNo> [destPath]` | Download one result by its local result number.               |
-| `rescan`                         | Rebuild the local file index.                                 |
-| `save`                           | Write the current config to disk.                             |
-| `sleep`                          | Pause during scripted runs.                                   |
-| `quit` / `exit`                  | Stop the node cleanly.                                        |
+| Command                          | What it does                                                    |
+| -------------------------------- | --------------------------------------------------------------- |
+| `monitor`                        | Toggle verbose live protocol logging. Off by default.           |
+| `help`                           | Show the command list.                                          |
+| `status`                         | Show peer, share, result, and known-peer counts.                |
+| `peers`                          | List connected peers and their direction/compression/TLS flags. |
+| `connect <host:port>`            | Connect to a peer and remember it for future boots.             |
+| `shares`                         | List the files currently being shared.                          |
+| `results`                        | Show the current search-result table.                           |
+| `clear`                          | Clear the current result buffer and restart result numbering.   |
+| `ping [ttl]`                     | Send a ping.                                                    |
+| `query <terms...>`               | Search the network. Supports quoted args, escapes, and URNs.    |
+| `browse`                         | Send the Gnutella index query used for browse-host responses.   |
+| `info <resultNo>`                | Show detailed information for one buffered result.              |
+| `download <resultNo> [destPath]` | Download one result by its local result number.                 |
+| `rescan`                         | Rebuild the local file index.                                   |
+| `save`                           | Write the current config to disk.                               |
+| `sleep`                          | Pause during scripted runs.                                     |
+| `quit` / `exit`                  | Stop the node cleanly.                                          |
+
+In the `peers` table, the `FL` column is a compact three-character flag set:
+
+- `O` or `I`: outbound or inbound connection
+- `Z` or `-`: deflate compression active or not active
+- `L` or `-`: TLS active or not active
+
+For example, `OZL` means an outbound peer with deflate and TLS, and `I--` means an inbound plaintext peer with no compression or encryption.
 
 ## Scripted Use
 
@@ -148,6 +158,21 @@ This is useful for:
 - scripted demos
 - reproducible manual checks
 - running several local nodes in separate terminals
+
+## Monitoring
+
+`monitor` is the high-noise live trace mode for the CLI. It is off by default so normal startup stays readable.
+
+When enabled, it prints:
+
+- handshake progress and failures
+- peer up/down events
+- inbound and outbound descriptor traffic
+- query sends, receives, skips, and hits
+- push and download activity
+- maintenance errors and share refreshes
+
+`log_ignore` lets you suppress log classes you do not care about. The values are matched against the monitor tags, so broad tags such as `PING` and `PONG` work, and more specific tags such as `RX:PING`, `TX:PONG`, `QUERY_RESULT`, or `PEER_CONNECTED` also work.
 
 ## How Search and Download Work
 
@@ -223,20 +248,20 @@ The config file has two top-level keys:
 - `config`: runtime settings
 - `state`: persistent runtime identity
 
-Persistent runtime state includes `serventIdHex` and the `peers` map.
+Persistent runtime state includes `servent_id_hex` and the `peers` map.
 
 ### Network Identity
 
-| Field                               | Meaning                                                                                                                                                                                                        |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listenHost` / `listenPort`         | Where the node listens locally.                                                                                                                                                                                |
-| `advertisedHost` / `advertisedPort` | Optional overrides for what the node tells peers to use when connecting back or downloading. By default it learns the host from peer `Remote-IP` reports and uses `listenPort` unless `advertisedPort` is set. |
+| Field                                 | Meaning                                                                                                                                                                                                          |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listen_host` / `listen_port`         | Where the node listens locally.                                                                                                                                                                                  |
+| `advertised_host` / `advertised_port` | Optional overrides for what the node tells peers to use when connecting back or downloading. By default it learns the host from peer `Remote-IP` reports and uses `listen_port` unless `advertised_port` is set. |
 
 ### Sharing and Downloads
 
-| Field     | Meaning                                                                                                     |
-| --------- | ----------------------------------------------------------------------------------------------------------- |
-| `dataDir` | Root directory for runtime data. Files you share and files you download both live in `<dataDir>/downloads`. |
+| Field      | Meaning                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| `data_dir` | Root directory for runtime data. Files you share and files you download both live in `<data_dir>/downloads`. |
 
 ### Node Mode
 
@@ -244,11 +269,21 @@ Persistent runtime state includes `serventIdHex` and the `peers` map.
 
 - `true`: run as an ultrapeer
 - `false`: run as a leaf
-- omitted: stay in the older legacy mode
+- omitted: default to leaf mode
 
 When running as an ultrapeer, the node advertises ultrapeer capability in the handshake, accepts both mesh peers and leaves, relays traffic, and uses Query Routing Protocol updates for attached peers. The default connection caps mirror gtk-gnutella-style operating limits: up to `50` mesh peers plus `300` leaves.
 
 When running as a leaf, the node behaves as a shielded client and keeps up to `4` ultrapeer connections.
+
+### TLS and Monitoring
+
+| Field        | Meaning                                                                 |
+| ------------ | ----------------------------------------------------------------------- |
+| `log_ignore` | Case-insensitive list of monitor tags to suppress when `monitor` is on. |
+
+Peer-link TLS is opportunistic by default. The node advertises `Upgrade: TLS/1.0` and upgrades connections when peers agree.
+
+On-disk config uses snake_case only.
 
 All other networking, timing, feature, and protocol tuning values are compile-time constants in the codebase.
 
@@ -350,7 +385,7 @@ bun run gnutella.ts run --config b.json
 Then:
 
 - add each node to the other node's `state.peers` map with a value of `0`
-- put one test file in each node's `<dataDir>/downloads`
+- put one test file in each node's `<data_dir>/downloads`
 - search from one side with `query <name>`
 - view results with `results`
 - fetch one with `download <resultNo>`

@@ -18,6 +18,7 @@ import * as handshake from "./node_handshake";
 import * as lifecycle from "./node_lifecycle";
 import * as protocolRuntime from "./node_protocol_runtime";
 import * as state from "./node_state";
+import * as tlsSupport from "./node_tls";
 import * as topology from "./node_topology";
 import * as transfer from "./node_transfer";
 import type { Peer } from "./node_types";
@@ -65,6 +66,7 @@ type LifecycleMethods = BoundMethods<typeof lifecycle>;
 type HandshakeMethods = BoundMethods<typeof handshake>;
 type ProtocolRuntimeMethods = BoundMethods<typeof protocolRuntime>;
 type TopologyMethods = BoundMethods<typeof topology>;
+type TlsMethods = BoundMethods<typeof tlsSupport>;
 type TransferMethods = BoundMethods<typeof transfer>;
 
 export class GnutellaServent {
@@ -156,6 +158,14 @@ export class GnutellaServent {
   declare startServer: LifecycleMethods["startServer"];
   declare connectKnownPeers: LifecycleMethods["connectKnownPeers"];
   declare connectPeer: LifecycleMethods["connectPeer"];
+  declare tlsEnabled: TlsMethods["tlsEnabled"];
+  declare socketUsesTls: TlsMethods["socketUsesTls"];
+  declare canUpgradeSocketToTls: TlsMethods["canUpgradeSocketToTls"];
+  declare peerRequestedTlsUpgrade: TlsMethods["peerRequestedTlsUpgrade"];
+  declare peerAcceptedTlsUpgrade: TlsMethods["peerAcceptedTlsUpgrade"];
+  declare clientAcceptedTlsUpgrade: TlsMethods["clientAcceptedTlsUpgrade"];
+  declare tlsUpgradeToken: TlsMethods["tlsUpgradeToken"];
+  declare upgradeSocketToTls: TlsMethods["upgradeSocketToTls"];
   declare baseHandshakeHeaders: HandshakeMethods["baseHandshakeHeaders"];
   declare buildServerHandshakeHeaders: HandshakeMethods["buildServerHandshakeHeaders"];
   declare buildClientFinalHeaders: HandshakeMethods["buildClientFinalHeaders"];
@@ -256,6 +266,7 @@ Object.assign(
   bindNodeMethods(nodeCoreMethods),
   bindNodeMethods(state),
   bindNodeMethods(lifecycle),
+  bindNodeMethods(tlsSupport),
   bindNodeMethods(handshake),
   bindNodeMethods(topology),
   bindNodeMethods(protocolRuntime),

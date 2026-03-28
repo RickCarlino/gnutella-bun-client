@@ -7,7 +7,6 @@ export const DEFAULT_LISTEN_HOST = "0.0.0.0";
 export const DEFAULT_LISTEN_PORT = 6346;
 export const DEFAULT_USER_AGENT = "GnutellaBun/0.6";
 export const DEFAULT_VENDOR_CODE = "GBUN";
-export const DATA_SHARED_DIRNAME = "shared";
 export const DATA_DOWNLOADS_DIRNAME = "downloads";
 export const MAX_CONNECTIONS = 50;
 export const MAX_ULTRAPEER_CONNECTIONS = 4;
@@ -32,6 +31,7 @@ export const MAX_PEER_AGE_SEC = 7 * 24 * 60 * 60;
 export const GWEBCACHE_REPORT_DELAY_SEC = 5 * 60;
 export const DEFAULT_QUERY_ROUTING_VERSION = "0.1";
 export const ENABLE_COMPRESSION = true;
+export const ENABLE_TLS = true;
 export const ENABLE_QRP = true;
 export const ENABLE_BYE = true;
 export const ENABLE_PONG_CACHING = true;
@@ -71,7 +71,9 @@ export const CANONICAL_HEADER_NAMES: Record<string, string> = {
   "x-query-routing": "X-Query-Routing",
   "x-ultrapeer-query-routing": "X-Ultrapeer-Query-Routing",
   "accept-encoding": "Accept-Encoding",
+  connection: "Connection",
   "content-encoding": "Content-Encoding",
+  upgrade: "Upgrade",
   "listen-ip": "Listen-IP",
   "remote-ip": "Remote-IP",
   "pong-caching": "Pong-Caching",
@@ -90,6 +92,8 @@ export const INTERESTING_HANDSHAKE_HEADERS = [
   "x-try-ultrapeers",
   "x-ultrapeer",
   "x-ultrapeer-needed",
+  "upgrade",
+  "connection",
   "listen-ip",
   "remote-ip",
 ] as const;

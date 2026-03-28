@@ -178,8 +178,7 @@ async function createMeshNode(
   doc.config.advertisedHost = "127.0.0.1";
   doc.config.advertisedPort = options.advertisedPort;
   doc.config.dataDir = dir;
-  if (options.ultrapeer !== undefined)
-    doc.config.ultrapeer = options.ultrapeer;
+  doc.config.ultrapeer = options.ultrapeer ?? true;
   doc.state.peers = peerState(options.peers.map((peer) => [peer, nowSec]));
 
   await writeDoc(configPath, doc);

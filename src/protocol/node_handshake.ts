@@ -25,6 +25,49 @@ import {
 import type { GnutellaServent } from "./node";
 import type { ProbeCtx } from "./node_types";
 
+function clearProbeListeners(ctx: ProbeCtx): void {
+  if (ctx.onData) ctx.socket.off("data", ctx.onData);
+  if (ctx.onError) ctx.socket.off("error", ctx.onError);
+}
+
+function handshakePeerLabel(socket: net.Socket): string {
+  return `${socket.remoteAddress || "?"}:${socket.remotePort || "?"}`;
+}
+
+function emitHandshakeDebug(
+  node: GnutellaServent,
+  direction: "inbound" | "outbound",
+  phase: string,
+  peer: string,
+  message: string,
+): void {
+  node.emitEvent({
+    type: "HANDSHAKE_DEBUG",
+    at: ts(),
+    direction,
+    phase,
+    peer,
+    message,
+  });
+}
+
+function emitHandshakeBlock(
+  node: GnutellaServent,
+  direction: "inbound" | "outbound",
+  phase: string,
+  peer: string,
+  startLine: string,
+  headers: Record<string, string>,
+): void {
+  emitHandshakeDebug(
+    node,
+    direction,
+    phase,
+    peer,
+    describeHandshakeResponse(startLine, headers),
+  );
+}
+
 function ultrapeerNeededHeader(node: GnutellaServent): string | undefined {
   if (node.nodeMode() !== "ultrapeer") return undefined;
   if (node.connectedMeshPeerCount() < node.config().maxConnections)
@@ -84,6 +127,10 @@ export function buildServerHandshakeHeaders(
   remoteIp?: string,
 ): Record<string, string> {
   const headers = node.baseHandshakeHeaders(remoteIp);
+  if (node.tlsEnabled() && node.peerRequestedTlsUpgrade(requestHeaders)) {
+    headers.upgrade = node.tlsUpgradeToken();
+    headers.connection = "Upgrade";
+  }
   if (
     node.config().enableCompression &&
     hasToken(requestHeaders["accept-encoding"], "deflate")
@@ -101,6 +148,8 @@ export function buildClientFinalHeaders(
   const headers: Record<string, string> = {};
   const observedRemote = normalizeIpv4(remoteIp);
   if (observedRemote) headers["remote-ip"] = observedRemote;
+  if (node.tlsEnabled() && node.peerAcceptedTlsUpgrade(serverHeaders))
+    headers.connection = "Upgrade";
   if (
     node.config().enableCompression &&
     hasToken(serverHeaders["accept-encoding"], "deflate")
@@ -111,7 +160,7 @@ export function buildClientFinalHeaders(
 }
 
 export function buildCapabilities(
-  _node: GnutellaServent,
+  node: GnutellaServent,
   version: string,
   headers: Record<string, string>,
   compressIn: boolean,
@@ -125,6 +174,7 @@ export function buildCapabilities(
     supportsGgep: !!h["ggep"],
     supportsPongCaching: !!h["pong-caching"],
     supportsBye: !!h["bye-packet"],
+    supportsTls: node.peerRequestedTlsUpgrade(h),
     supportsCompression:
       hasToken(h["accept-encoding"], "deflate") ||
       hasToken(h["content-encoding"], "deflate"),
@@ -205,6 +255,14 @@ export function reject06(
     headers["x-try"] = tryPeers.join(",");
     headers["x-try-ultrapeers"] = tryPeers.join(",");
   }
+  emitHandshakeBlock(
+    node,
+    "inbound",
+    "reject-sent",
+    handshakePeerLabel(socket),
+    `GNUTELLA/0.6 ${code} ${reason}`,
+    headers,
+  );
   socket.end(
     buildHandshakeBlock(`GNUTELLA/0.6 ${code} ${reason}`, headers),
   );
@@ -220,12 +278,19 @@ export function handleProbe(
     mode: "undecided",
   };
   socket.setNoDelay(true);
-  socket.on("data", (chunk) => {
+  ctx.onData = (chunk) => {
     if (ctx.mode === "done") return;
     ctx.buf = Buffer.concat([ctx.buf, toBuffer(chunk)]);
     try {
       node.tryDecideProbe(ctx);
     } catch (error) {
+      emitHandshakeDebug(
+        node,
+        "inbound",
+        "failed",
+        handshakePeerLabel(socket),
+        errMsg(error),
+      );
       node.emitEvent({
         type: "PROBE_REJECTED",
         at: ts(),
@@ -233,8 +298,10 @@ export function handleProbe(
       });
       socket.destroy();
     }
-  });
-  socket.on("error", () => void 0);
+  };
+  ctx.onError = () => void 0;
+  socket.on("data", ctx.onData);
+  socket.on("error", ctx.onError);
 }
 
 export function handleUndecidedProbe(
@@ -269,6 +336,14 @@ export function handleInbound06Probe(
   const cut = findHeaderEnd(raw);
   if (cut === -1) return;
   const { startLine, headers } = parseHandshakeBlock(raw.slice(0, cut));
+  emitHandshakeBlock(
+    node,
+    "inbound",
+    "connect-recv",
+    handshakePeerLabel(ctx.socket),
+    startLine,
+    headers,
+  );
   if (!/^GNUTELLA CONNECT\/0\.[0-9]+/i.test(startLine)) {
     throw new Error(`unexpected 0.6 start line: ${startLine}`);
   }
@@ -284,6 +359,7 @@ export function handleInbound06Probe(
   if (!acceptance.ok) {
     node.reject06(ctx.socket, acceptance.code, acceptance.reason);
     ctx.mode = "done";
+    clearProbeListeners(ctx);
     return;
   }
   ctx.requestHeaders = headers;
@@ -293,6 +369,14 @@ export function handleInbound06Probe(
   );
   ctx.socket.write(
     buildHandshakeBlock("GNUTELLA/0.6 200 OK", ctx.serverHeaders),
+  );
+  emitHandshakeBlock(
+    node,
+    "inbound",
+    "response-sent",
+    handshakePeerLabel(ctx.socket),
+    "GNUTELLA/0.6 200 OK",
+    ctx.serverHeaders,
   );
   ctx.buf = ctx.buf.subarray(cut);
   ctx.mode = "await-final-0.6";
@@ -317,6 +401,7 @@ export function startHttpProbeSession(
   const cut = findHeaderEnd(raw);
   if (cut === -1) return;
   ctx.mode = "done";
+  clearProbeListeners(ctx);
   node.startHttpSession(
     ctx.socket,
     raw.slice(0, cut),
@@ -332,6 +417,7 @@ export function startGivProbeSession(
   const cut = findHeaderEnd(raw);
   if (cut === -1) return;
   ctx.mode = "done";
+  clearProbeListeners(ctx);
   void node
     .handleIncomingGiv(ctx.socket, raw.slice(0, cut))
     .catch(() => ctx.socket.destroy());
@@ -357,6 +443,76 @@ type OutboundHandshakeResult = {
   finalHeadersWithRemote: Record<string, string>;
 };
 
+function shouldUpgradeSocketToTls(
+  node: GnutellaServent,
+  socket: net.Socket,
+  acceptedByServer: boolean,
+  acceptedByClient: boolean,
+): boolean {
+  return (
+    node.tlsEnabled() &&
+    node.canUpgradeSocketToTls(socket) &&
+    acceptedByServer &&
+    acceptedByClient
+  );
+}
+
+function attachInbound06Peer(
+  node: GnutellaServent,
+  socket: net.Socket,
+  remoteLabel: string,
+  role: PeerRole,
+  caps: PeerCapabilities,
+  rest: Buffer,
+  serverHeaders: Record<string, string>,
+  clientHeaders: Record<string, string>,
+): void {
+  const upgradeToTls = shouldUpgradeSocketToTls(
+    node,
+    socket,
+    node.peerAcceptedTlsUpgrade(serverHeaders),
+    node.clientAcceptedTlsUpgrade(clientHeaders),
+  );
+  if (!upgradeToTls) {
+    node.attachPeer(socket, false, remoteLabel, role, caps, rest);
+    return;
+  }
+  emitHandshakeDebug(
+    node,
+    "inbound",
+    "tls-upgrade-start",
+    remoteLabel,
+    "upgrading socket to TLS",
+  );
+  void node
+    .upgradeSocketToTls(socket, "server", rest)
+    .then((tlsSocket) => {
+      emitHandshakeDebug(
+        node,
+        "inbound",
+        "tls-upgrade-ok",
+        remoteLabel,
+        "TLS active",
+      );
+      node.attachPeer(tlsSocket, false, remoteLabel, role, caps);
+    })
+    .catch((error) => {
+      emitHandshakeDebug(
+        node,
+        "inbound",
+        "tls-upgrade-failed",
+        remoteLabel,
+        errMsg(error),
+      );
+      node.emitEvent({
+        type: "PROBE_REJECTED",
+        at: ts(),
+        message: `TLS upgrade failed: ${errMsg(error)}`,
+      });
+      socket.destroy();
+    });
+}
+
 function parseOutboundHandshakeResult(
   node: GnutellaServent,
   target: string,
@@ -370,12 +526,20 @@ function parseOutboundHandshakeResult(
 
   const { startLine, headers } = parseHandshakeBlock(raw.slice(0, cut));
   node.absorbHandshakeHeaders(headers, socket.remoteAddress);
+  emitHandshakeBlock(
+    node,
+    "outbound",
+    "response-recv",
+    target,
+    startLine,
+    headers,
+  );
   if (
     /^GNUTELLA OK/i.test(startLine) ||
     /^GNUTELLA\/0\.4 200/i.test(startLine)
   ) {
     throw new Error(
-      `unsupported legacy handshake response from ${target}: ${describeHandshakeResponse(startLine, headers)}`,
+      `unsupported 0.4 handshake response from ${target}: ${describeHandshakeResponse(startLine, headers)}`,
     );
   }
 
@@ -425,6 +589,14 @@ export function finishInbound06Probe(
   if (cut === -1) return;
   const { startLine, headers } = parseHandshakeBlock(raw.slice(0, cut));
   node.absorbHandshakeHeaders(headers, ctx.socket.remoteAddress);
+  emitHandshakeBlock(
+    node,
+    "inbound",
+    "final-recv",
+    handshakePeerLabel(ctx.socket),
+    startLine,
+    headers,
+  );
   if (finalHandshakeCode(startLine) !== 200) {
     throw new Error(`client rejected connection: ${startLine}`);
   }
@@ -446,13 +618,17 @@ export function finishInbound06Probe(
   const role = node.classifyPeerRole(caps);
   const rest = ctx.buf.subarray(cut);
   ctx.mode = "done";
-  node.attachPeer(
+  clearProbeListeners(ctx);
+  const remoteLabel = handshakePeerLabel(ctx.socket);
+  attachInbound06Peer(
+    node,
     ctx.socket,
-    false,
-    `${ctx.socket.remoteAddress || "?"}:${ctx.socket.remotePort || "?"}`,
+    remoteLabel,
     role,
     caps,
     rest,
+    serverHeaders,
+    headers,
   );
 }
 
@@ -475,32 +651,59 @@ export async function connectPeer06(
 ): Promise<void> {
   const c = node.config();
   const target = normalizePeer(host, port);
+  emitHandshakeDebug(
+    node,
+    "outbound",
+    "dial-start",
+    target,
+    `timeoutMs=${timeoutMs}`,
+  );
   await new Promise<void>((resolve, reject) => {
     const socket = net.createConnection({ host, port });
     socket.setNoDelay(true);
-    socket.setTimeout(timeoutMs, () =>
-      socket.destroy(new Error("connect timeout")),
-    );
     let decided = false;
     let buf = Buffer.alloc(0);
+
+    const cleanup = () => {
+      socket.off("error", fail);
+      socket.off("close", onClose);
+      socket.off("connect", onConnect);
+      socket.off("data", onData);
+    };
 
     const fail = (error: unknown) => {
       if (decided) return;
       decided = true;
+      cleanup();
+      emitHandshakeDebug(
+        node,
+        "outbound",
+        "failed",
+        target,
+        errMsg(error),
+      );
       socket.destroy();
       reject(error instanceof Error ? error : new Error(errMsg(error)));
     };
+    socket.setTimeout(timeoutMs, () => fail(new Error("connect timeout")));
 
-    socket.on("error", fail);
-    socket.on("connect", () =>
-      socket.write(
-        buildHandshakeBlock(
-          "GNUTELLA CONNECT/0.6",
-          node.baseHandshakeHeaders(socket.remoteAddress),
-        ),
-      ),
-    );
-    socket.on("data", (chunk) => {
+    const onConnect = () => {
+      const headers = node.baseHandshakeHeaders(socket.remoteAddress);
+      if (node.tlsEnabled() && node.canUpgradeSocketToTls(socket))
+        headers.upgrade = node.tlsUpgradeToken();
+      socket.write(buildHandshakeBlock("GNUTELLA CONNECT/0.6", headers));
+      emitHandshakeBlock(
+        node,
+        "outbound",
+        "connect-sent",
+        target,
+        "GNUTELLA CONNECT/0.6",
+        headers,
+      );
+    };
+    const onClose = () =>
+      fail(new Error("socket closed during handshake"));
+    const onData = (chunk: string | Buffer) => {
       if (decided) return;
       buf = Buffer.concat([buf, toBuffer(chunk)]);
       let result: OutboundHandshakeResult | undefined;
@@ -537,9 +740,73 @@ export async function connectPeer06(
       socket.write(
         buildHandshakeBlock("GNUTELLA/0.6 200 OK", finalHeadersWithRemote),
       );
+      emitHandshakeBlock(
+        node,
+        "outbound",
+        "final-sent",
+        target,
+        "GNUTELLA/0.6 200 OK",
+        finalHeadersWithRemote,
+      );
       decided = true;
-      node.attachPeer(socket, true, target, role, caps, rest, target);
-      resolve();
-    });
+      socket.setTimeout(0);
+      cleanup();
+      const upgradeToTls = shouldUpgradeSocketToTls(
+        node,
+        socket,
+        node.peerAcceptedTlsUpgrade(caps.headers),
+        true,
+      );
+      if (!upgradeToTls) {
+        node.attachPeer(socket, true, target, role, caps, rest, target);
+        resolve();
+        return;
+      }
+      emitHandshakeDebug(
+        node,
+        "outbound",
+        "tls-upgrade-start",
+        target,
+        "upgrading socket to TLS",
+      );
+      void node
+        .upgradeSocketToTls(socket, "client", rest)
+        .then((tlsSocket) => {
+          emitHandshakeDebug(
+            node,
+            "outbound",
+            "tls-upgrade-ok",
+            target,
+            "TLS active",
+          );
+          node.attachPeer(
+            tlsSocket,
+            true,
+            target,
+            role,
+            caps,
+            Buffer.alloc(0),
+            target,
+          );
+          resolve();
+        })
+        .catch((error) => {
+          emitHandshakeDebug(
+            node,
+            "outbound",
+            "tls-upgrade-failed",
+            target,
+            errMsg(error),
+          );
+          socket.destroy();
+          reject(
+            error instanceof Error ? error : new Error(errMsg(error)),
+          );
+        });
+    };
+    socket.on("error", fail);
+    socket.on("close", onClose);
+    socket.on("connect", onConnect);
+    socket.on("data", onData);
   });
 }

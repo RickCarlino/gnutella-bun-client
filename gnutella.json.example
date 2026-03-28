@@ -1,13 +1,13 @@
 {
   "config": {
-    "listenHost": "0.0.0.0",
-    "listenPort": 6346,
+    "listen_host": "0.0.0.0",
+    "listen_port": 6346,
     "ultrapeer": false,
-    "monitorIgnoreEvents": [],
-    "dataDir": "."
+    "log_ignore": [],
+    "data_dir": "."
   },
   "state": {
-    "serventIdHex": "00112233445566778899aabbccddeeff",
+    "servent_id_hex": "00112233445566778899aabbccddeeff",
     "peers": {
       "127.0.0.1:6346": 0
     }

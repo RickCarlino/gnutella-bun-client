@@ -7,6 +7,8 @@ export type CliNode = {
     outbound: boolean;
     dialTarget?: string;
     userAgent?: string;
+    compression: boolean;
+    tls: boolean;
   }>;
   getResults(): Array<{
     resultNo: number;
@@ -45,8 +47,8 @@ export type ParsedCli = {
 export type PeerAddr = { host: string; port: number };
 export type PeerState = Record<string, number>;
 export type Route = { peerKey: string; ts: number };
-type NodeMode = "legacy" | "leaf" | "ultrapeer";
-export type PeerRole = "legacy" | "leaf" | "ultrapeer";
+type NodeMode = "leaf" | "ultrapeer";
+export type PeerRole = "leaf" | "ultrapeer";
 
 export type RemoteQrpState = {
   resetSeen: boolean;
@@ -67,6 +69,7 @@ export type PeerCapabilities = {
   supportsPongCaching: boolean;
   supportsBye: boolean;
   supportsCompression: boolean;
+  supportsTls: boolean;
   compressIn: boolean;
   compressOut: boolean;
   isUltrapeer?: boolean;
@@ -172,7 +175,7 @@ export type ConfigDoc = {
     listenPort: number;
     advertisedHost?: string;
     advertisedPort?: number;
-    ultrapeer?: boolean;
+    ultrapeer: boolean;
     monitorIgnoreEvents?: string[];
     dataDir: string;
   };
@@ -187,7 +190,7 @@ export type RuntimeConfig = {
   listenPort: number;
   advertisedHost?: string;
   advertisedPort?: number;
-  ultrapeer?: boolean;
+  ultrapeer: boolean;
   monitorIgnoreEvents: string[];
   nodeMode: NodeMode;
   dataDir: string;
@@ -228,6 +231,8 @@ export type PeerInfo = {
   outbound: boolean;
   dialTarget?: string;
   userAgent?: string;
+  compression: boolean;
+  tls: boolean;
 };
 
 export type NodeStatus = {
@@ -260,6 +265,12 @@ export type GnutellaEvent =
       message: string;
     })
   | (EventBase<"PROBE_REJECTED"> & {
+      message: string;
+    })
+  | (EventBase<"HANDSHAKE_DEBUG"> & {
+      direction: "inbound" | "outbound";
+      phase: string;
+      peer: string;
       message: string;
     })
   | (EventBase<"PEER_CONNECTED"> & {

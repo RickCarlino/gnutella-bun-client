@@ -7,7 +7,6 @@ const SIZE_FORMAT = new Intl.NumberFormat("en-US", {
 const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
 const RESULT_COUNT_DISPLAY_MAX = 999;
 const PEER_TABLE_WIDTH_MAX = 80;
-const PEER_TABLE_GAP_WIDTH = 4;
 
 type ResultInfo = ReturnType<CliNode["getResults"]>[number];
 
@@ -48,6 +47,10 @@ function fitTableCell(value: string, width: number): string {
   const head = Math.floor(kept / 2);
   const tail = kept - head;
   return `${value.slice(0, head)}..${value.slice(-tail)}`;
+}
+
+function peerFlags(peer: ReturnType<CliNode["getPeers"]>[number]): string {
+  return `${peer.outbound ? "O" : "I"}${peer.compression ? "Z" : "-"}${peer.tls ? "L" : "-"}`;
 }
 
 function valueOrDash(value: string | number | undefined): string {
@@ -121,14 +124,14 @@ export function printPeers(
     return;
   }
   const rows = peers.map((peer) => ({
-    direction: peer.outbound ? "out" : "in",
+    flags: peerFlags(peer),
     remoteLabel: sanitizeTableCell(peer.remoteLabel, "?"),
     userAgent: sanitizeTableCell(peer.userAgent, "-"),
   }));
 
-  const direction = Math.max(
-    "Dir".length,
-    ...rows.map((row) => row.direction.length),
+  const flags = Math.max(
+    "FL".length,
+    ...rows.map((row) => row.flags.length),
   );
   const desiredRemoteLabel = Math.max(
     "Peer".length,
@@ -140,7 +143,7 @@ export function printPeers(
   );
   const available = Math.max(
     "Peer".length + "Agent".length,
-    PEER_TABLE_WIDTH_MAX - direction - PEER_TABLE_GAP_WIDTH,
+    PEER_TABLE_WIDTH_MAX - flags - 4,
   );
 
   let remoteLabel = Math.min(
@@ -159,28 +162,24 @@ export function printPeers(
   }
 
   const widths = {
-    direction,
+    flags,
     remoteLabel,
     userAgent,
   };
 
-  const line = (
-    direction: string,
-    remoteLabel: string,
-    userAgent: string,
-  ) =>
-    `${direction.padEnd(widths.direction, " ")}  ${fitTableCell(remoteLabel, widths.remoteLabel)}  ${fitTableCell(userAgent, widths.userAgent)}`.trimEnd();
+  const line = (flags: string, remoteLabel: string, userAgent: string) =>
+    `${flags.padEnd(widths.flags, " ")}  ${fitTableCell(remoteLabel, widths.remoteLabel)}  ${fitTableCell(userAgent, widths.userAgent)}`.trimEnd();
 
   log(
     [
-      line("Dir", "Peer", "Agent"),
+      line("FL", "Peer", "Agent"),
       line(
-        "-".repeat(widths.direction),
+        "-".repeat(widths.flags),
         "-".repeat(widths.remoteLabel),
         "-".repeat(widths.userAgent),
       ),
       ...rows.map((row) =>
-        line(row.direction, row.remoteLabel, row.userAgent),
+        line(row.flags, row.remoteLabel, row.userAgent),
       ),
     ].join("\n"),
   );

@@ -7,7 +7,6 @@ import {
   ADVERTISED_SPEED_KBPS,
   CONNECT_TIMEOUT_MS,
   DATA_DOWNLOADS_DIRNAME,
-  DATA_SHARED_DIRNAME,
   DEFAULT_LISTEN_HOST,
   DEFAULT_LISTEN_PORT,
   DEFAULT_PING_TTL,
@@ -47,24 +46,21 @@ import {
   parsePeer,
   unique,
 } from "../shared";
-import type {
-  ConfigDoc,
-  DownloadRecord,
-  PeerState,
-  RuntimeConfig,
-} from "../types";
+import type { ConfigDoc, PeerState, RuntimeConfig } from "../types";
 
-type PersistedConfig = Partial<ConfigDoc["config"]> & {
-  peers?: string[];
-  seedPeers?: string[];
-  sharedDir?: string;
-  downloadsDir?: string;
+type PersistedConfig = {
+  listen_host?: unknown;
+  listen_port?: unknown;
+  advertised_host?: unknown;
+  advertised_port?: unknown;
+  ultrapeer?: unknown;
+  log_ignore?: unknown;
+  data_dir?: unknown;
 };
 
-type PersistedState = Partial<ConfigDoc["state"]> & {
-  goodPeers?: string[];
-  knownPeers?: string[];
-  downloads?: DownloadRecord[];
+type PersistedState = {
+  servent_id_hex?: unknown;
+  peers?: unknown;
 };
 
 type PersistedDoc = {
@@ -121,15 +117,6 @@ export function detectLocalAdvertisedIpv4(listenHost: string): string {
     }
   }
   return candidates.privateAddr || candidates.loopback;
-}
-
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return unique(
-    value
-      .map((item) => String(item || "").trim())
-      .filter((item) => item.length > 0),
-  );
 }
 
 function normalizePeerTimestamp(value: unknown): number {
@@ -207,27 +194,6 @@ export function rememberPeerInState(
   );
 }
 
-function migratePeerState(
-  value: {
-    peers?: unknown;
-    configPeers?: unknown;
-    seedPeers?: unknown;
-    knownPeers?: unknown;
-    goodPeers?: unknown;
-  } = {},
-): PeerState {
-  let peers = normalizePeerState(value.peers);
-  for (const peer of normalizeStringArray(value.configPeers))
-    peers = rememberPeerInState(peers, peer, 0);
-  for (const peer of normalizeStringArray(value.seedPeers))
-    peers = rememberPeerInState(peers, peer, 0);
-  for (const peer of normalizeStringArray(value.knownPeers))
-    peers = rememberPeerInState(peers, peer, 0);
-  for (const peer of normalizeStringArray(value.goodPeers))
-    peers = rememberPeerInState(peers, peer, 0);
-  return peers;
-}
-
 export function peerStateTargets(peers: PeerState): string[] {
   return sortPeerStateEntries(peers).map(([peer]) => peer);
 }
@@ -252,44 +218,27 @@ export function appendPathSuffix(
   return path.join(dir, `${base} (${suffixNo})${ext}`);
 }
 
+function resolveConfiguredPath(
+  baseDir: string,
+  value: unknown,
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return path.isAbsolute(trimmed)
+    ? path.normalize(trimmed)
+    : path.resolve(baseDir, trimmed);
+}
+
 function resolveDataDir(
   configPath: string,
   config: {
-    dataDir?: unknown;
-    sharedDir?: unknown;
-    downloadsDir?: unknown;
+    data_dir?: unknown;
   },
 ): string {
   const base = path.dirname(path.resolve(configPath));
-  const resolvePath = (value: unknown): string | undefined => {
-    if (typeof value !== "string") return undefined;
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    return path.isAbsolute(trimmed)
-      ? path.normalize(trimmed)
-      : path.resolve(base, trimmed);
-  };
-
-  const explicit = resolvePath(config.dataDir);
-  if (explicit) return explicit;
-
-  const sharedDir = resolvePath(config.sharedDir);
-  const downloadsDir = resolvePath(config.downloadsDir);
-  if (
-    sharedDir &&
-    downloadsDir &&
-    path.dirname(sharedDir) === path.dirname(downloadsDir)
-  ) {
-    return path.dirname(sharedDir);
-  }
-  if (sharedDir && path.basename(sharedDir) === DATA_SHARED_DIRNAME)
-    return path.dirname(sharedDir);
-  if (
-    downloadsDir &&
-    path.basename(downloadsDir) === DATA_DOWNLOADS_DIRNAME
-  )
-    return path.dirname(downloadsDir);
-  return base;
+  const explicit = resolveConfiguredPath(base, config.data_dir);
+  return explicit || base;
 }
 
 function normalizedListenHost(value: unknown): string {
@@ -308,12 +257,10 @@ export function runtimeConfigFor(
   configPath: string,
   doc: Pick<ConfigDoc, "config" | "state">,
 ): RuntimeConfig {
-  const dataDir = resolveDataDir(configPath, doc.config);
+  const dataDir = resolveDataDir(configPath, {
+    data_dir: doc.config.dataDir,
+  });
   const peers = trimPeerState(doc.state.peers);
-  const ultrapeer =
-    typeof doc.config.ultrapeer === "boolean"
-      ? doc.config.ultrapeer
-      : undefined;
   const monitorIgnoreEvents =
     normalizedMonitorIgnoreEvents(doc.config.monitorIgnoreEvents) || [];
   return {
@@ -326,14 +273,9 @@ export function runtimeConfigFor(
         ? doc.config.advertisedHost.trim()
         : undefined,
     advertisedPort: normalizedPositivePort(doc.config.advertisedPort),
-    ultrapeer,
+    ultrapeer: doc.config.ultrapeer === true,
     monitorIgnoreEvents,
-    nodeMode:
-      ultrapeer === true
-        ? "ultrapeer"
-        : ultrapeer === false
-          ? "leaf"
-          : "legacy",
+    nodeMode: doc.config.ultrapeer === true ? "ultrapeer" : "leaf",
     dataDir,
     downloadsDir: path.join(dataDir, DATA_DOWNLOADS_DIRNAME),
     peers: peerStateTargets(peers),
@@ -411,6 +353,7 @@ export function defaultDoc(configPath: string): ConfigDoc {
     config: {
       listenHost: DEFAULT_LISTEN_HOST,
       listenPort: DEFAULT_LISTEN_PORT,
+      ultrapeer: false,
       dataDir: base,
     },
     state: {
@@ -434,14 +377,15 @@ function applyOptionalLoadedConfig(
   doc: ConfigDoc,
   config: PersistedConfig,
 ): void {
-  const advertisedHost = optionalNonEmptyString(config.advertisedHost);
+  const advertisedHost = optionalNonEmptyString(config.advertised_host);
   if (advertisedHost) doc.config.advertisedHost = advertisedHost;
-  const advertisedPort = positiveIntegerOrUndefined(config.advertisedPort);
+  const advertisedPort = positiveIntegerOrUndefined(
+    config.advertised_port,
+  );
   if (advertisedPort) doc.config.advertisedPort = advertisedPort;
-  if (typeof config.ultrapeer === "boolean")
-    doc.config.ultrapeer = config.ultrapeer;
+  doc.config.ultrapeer = config.ultrapeer === true;
   const monitorIgnoreEvents = normalizedMonitorIgnoreEvents(
-    config.monitorIgnoreEvents,
+    config.log_ignore,
   );
   if (monitorIgnoreEvents)
     doc.config.monitorIgnoreEvents = monitorIgnoreEvents;
@@ -457,24 +401,19 @@ function buildLoadedDoc(
   const doc: ConfigDoc = {
     config: {
       listenHost:
-        optionalNonEmptyString(config.listenHost) ||
+        optionalNonEmptyString(config.listen_host) ||
         defaults.config.listenHost,
       listenPort:
-        positiveIntegerOrUndefined(config.listenPort) ||
+        positiveIntegerOrUndefined(config.listen_port) ||
         defaults.config.listenPort,
+      ultrapeer: config.ultrapeer === true,
       dataDir: resolveDataDir(configPath, config),
     },
     state: {
       serventIdHex:
-        normalizedServentIdHex(state.serventIdHex) ||
+        normalizedServentIdHex(state.servent_id_hex) ||
         defaults.state.serventIdHex,
-      peers: migratePeerState({
-        peers: state.peers,
-        configPeers: config.peers,
-        seedPeers: config.seedPeers,
-        knownPeers: state.knownPeers,
-        goodPeers: state.goodPeers,
-      }),
+      peers: normalizePeerState(state.peers),
     },
   };
   applyOptionalLoadedConfig(doc, config);
@@ -506,33 +445,34 @@ export async function writeDoc(
   const full = path.resolve(configPath);
   const tmp = `${full}.tmp`;
   const runtime = runtimeConfigFor(full, doc);
-  const clean: ConfigDoc = {
-    config: {
-      listenHost: runtime.listenHost,
-      listenPort: runtime.listenPort,
-      dataDir: runtime.dataDir,
-    },
-    state: {
-      serventIdHex:
-        typeof doc.state.serventIdHex === "string" &&
-        /^[0-9a-f]{32}$/i.test(doc.state.serventIdHex)
-          ? doc.state.serventIdHex.toLowerCase()
-          : randomDocServentId(),
-      peers: trimPeerState(doc.state.peers),
-    },
+  const cleanConfig: PersistedConfig = {
+    listen_host: runtime.listenHost,
+    listen_port: runtime.listenPort,
+    ultrapeer: runtime.ultrapeer,
+    data_dir: runtime.dataDir,
+  };
+  const cleanState: PersistedState = {
+    servent_id_hex:
+      typeof doc.state.serventIdHex === "string" &&
+      /^[0-9a-f]{32}$/i.test(doc.state.serventIdHex)
+        ? doc.state.serventIdHex.toLowerCase()
+        : randomDocServentId(),
+    peers: trimPeerState(doc.state.peers),
   };
   if (runtime.advertisedHost)
-    clean.config.advertisedHost = runtime.advertisedHost;
+    cleanConfig.advertised_host = runtime.advertisedHost;
   if (
     runtime.advertisedPort != null &&
     runtime.advertisedPort !== runtime.listenPort
   ) {
-    clean.config.advertisedPort = runtime.advertisedPort;
+    cleanConfig.advertised_port = runtime.advertisedPort;
   }
-  if (runtime.ultrapeer !== undefined)
-    clean.config.ultrapeer = runtime.ultrapeer;
   if (runtime.monitorIgnoreEvents.length)
-    clean.config.monitorIgnoreEvents = runtime.monitorIgnoreEvents;
+    cleanConfig.log_ignore = runtime.monitorIgnoreEvents;
+  const clean: PersistedDoc = {
+    config: cleanConfig,
+    state: cleanState,
+  };
   await fsp.writeFile(tmp, `${JSON.stringify(clean, null, 2)}\n`, "utf8");
   await fsp.rename(tmp, full);
 }

@@ -48,7 +48,7 @@ function makePeer(label = "1.2.3.4:6346"): Peer {
     outbound: false,
     dialTarget: label,
     remoteLabel: label,
-    role: "legacy",
+    role: "leaf",
     capabilities: {
       version: "0.6",
       headers: {},
@@ -56,6 +56,7 @@ function makePeer(label = "1.2.3.4:6346"): Peer {
       supportsPongCaching: false,
       supportsBye: true,
       supportsCompression: false,
+      supportsTls: false,
       compressIn: false,
       compressOut: false,
       isUltrapeer: false,
@@ -117,6 +118,12 @@ describe("protocol config and public helpers", () => {
         configPath,
         loaded,
       ).config();
+      const persisted = JSON.parse(
+        await fs.readFile(configPath, "utf8"),
+      ) as {
+        config: Record<string, unknown>;
+        state: Record<string, unknown>;
+      };
       expect(loaded.state.peers).toEqual({
         "9.9.9.9:6346": 123,
         "1.2.3.4:6346": 0,
@@ -124,6 +131,14 @@ describe("protocol config and public helpers", () => {
       expect(loaded.config.dataDir).toBe(path.join(dir, "nested"));
       expect(loaded.config.advertisedHost).toBeUndefined();
       expect(loaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
+      expect(persisted.config.listen_host).toBe("0.0.0.0");
+      expect(persisted.config.listen_port).toBe(6346);
+      expect(persisted.config.data_dir).toBe(path.join(dir, "nested"));
+      expect(persisted.config.log_ignore).toBeUndefined();
+      expect("listenHost" in persisted.config).toBe(false);
+      expect("dataDir" in persisted.config).toBe(false);
+      expect(persisted.state.servent_id_hex).toMatch(/^[0-9a-f]{32}$/);
+      expect("serventIdHex" in persisted.state).toBe(false);
       await expect(
         fs.stat(loadedRuntime.downloadsDir),
       ).resolves.toBeDefined();
@@ -158,22 +173,29 @@ describe("protocol config and public helpers", () => {
           remoteLabel: "1.2.3.4:6346",
           outbound: false,
           dialTarget: "1.2.3.4:6346",
+          compression: false,
+          tls: false,
           userAgent: "Peer/1.0",
         },
       ]);
     });
   });
 
-  test("drops legacy persisted download history from state", async () => {
+  test("ignores obsolete persisted keys instead of migrating them", async () => {
     await withTempDir(async (dir) => {
       const configPath = path.join(dir, "protocol.json");
       await fs.writeFile(
         configPath,
         `${JSON.stringify(
           {
-            config: {},
+            config: {
+              peers: ["1.2.3.4:6346", "9.9.9.9:6346"],
+              seed_peers: ["3.4.5.6:6346"],
+            },
             state: {
-              serventIdHex: "ab".repeat(16),
+              servent_id_hex: "ab".repeat(16),
+              known_peers: ["7.7.7.7:7777"],
+              good_peers: ["8.8.8.8:8888"],
               downloads: [{ fileName: "stale.bin" }],
             },
           },
@@ -188,39 +210,6 @@ describe("protocol config and public helpers", () => {
       expect(loaded.state).toEqual({
         serventIdHex: "ab".repeat(16),
         peers: {},
-      });
-    });
-  });
-
-  test("migrates legacy peer arrays into the unified peer state map", async () => {
-    await withTempDir(async (dir) => {
-      const configPath = path.join(dir, "protocol.json");
-      await fs.writeFile(
-        configPath,
-        `${JSON.stringify(
-          {
-            config: {
-              peers: ["1.2.3.4:6346", "9.9.9.9:6346"],
-            },
-            state: {
-              serventIdHex: "ab".repeat(16),
-              knownPeers: ["7.7.7.7:7777"],
-              goodPeers: ["8.8.8.8:8888"],
-            },
-          },
-          null,
-          2,
-        )}\n`,
-        "utf8",
-      );
-
-      const loaded = await loadDoc(configPath);
-
-      expect(loaded.state.peers).toEqual({
-        "8.8.8.8:8888": 0,
-        "7.7.7.7:7777": 0,
-        "9.9.9.9:6346": 0,
-        "1.2.3.4:6346": 0,
       });
     });
   });
@@ -274,6 +263,84 @@ describe("protocol config and public helpers", () => {
         "PONG",
         "RX:PING",
       ]);
+    });
+  });
+
+  test("loads snake_case config keys and ignores camelCase aliases", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      await fs.writeFile(
+        configPath,
+        `${JSON.stringify(
+          {
+            config: {
+              listen_host: "127.0.0.1",
+              listen_port: 7777,
+              advertised_host: "7.7.7.7",
+              advertised_port: 8888,
+              data_dir: "./state-dir",
+              ultrapeer: true,
+              log_ignore: [" ping ", "PONG"],
+              seed_peers: ["1.2.3.4:6346"],
+            },
+            state: {
+              servent_id_hex: "ab".repeat(16),
+              known_peers: ["5.6.7.8:6346"],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const snakeLoaded = await loadDoc(configPath);
+      expect(snakeLoaded.config.listenHost).toBe("127.0.0.1");
+      expect(snakeLoaded.config.listenPort).toBe(7777);
+      expect(snakeLoaded.config.advertisedHost).toBe("7.7.7.7");
+      expect(snakeLoaded.config.advertisedPort).toBe(8888);
+      expect(snakeLoaded.config.dataDir).toBe(path.join(dir, "state-dir"));
+      expect(snakeLoaded.config.monitorIgnoreEvents).toEqual([
+        "PING",
+        "PONG",
+      ]);
+      expect(snakeLoaded.state.serventIdHex).toBe("ab".repeat(16));
+      expect(snakeLoaded.state.peers).toEqual({});
+
+      await fs.writeFile(
+        configPath,
+        `${JSON.stringify(
+          {
+            config: {
+              listenHost: "127.0.0.2",
+              listenPort: 9999,
+              advertisedHost: "8.8.8.8",
+              advertisedPort: 9998,
+              dataDir: "./legacy-dir",
+              monitorIgnoreEvents: ["query"],
+              seedPeers: ["2.3.4.5:6346"],
+            },
+            state: {
+              serventIdHex: "cd".repeat(16),
+              goodPeers: ["6.7.8.9:6346"],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const camelLoaded = await loadDoc(configPath);
+      expect(camelLoaded.config.listenHost).toBe("0.0.0.0");
+      expect(camelLoaded.config.listenPort).toBe(6346);
+      expect(camelLoaded.config.advertisedHost).toBeUndefined();
+      expect(camelLoaded.config.advertisedPort).toBeUndefined();
+      expect(camelLoaded.config.dataDir).toBe(dir);
+      expect(camelLoaded.config.monitorIgnoreEvents).toBeUndefined();
+      expect(camelLoaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
+      expect(camelLoaded.state.serventIdHex).not.toBe("cd".repeat(16));
+      expect(camelLoaded.state.peers).toEqual({});
     });
   });
 

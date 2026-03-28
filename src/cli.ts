@@ -117,6 +117,7 @@ function describePeer(
   const parts = [
     event.peer.remoteLabel,
     `dir=${event.peer.outbound ? "out" : "in"}`,
+    `flags=${event.peer.compression ? "Z" : "-"}${event.peer.tls ? "L" : "-"}`,
   ];
   if (event.peer.userAgent)
     parts.push(`agent=${quoted(event.peer.userAgent)}`);
@@ -165,6 +166,18 @@ function formatLifecycleMonitorEvent(
         "PROBE_REJECTED",
       );
   }
+}
+
+function formatHandshakeMonitorEvent(
+  event: GnutellaEvent,
+): MonitorLogEntry | undefined {
+  if (event.type !== "HANDSHAKE_DEBUG") return;
+  return monitorEntry(
+    `[hs ${event.direction} ${event.phase}] peer=${event.peer} ${event.message}`,
+    "HANDSHAKE",
+    `HANDSHAKE:${event.direction.toUpperCase()}`,
+    `HANDSHAKE:${event.phase.toUpperCase()}`,
+  );
 }
 
 function formatPeerMonitorEvent(
@@ -285,6 +298,7 @@ function formatMonitorEvent(
 ): MonitorLogEntry | undefined {
   return (
     formatLifecycleMonitorEvent(event) ||
+    formatHandshakeMonitorEvent(event) ||
     formatPeerMonitorEvent(event) ||
     formatQueryMonitorEvent(event) ||
     formatTransferMonitorEvent(event)

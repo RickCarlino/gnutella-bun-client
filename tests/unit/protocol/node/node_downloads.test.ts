@@ -555,6 +555,8 @@ describe("protocol node", () => {
           remoteLabel: "9.8.7.6:4321",
           outbound: true,
           dialTarget: "9.8.7.6:4321",
+          compression: false,
+          tls: false,
         },
       ]);
       expect(node.getServentIdHex()).toMatch(/^[0-9a-f]{32}$/);
