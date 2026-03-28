@@ -23,8 +23,40 @@ import {
 import type { GnutellaServent } from "./node";
 import type { ExistingGetRequest, HttpDownloadState } from "./node_types";
 
+type OutgoingQueryParts = {
+  search: string;
+  urns: string[];
+};
+
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(errMsg(error));
+}
+
+function splitOutgoingQuery(search: string): OutgoingQueryParts {
+  if (!search.trim()) {
+    return {
+      search,
+      urns: [],
+    };
+  }
+  const parts = search.trim().split(/\s+/).filter(Boolean);
+  const textParts: string[] = [];
+  const urns: string[] = [];
+  const seenUrns = new Set<string>();
+  for (const part of parts) {
+    if (!/^urn:[^\s]+$/i.test(part)) {
+      textParts.push(part);
+      continue;
+    }
+    const key = part.toLowerCase();
+    if (seenUrns.has(key)) continue;
+    seenUrns.add(key);
+    urns.push(part);
+  }
+  return {
+    search: textParts.join(" "),
+    urns,
+  };
 }
 
 function recordDownloadSuccess(
@@ -615,13 +647,18 @@ export function sendPing(node: GnutellaServent, ttl: number): void {
   const hex = descriptorId.toString("hex");
   node.markSeen(TYPE.PING, hex);
   node.pingRoutes.set(hex, LOCAL_ROUTE);
-  node.broadcast(
-    TYPE.PING,
-    descriptorId,
-    Math.max(0, Math.min(ttl, node.config().maxTtl)),
-    0,
-    Buffer.alloc(0),
-  );
+  const pingTtl = Math.max(0, Math.min(ttl, node.config().maxTtl));
+  for (const peer of node.peers.values()) {
+    if (node.nodeMode() === "ultrapeer" && node.isLeafPeer(peer)) continue;
+    node.sendToPeer(
+      peer,
+      TYPE.PING,
+      descriptorId,
+      pingTtl,
+      0,
+      Buffer.alloc(0),
+    );
+  }
   node.emitEvent({
     type: "PING_SENT",
     at: ts(),
@@ -648,9 +685,11 @@ export function sendQuery(
   const hex = descriptorId.toString("hex");
   node.markSeen(TYPE.QUERY, hex);
   node.queryRoutes.set(hex, LOCAL_ROUTE);
-  const payload = encodeQuery(search, {
+  const query = splitOutgoingQuery(search);
+  const payload = encodeQuery(query.search, {
     ggepHAllowed: !!node.config().enableGgep,
     maxHits: Math.min(0x1ff, node.config().maxResultsPerQuery),
+    urns: query.urns,
   });
   node.broadcastQuery(
     descriptorId,

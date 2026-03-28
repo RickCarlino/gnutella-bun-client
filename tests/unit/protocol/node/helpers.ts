@@ -141,6 +141,7 @@ export function makePeer(label = "1.2.3.4:6346"): Peer {
     buf: Buffer.alloc(0),
     outbound: false,
     remoteLabel: label,
+    role: "legacy",
     capabilities: {
       version: "0.6",
       headers: {},
@@ -152,6 +153,7 @@ export function makePeer(label = "1.2.3.4:6346"): Peer {
       compressOut: false,
       isUltrapeer: false,
       ultrapeerNeeded: false,
+      isCrawler: false,
     },
     remoteQrp: {
       resetSeen: false,

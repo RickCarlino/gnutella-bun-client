@@ -9,7 +9,7 @@ import {
   toBuffer,
   ts,
 } from "../shared";
-import type { PeerCapabilities } from "../types";
+import type { PeerCapabilities, PeerRole } from "../types";
 import {
   buildHandshakeBlock,
   describeHandshakeResponse,
@@ -25,6 +25,40 @@ import {
 import type { GnutellaServent } from "./node";
 import type { ProbeCtx } from "./node_types";
 
+function ultrapeerNeededHeader(node: GnutellaServent): string | undefined {
+  if (node.nodeMode() !== "ultrapeer") return undefined;
+  if (node.connectedMeshPeerCount() < node.config().maxConnections)
+    return "True";
+  if (node.connectedLeafCount() < node.config().maxLeafConnections)
+    return "False";
+  return undefined;
+}
+
+function baseRoleHeaders(node: GnutellaServent): Record<string, string> {
+  const headers: Record<string, string> = {
+    "x-ultrapeer": node.nodeMode() === "ultrapeer" ? "True" : "False",
+  };
+  const ultrapeerNeeded = ultrapeerNeededHeader(node);
+  if (ultrapeerNeeded) headers["x-ultrapeer-needed"] = ultrapeerNeeded;
+  if (node.nodeMode() === "ultrapeer")
+    headers["x-ultrapeer-query-routing"] = "0.1";
+  return headers;
+}
+
+function baseFeatureHeaders(
+  node: GnutellaServent,
+): Record<string, string> {
+  const c = node.config();
+  const headers: Record<string, string> = {};
+  if (c.enableQrp)
+    headers["x-query-routing"] = c.queryRoutingVersion || "0.1";
+  if (c.enableCompression) headers["accept-encoding"] = "deflate";
+  if (c.enablePongCaching) headers["pong-caching"] = "0.1";
+  if (c.enableGgep) headers["ggep"] = "0.5";
+  if (c.enableBye) headers["bye-packet"] = "0.1";
+  return headers;
+}
+
 export function baseHandshakeHeaders(
   node: GnutellaServent,
   remoteIp?: string,
@@ -34,19 +68,13 @@ export function baseHandshakeHeaders(
   const advertisedPort = node.currentAdvertisedPort();
   const headers: Record<string, string> = {
     "user-agent": c.userAgent || DEFAULT_USER_AGENT,
-    "x-ultrapeer": "False",
-    "x-ultrapeer-needed": "False",
     "listen-ip": `${advertisedHost}:${advertisedPort}`,
     "x-max-ttl": String(c.maxTtl),
+    ...baseRoleHeaders(node),
+    ...baseFeatureHeaders(node),
   };
   const observedRemote = normalizeIpv4(remoteIp);
   if (observedRemote) headers["remote-ip"] = observedRemote;
-  if (c.enableQrp)
-    headers["x-query-routing"] = c.queryRoutingVersion || "0.1";
-  if (c.enableCompression) headers["accept-encoding"] = "deflate";
-  if (c.enablePongCaching) headers["pong-caching"] = "0.1";
-  if (c.enableGgep) headers["ggep"] = "0.5";
-  if (c.enableBye) headers["bye-packet"] = "0.1";
   return headers;
 }
 
@@ -106,6 +134,7 @@ export function buildCapabilities(
     ultrapeerNeeded: parseBoolHeader(h["x-ultrapeer-needed"]),
     queryRoutingVersion: h["x-query-routing"],
     ultrapeerQueryRoutingVersion: h["x-ultrapeer-query-routing"],
+    isCrawler: !!h["crawler"],
     listenIp: parseListenIpHeader(h["listen-ip"]),
   };
 }
@@ -244,8 +273,16 @@ export function handleInbound06Probe(
     throw new Error(`unexpected 0.6 start line: ${startLine}`);
   }
   node.absorbHandshakeHeaders(headers, ctx.socket.remoteAddress);
-  if (node.peerCount() >= node.config().maxConnections) {
-    node.reject06(ctx.socket, 503, "Busy");
+  const requestedCaps = node.buildCapabilities(
+    "0.6",
+    headers,
+    false,
+    false,
+  );
+  const requestedRole = node.classifyPeerRole(requestedCaps);
+  const acceptance = node.canAcceptPeerRole(requestedRole);
+  if (!acceptance.ok) {
+    node.reject06(ctx.socket, acceptance.code, acceptance.reason);
     ctx.mode = "done";
     return;
   }
@@ -313,6 +350,72 @@ function compressionAccepted(
   return enabled && hasToken(headers["content-encoding"], "deflate");
 }
 
+type OutboundHandshakeResult = {
+  caps: PeerCapabilities;
+  role: PeerRole;
+  rest: Buffer;
+  finalHeadersWithRemote: Record<string, string>;
+};
+
+function parseOutboundHandshakeResult(
+  node: GnutellaServent,
+  target: string,
+  socket: net.Socket,
+  buf: Buffer,
+  compressionEnabled: boolean,
+): OutboundHandshakeResult | undefined {
+  const raw = buf.toString("latin1");
+  const cut = findHeaderEnd(raw);
+  if (cut === -1) return undefined;
+
+  const { startLine, headers } = parseHandshakeBlock(raw.slice(0, cut));
+  node.absorbHandshakeHeaders(headers, socket.remoteAddress);
+  if (
+    /^GNUTELLA OK/i.test(startLine) ||
+    /^GNUTELLA\/0\.4 200/i.test(startLine)
+  ) {
+    throw new Error(
+      `unsupported legacy handshake response from ${target}: ${describeHandshakeResponse(startLine, headers)}`,
+    );
+  }
+
+  const match = /^GNUTELLA\/0\.([0-9]+)\s+(\d+)/i.exec(startLine);
+  if (!match) {
+    throw new Error(
+      `unexpected handshake response from ${target}: ${describeHandshakeResponse(startLine, headers)}`,
+    );
+  }
+
+  const code = Number(match[2]);
+  if (code !== 200) {
+    throw new Error(
+      `0.6 handshake rejected by ${target}: ${describeHandshakeResponse(startLine, headers)}`,
+    );
+  }
+
+  const finalHeadersWithRemote = node.buildClientFinalHeaders(
+    headers,
+    socket.remoteAddress,
+  );
+  const compressIn =
+    hasToken(headers["content-encoding"], "deflate") && compressionEnabled;
+  const compressOut =
+    hasToken(finalHeadersWithRemote["content-encoding"], "deflate") &&
+    compressionEnabled;
+  const caps = node.buildCapabilities(
+    `0.${match[1]}`,
+    mergeHeaders(headers, finalHeadersWithRemote),
+    compressIn,
+    compressOut,
+  );
+  return {
+    caps,
+    role: node.classifyPeerRole(caps),
+    rest: buf.subarray(cut),
+    finalHeadersWithRemote,
+  };
+}
+
 export function finishInbound06Probe(
   node: GnutellaServent,
   ctx: ProbeCtx,
@@ -340,12 +443,14 @@ export function finishInbound06Probe(
     compressIn,
     compressOut,
   );
+  const role = node.classifyPeerRole(caps);
   const rest = ctx.buf.subarray(cut);
   ctx.mode = "done";
   node.attachPeer(
     ctx.socket,
     false,
     `${ctx.socket.remoteAddress || "?"}:${ctx.socket.remotePort || "?"}`,
+    role,
     caps,
     rest,
   );
@@ -398,67 +503,42 @@ export async function connectPeer06(
     socket.on("data", (chunk) => {
       if (decided) return;
       buf = Buffer.concat([buf, toBuffer(chunk)]);
-      const raw = buf.toString("latin1");
-      const cut = findHeaderEnd(raw);
-      if (cut === -1) return;
+      let result: OutboundHandshakeResult | undefined;
+      try {
+        result = parseOutboundHandshakeResult(
+          node,
+          target,
+          socket,
+          buf,
+          !!c.enableCompression,
+        );
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      if (!result) return;
 
-      const { startLine, headers } = parseHandshakeBlock(
-        raw.slice(0, cut),
-      );
-      node.absorbHandshakeHeaders(headers, socket.remoteAddress);
-      if (
-        /^GNUTELLA OK/i.test(startLine) ||
-        /^GNUTELLA\/0\.4 200/i.test(startLine)
-      ) {
+      const { caps, role, rest, finalHeadersWithRemote } = result;
+      const acceptance = node.canAcceptPeerRole(role);
+      if (!acceptance.ok) {
+        socket.write(
+          buildHandshakeBlock(
+            `GNUTELLA/0.6 ${acceptance.code} ${acceptance.reason}`,
+            {},
+          ),
+        );
         fail(
           new Error(
-            `unsupported legacy handshake response from ${target}: ${describeHandshakeResponse(startLine, headers)}`,
+            `0.6 handshake rejected by ${target}: ${acceptance.reason}`,
           ),
         );
         return;
       }
-
-      const match = /^GNUTELLA\/0\.([0-9]+)\s+(\d+)/i.exec(startLine);
-      if (!match) {
-        fail(
-          new Error(
-            `unexpected handshake response from ${target}: ${describeHandshakeResponse(startLine, headers)}`,
-          ),
-        );
-        return;
-      }
-      const code = Number(match[2]);
-      if (code !== 200) {
-        fail(
-          new Error(
-            `0.6 handshake rejected by ${target}: ${describeHandshakeResponse(startLine, headers)}`,
-          ),
-        );
-        return;
-      }
-
-      const finalHeadersWithRemote = node.buildClientFinalHeaders(
-        headers,
-        socket.remoteAddress,
-      );
-      const compressIn =
-        hasToken(headers["content-encoding"], "deflate") &&
-        !!c.enableCompression;
-      const compressOut =
-        hasToken(finalHeadersWithRemote["content-encoding"], "deflate") &&
-        !!c.enableCompression;
       socket.write(
         buildHandshakeBlock("GNUTELLA/0.6 200 OK", finalHeadersWithRemote),
       );
       decided = true;
-      const rest = buf.subarray(cut);
-      const caps = node.buildCapabilities(
-        `0.${match[1]}`,
-        mergeHeaders(headers, finalHeadersWithRemote),
-        compressIn,
-        compressOut,
-      );
-      node.attachPeer(socket, true, target, caps, rest, target);
+      node.attachPeer(socket, true, target, role, caps, rest, target);
       resolve();
     });
   });

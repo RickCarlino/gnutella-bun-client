@@ -21,11 +21,13 @@ import {
   ENABLE_GGEP,
   ENABLE_PONG_CACHING,
   ENABLE_QRP,
-  MAX_PAYLOAD_BYTES,
   MAX_CONNECTIONS,
+  MAX_LEAF_CONNECTIONS,
+  MAX_PAYLOAD_BYTES,
   MAX_RESULTS_PER_QUERY,
   MAX_TRACKED_PEERS,
   MAX_TTL,
+  MAX_ULTRAPEER_CONNECTIONS,
   PEER_SEEN_THRESHOLD_SEC,
   PING_INTERVAL_SEC,
   PUSH_WAIT_MS,
@@ -308,6 +310,12 @@ export function runtimeConfigFor(
 ): RuntimeConfig {
   const dataDir = resolveDataDir(configPath, doc.config);
   const peers = trimPeerState(doc.state.peers);
+  const ultrapeer =
+    typeof doc.config.ultrapeer === "boolean"
+      ? doc.config.ultrapeer
+      : undefined;
+  const monitorIgnoreEvents =
+    normalizedMonitorIgnoreEvents(doc.config.monitorIgnoreEvents) || [];
   return {
     listenHost: normalizedListenHost(doc.config.listenHost),
     listenPort:
@@ -318,11 +326,21 @@ export function runtimeConfigFor(
         ? doc.config.advertisedHost.trim()
         : undefined,
     advertisedPort: normalizedPositivePort(doc.config.advertisedPort),
+    ultrapeer,
+    monitorIgnoreEvents,
+    nodeMode:
+      ultrapeer === true
+        ? "ultrapeer"
+        : ultrapeer === false
+          ? "leaf"
+          : "legacy",
     dataDir,
     downloadsDir: path.join(dataDir, DATA_DOWNLOADS_DIRNAME),
     peers: peerStateTargets(peers),
     peerSeenThresholdSec: PEER_SEEN_THRESHOLD_SEC,
     maxConnections: MAX_CONNECTIONS,
+    maxUltrapeerConnections: MAX_ULTRAPEER_CONNECTIONS,
+    maxLeafConnections: MAX_LEAF_CONNECTIONS,
     connectTimeoutMs: CONNECT_TIMEOUT_MS,
     pingIntervalSec: PING_INTERVAL_SEC,
     reconnectIntervalSec: RECONNECT_INTERVAL_SEC,
@@ -368,6 +386,19 @@ function positiveIntegerOrUndefined(value: unknown): number | undefined {
     : undefined;
 }
 
+function normalizedMonitorIgnoreEvents(
+  value: unknown,
+): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = unique(
+    value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim().toUpperCase())
+      .filter((entry) => entry.length > 0),
+  );
+  return normalized.length ? normalized : undefined;
+}
+
 function normalizedServentIdHex(value: unknown): string | undefined {
   if (typeof value !== "string" || !/^[0-9a-f]{32}$/i.test(value))
     return undefined;
@@ -397,6 +428,23 @@ async function ensureDocRuntimeDirs(
   const runtime = runtimeConfigFor(configPath, doc);
   if (ensureConfigDir) await ensureDir(path.dirname(configPath));
   await ensureDir(runtime.downloadsDir);
+}
+
+function applyOptionalLoadedConfig(
+  doc: ConfigDoc,
+  config: PersistedConfig,
+): void {
+  const advertisedHost = optionalNonEmptyString(config.advertisedHost);
+  if (advertisedHost) doc.config.advertisedHost = advertisedHost;
+  const advertisedPort = positiveIntegerOrUndefined(config.advertisedPort);
+  if (advertisedPort) doc.config.advertisedPort = advertisedPort;
+  if (typeof config.ultrapeer === "boolean")
+    doc.config.ultrapeer = config.ultrapeer;
+  const monitorIgnoreEvents = normalizedMonitorIgnoreEvents(
+    config.monitorIgnoreEvents,
+  );
+  if (monitorIgnoreEvents)
+    doc.config.monitorIgnoreEvents = monitorIgnoreEvents;
 }
 
 function buildLoadedDoc(
@@ -429,10 +477,7 @@ function buildLoadedDoc(
       }),
     },
   };
-  const advertisedHost = optionalNonEmptyString(config.advertisedHost);
-  if (advertisedHost) doc.config.advertisedHost = advertisedHost;
-  const advertisedPort = positiveIntegerOrUndefined(config.advertisedPort);
-  if (advertisedPort) doc.config.advertisedPort = advertisedPort;
+  applyOptionalLoadedConfig(doc, config);
   return doc;
 }
 
@@ -484,6 +529,10 @@ export async function writeDoc(
   ) {
     clean.config.advertisedPort = runtime.advertisedPort;
   }
+  if (runtime.ultrapeer !== undefined)
+    clean.config.ultrapeer = runtime.ultrapeer;
+  if (runtime.monitorIgnoreEvents.length)
+    clean.config.monitorIgnoreEvents = runtime.monitorIgnoreEvents;
   await fsp.writeFile(tmp, `${JSON.stringify(clean, null, 2)}\n`, "utf8");
   await fsp.rename(tmp, full);
 }

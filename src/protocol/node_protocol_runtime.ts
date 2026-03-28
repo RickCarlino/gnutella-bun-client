@@ -12,6 +12,7 @@ import {
 import { errMsg, sleep, toBuffer, ts } from "../shared";
 import type {
   PendingPush,
+  PeerRole,
   PeerCapabilities,
   QueryDescriptor,
   Route,
@@ -32,6 +33,12 @@ import {
 } from "./codec";
 import { findHeaderEnd, socketCanEnd } from "./handshake";
 import type { GnutellaServent } from "./node";
+import {
+  broadcastPingToPeers,
+  publishedQrpTableForPeer,
+  routeQueryToPeers,
+  sendPublishedQrpToMeshPeers,
+} from "./node_query_routing";
 import type { DescriptorHeader, HttpSession, Peer } from "./node_types";
 import {
   initialRemoteQrpState,
@@ -54,6 +61,7 @@ export function attachPeer(
   socket: net.Socket,
   outbound: boolean,
   remoteLabel: string,
+  role: PeerRole,
   capabilities: PeerCapabilities,
   initialBuf: Buffer = Buffer.alloc(0),
   dialTarget?: string,
@@ -67,6 +75,7 @@ export function attachPeer(
     outbound,
     remoteLabel,
     dialTarget,
+    role,
     capabilities,
     remoteQrp: initialRemoteQrpState(),
     lastPingAt: 0,
@@ -80,9 +89,14 @@ export function attachPeer(
   const drop = (message: string) => {
     if (closed) return;
     closed = true;
+    const hadLeafQrp =
+      node.nodeMode() === "ultrapeer" &&
+      peer.role === "leaf" &&
+      peer.remoteQrp.table != null;
     node.markPeerSeenIfStable(peer);
     node.peers.delete(peer.key);
     node.refreshGWebCacheReport();
+    if (hadLeafQrp) sendPublishedQrpToMeshPeers(node);
     if (!node.stopped) {
       node.emitEvent({
         type: "PEER_DROPPED",
@@ -344,6 +358,17 @@ export function sendToPeer(
   if (peer.closingAfterBye && payloadType !== TYPE.BYE) return;
   const frame = buildHeader(descriptorId, payloadType, ttl, hops, payload);
   node.sendRaw(peer, frame);
+  node.emitEvent({
+    type: "PEER_MESSAGE_SENT",
+    at: ts(),
+    peer: node.peerInfo(peer),
+    payloadType,
+    payloadTypeName: descriptorTypeName(payloadType),
+    descriptorIdHex: descriptorId.toString("hex"),
+    ttl,
+    hops,
+    payloadLength: payload.length,
+  });
 }
 
 export function forwardToRoute(
@@ -389,19 +414,19 @@ export function broadcastQuery(
   ttl: number,
   hops: number,
   payload: Buffer,
-  search: string,
+  _search: string,
   exceptPeerKey?: string,
 ): void {
-  for (const peer of node.peers.values()) {
-    if (exceptPeerKey && peer.key === exceptPeerKey) continue;
-    if (
-      node.config().enableQrp &&
-      !QrpTable.matchesRemote(peer.remoteQrp, search)
-    ) {
-      continue;
-    }
-    node.sendToPeer(peer, TYPE.QUERY, descriptorId, ttl, hops, payload);
-  }
+  routeQueryToPeers(
+    node,
+    descriptorId,
+    ttl,
+    hops,
+    payload,
+    parseQuery(payload),
+    exceptPeerKey,
+    true,
+  );
 }
 
 export function normalizeQueryLifetime(
@@ -501,10 +526,11 @@ export function onPingDescriptor(
     ts: Date.now(),
   });
   node.respondPong(peer, hdr);
+  if (!node.shouldRelayPings()) return;
   if (hdr.ttl <= 1 || Date.now() - peer.lastPingAt < 1000) return;
   peer.lastPingAt = Date.now();
-  node.broadcast(
-    TYPE.PING,
+  broadcastPingToPeers(
+    node,
     hdr.descriptorId,
     hdr.ttl - 1,
     hdr.hops + 1,
@@ -540,16 +566,16 @@ export function onQueryDescriptor(
     ts: Date.now(),
   });
   node.respondQueryHit(peer, hdr, q);
-  if (hdr.ttl > 0) {
-    node.broadcastQuery(
-      hdr.descriptorId,
-      hdr.ttl - 1,
-      hdr.hops + 1,
-      payload,
-      q.search,
-      peer.key,
-    );
-  }
+  if (!node.shouldRelayQueries()) return;
+  routeQueryToPeers(
+    node,
+    hdr.descriptorId,
+    hdr.ttl,
+    hdr.hops,
+    payload,
+    q,
+    peer.key,
+  );
 }
 
 export function dispatchDescriptor(
@@ -599,7 +625,7 @@ export function handleDescriptor(
 }
 
 export function onRouteTableUpdate(
-  _node: GnutellaServent,
+  node: GnutellaServent,
   peer: Peer,
   payload: Buffer,
 ): void {
@@ -620,30 +646,25 @@ export function onRouteTableUpdate(
   peer.remoteQrp.entryBits = msg.entryBits;
   peer.remoteQrp.parts.set(msg.seqNo, Buffer.from(msg.data));
   QrpTable.applyPatch(peer.remoteQrp);
+  if (peer.remoteQrp.table && peer.role === "leaf")
+    sendPublishedQrpToMeshPeers(node);
 }
 
 export async function sendQrpTable(
   node: GnutellaServent,
   peer: Peer,
 ): Promise<void> {
-  if (!node.config().enableQrp) return;
-  if (
-    !(
-      peer.capabilities.queryRoutingVersion ||
-      peer.capabilities.ultrapeerQueryRoutingVersion
-    )
-  ) {
-    return;
-  }
+  const published = publishedQrpTableForPeer(node, peer);
+  if (!published) return;
   node.sendToPeer(
     peer,
     TYPE.ROUTE_TABLE_UPDATE,
     node.randomId16(),
     1,
     0,
-    node.qrpTable.encodeReset(),
+    published.encodeReset(),
   );
-  for (const patch of node.qrpTable.encodePatchChunks(
+  for (const patch of published.encodePatchChunks(
     Math.min(node.config().maxPayloadBytes, 60 * 1024),
   )) {
     node.sendToPeer(
@@ -825,6 +846,7 @@ export function onQueryHit(
     }
     return;
   }
+  if (node.nodeMode() === "leaf") return;
   node.forwardToRoute(
     route,
     TYPE.QUERY_HIT,
@@ -846,6 +868,7 @@ export async function onPush(
     await node.fulfillPush(push);
     return;
   }
+  if (node.nodeMode() === "leaf") return;
   const route = node.pushRoutes.get(push.serventIdHex);
   if (!route) return;
   node.forwardToRoute(

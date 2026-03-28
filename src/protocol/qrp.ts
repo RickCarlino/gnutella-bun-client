@@ -141,6 +141,22 @@ export class QrpTable {
     );
   }
 
+  mergePresenceTable(table: Uint8Array, infinity: number): void {
+    const length = Math.min(this.table.length, table.length);
+    for (let i = 0; i < length; i++) {
+      if (table[i] < infinity) this.table[i] = 1;
+    }
+  }
+
+  mergeFromQrp(other: Pick<QrpTable, "table" | "infinity">): void {
+    this.mergePresenceTable(other.table, other.infinity);
+  }
+
+  mergeFromRemoteQrp(state: RemoteQrpState): void {
+    if (!state.table) return;
+    this.mergePresenceTable(state.table, state.infinity);
+  }
+
   encodeReset(): Buffer {
     const payload = Buffer.alloc(6);
     payload[0] = 0x00;
@@ -306,5 +322,22 @@ export function matchQuery(
   const shareKw = new Set(share.keywords);
   return kws.every(
     (kw) => shareKw.has(kw) || share.name.toLowerCase().includes(kw),
+  );
+}
+
+function canRouteQrpQuery(
+  q: Pick<QueryDescriptor, "search" | "urns">,
+  matchesSearch: (search: string) => boolean,
+): boolean {
+  if (q.urns.length) return true;
+  return matchesSearch(q.search);
+}
+
+export function canRouteRemoteQrpQuery(
+  state: RemoteQrpState,
+  q: Pick<QueryDescriptor, "search" | "urns">,
+): boolean {
+  return canRouteQrpQuery(q, (search) =>
+    QrpTable.matchesRemote(state, search),
   );
 }

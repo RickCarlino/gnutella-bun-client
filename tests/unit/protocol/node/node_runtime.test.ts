@@ -8,6 +8,7 @@ import {
   encodeBye,
   GnutellaServent,
   parseRouteTableUpdate,
+  QrpTable,
 } from "../../../../src/protocol";
 import { TYPE } from "../../../../src/const";
 import { sleep } from "../../../../src/shared";
@@ -143,7 +144,7 @@ describe("protocol node", () => {
         peer.buf = Buffer.concat([frame, payload]);
         node.consumePeerBuffer(peer);
 
-        expect(events).toEqual([
+        expect(events).toContainEqual(
           expect.objectContaining({
             type: "PEER_MESSAGE_RECEIVED",
             peer: {
@@ -156,6 +157,47 @@ describe("protocol node", () => {
             descriptorIdHex: "aa".repeat(16),
             ttl: 7,
             hops: 2,
+            payloadLength: 0,
+          }),
+        );
+      });
+    });
+  });
+
+  test("emits outbound peer message events for sent descriptors", async () => {
+    await withTempDir(async (dir) => {
+      await withMockNetworkInterfaces(async () => {
+        const configPath = path.join(dir, "protocol.json");
+        const doc = defaultDoc(configPath);
+        const events: Array<Record<string, unknown>> = [];
+        const node = new GnutellaServent(configPath, doc, {
+          onEvent: (event) =>
+            events.push(event as unknown as Record<string, unknown>),
+        });
+        const peer = makePeer("9.8.7.6:4321");
+
+        node.sendToPeer(
+          peer,
+          TYPE.PING,
+          Buffer.alloc(16, 0xbb),
+          3,
+          1,
+          Buffer.alloc(0),
+        );
+
+        expect(events).toEqual([
+          expect.objectContaining({
+            type: "PEER_MESSAGE_SENT",
+            peer: {
+              key: "9.8.7.6:4321",
+              remoteLabel: "9.8.7.6:4321",
+              outbound: false,
+            },
+            payloadType: TYPE.PING,
+            payloadTypeName: "PING",
+            descriptorIdHex: "bb".repeat(16),
+            ttl: 3,
+            hops: 1,
             payloadLength: 0,
           }),
         ]);
@@ -293,6 +335,88 @@ describe("protocol node", () => {
         node.onRouteTableUpdate(remote as never, payload);
       expect(remote.remoteQrp.resetSeen).toBe(true);
       expect(remote.remoteQrp.table).not.toBeNull();
+    });
+  });
+
+  test("publishes aggregate ultrapeer QRP to mesh peers and skips leaf peers", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      doc.config.dataDir = dir;
+      doc.config.ultrapeer = true;
+      const node = new GnutellaServent(configPath, doc);
+      overrideRuntimeConfig(node, {
+        ultrapeer: true,
+        nodeMode: "ultrapeer",
+        enableQrp: true,
+      });
+
+      const ownShare = makeShare(
+        1,
+        path.join(node.config().downloadsDir, "own-alpha.txt"),
+        "own-alpha.txt",
+      );
+      node.qrpTable.rebuildFromShares([ownShare]);
+
+      const leaf = makePeer("leaf-peer");
+      leaf.role = "leaf";
+      const leafTable = new QrpTable();
+      leafTable.rebuildFromShares([
+        makeShare(
+          2,
+          path.join(node.config().downloadsDir, "leaf-zeta.txt"),
+          "leaf-zeta.txt",
+        ),
+      ]);
+      leaf.remoteQrp = {
+        resetSeen: true,
+        tableSize: leafTable.tableSize,
+        infinity: leafTable.infinity,
+        entryBits: leafTable.entryBits,
+        table: leafTable.table.slice(),
+        seqSize: 0,
+        compressor: 0,
+        parts: new Map<number, Buffer>(),
+      };
+      node.peers.set(leaf.key, leaf);
+
+      const meshPeer = makePeer("mesh-peer");
+      meshPeer.role = "ultrapeer";
+      meshPeer.capabilities.isUltrapeer = true;
+      meshPeer.capabilities.ultrapeerQueryRoutingVersion = "0.1";
+
+      const sent: Buffer[] = [];
+      (node as any).sendToPeer = (
+        _peer: unknown,
+        payloadType: number,
+        _descriptorId: Buffer,
+        _ttl: number,
+        _hops: number,
+        payload: Buffer,
+      ) => {
+        expect(payloadType).toBe(TYPE.ROUTE_TABLE_UPDATE);
+        sent.push(Buffer.from(payload));
+      };
+
+      await node.sendQrpTable(leaf as never);
+      expect(sent).toHaveLength(0);
+
+      await node.sendQrpTable(meshPeer as never);
+      expect(sent.length).toBeGreaterThan(1);
+
+      const remote = makePeer("remote-mesh");
+      remote.role = "ultrapeer";
+      node.onRouteTableUpdate(remote as never, sent[0]);
+      for (const payload of sent.slice(1))
+        node.onRouteTableUpdate(remote as never, payload);
+
+      expect(remote.remoteQrp.table).not.toBeNull();
+      expect(QrpTable.matchesRemote(remote.remoteQrp, "own alpha")).toBe(
+        true,
+      );
+      expect(QrpTable.matchesRemote(remote.remoteQrp, "leaf zeta")).toBe(
+        true,
+      );
     });
   });
 

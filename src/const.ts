@@ -9,7 +9,9 @@ export const DEFAULT_USER_AGENT = "GnutellaBun/0.6";
 export const DEFAULT_VENDOR_CODE = "GBUN";
 export const DATA_SHARED_DIRNAME = "shared";
 export const DATA_DOWNLOADS_DIRNAME = "downloads";
-export const MAX_CONNECTIONS = 8;
+export const MAX_CONNECTIONS = 50;
+export const MAX_ULTRAPEER_CONNECTIONS = 4;
+export const MAX_LEAF_CONNECTIONS = 300;
 export const CONNECT_TIMEOUT_MS = 5000;
 export const PING_INTERVAL_SEC = 60;
 export const RECONNECT_INTERVAL_SEC = 15;
@@ -19,7 +21,7 @@ export const SEEN_TTL_SEC = 600;
 export const MAX_PAYLOAD_BYTES = 1024 * 1024;
 export const MAX_TTL = 7;
 export const DEFAULT_PING_TTL = 1;
-export const DEFAULT_QUERY_TTL = 3;
+export const DEFAULT_QUERY_TTL = 4;
 export const ADVERTISED_SPEED_KBPS = 512;
 export const DOWNLOAD_TIMEOUT_MS = 15000;
 export const PUSH_WAIT_MS = 15000;
@@ -100,6 +102,7 @@ export const PROMPT_THROBBER_INTERVAL_MS = 120;
 
 export const CLI_HELP_LINES = [
   "help",
+  "monitor",
   "status",
   "peers",
   "connect <host:port>",
@@ -108,6 +111,8 @@ export const CLI_HELP_LINES = [
   "clear",
   "ping [ttl]",
   "query <search terms...>",
+  "browse",
+  "info <resultNo>",
   "download <resultNo> [destPath]",
   "rescan",
   "save",

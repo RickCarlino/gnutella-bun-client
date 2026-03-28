@@ -2,6 +2,8 @@
   "config": {
     "listenHost": "0.0.0.0",
     "listenPort": 6346,
+    "ultrapeer": false,
+    "monitorIgnoreEvents": [],
     "dataDir": "."
   },
   "state": {

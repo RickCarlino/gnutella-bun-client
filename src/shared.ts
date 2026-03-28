@@ -159,12 +159,14 @@ type SplitArgsState = {
   cur: string;
   quote: string;
   esc: boolean;
+  pending: boolean;
 };
 
 function flushSplitArg(state: SplitArgsState): void {
-  if (!state.cur) return;
+  if (!state.pending) return;
   state.out.push(state.cur);
   state.cur = "";
+  state.pending = false;
 }
 
 function consumeEscapedArgChar(
@@ -174,12 +176,14 @@ function consumeEscapedArgChar(
   if (!state.esc) return false;
   state.cur += ch;
   state.esc = false;
+  state.pending = true;
   return true;
 }
 
 function consumeEscapeStart(state: SplitArgsState, ch: string): boolean {
   if (ch !== "\\") return false;
   state.esc = true;
+  state.pending = true;
   return true;
 }
 
@@ -193,6 +197,7 @@ function consumeQuotedArgChar(state: SplitArgsState, ch: string): boolean {
 function consumeQuoteStart(state: SplitArgsState, ch: string): boolean {
   if (ch !== '"' && ch !== "'") return false;
   state.quote = ch;
+  state.pending = true;
   return true;
 }
 
@@ -208,6 +213,7 @@ export function splitArgs(line: string): string[] {
     cur: "",
     quote: "",
     esc: false,
+    pending: false,
   };
   for (const ch of line) {
     if (consumeEscapedArgChar(state, ch)) continue;
@@ -216,7 +222,9 @@ export function splitArgs(line: string): string[] {
     if (consumeQuoteStart(state, ch)) continue;
     if (consumeArgWhitespace(state, ch)) continue;
     state.cur += ch;
+    state.pending = true;
   }
+  if (state.esc) state.cur += "\\";
   flushSplitArg(state);
   return state.out;
 }

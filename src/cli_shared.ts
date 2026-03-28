@@ -9,6 +9,8 @@ const RESULT_COUNT_DISPLAY_MAX = 999;
 const PEER_TABLE_WIDTH_MAX = 80;
 const PEER_TABLE_GAP_WIDTH = 4;
 
+type ResultInfo = ReturnType<CliNode["getResults"]>[number];
+
 function formatSize(bytes: number): string {
   const safeBytes =
     Number.isFinite(bytes) && bytes > 0 ? Math.floor(bytes) : 0;
@@ -46,6 +48,57 @@ function fitTableCell(value: string, width: number): string {
   const head = Math.floor(kept / 2);
   const tail = kept - head;
   return `${value.slice(0, head)}..${value.slice(-tail)}`;
+}
+
+function valueOrDash(value: string | number | undefined): string {
+  return value == null || value === "" ? "-" : String(value);
+}
+
+function boolOrDash(value: boolean | undefined): string {
+  return value == null ? "-" : String(value);
+}
+
+function speedOrDash(speedKBps: number | undefined): string {
+  return speedKBps == null ? "-" : `${speedKBps}KB/s`;
+}
+
+function appendValueList(
+  lines: string[],
+  label: string,
+  values: string[],
+): void {
+  if (!values.length) {
+    lines.push(`${label}: -`);
+    return;
+  }
+  lines.push(`${label}:`);
+  for (const value of values) lines.push(`  ${value}`);
+}
+
+function otherUrns(result: ResultInfo): string[] {
+  return (result.urns || []).filter((urn) => urn !== result.sha1Urn);
+}
+
+function formatResultInfoLines(result: ResultInfo): string[] {
+  const lines = [
+    `result: #${result.resultNo}`,
+    `file: ${JSON.stringify(result.fileName)}`,
+    `size: ${formatSize(result.fileSize)} (${result.fileSize}B)`,
+    `remote: ${result.remoteHost}:${result.remotePort}`,
+    `speed: ${speedOrDash(result.speedKBps)}`,
+    `file index: ${valueOrDash(result.fileIndex)}`,
+    `servent id: ${result.serventIdHex}`,
+    `query id: ${valueOrDash(result.queryIdHex)}`,
+    `query hops: ${valueOrDash(result.queryHops)}`,
+    `via peer: ${valueOrDash(result.viaPeerKey)}`,
+    `sha1 urn: ${valueOrDash(result.sha1Urn)}`,
+  ];
+  appendValueList(lines, "other urns", otherUrns(result));
+  appendValueList(lines, "metadata", result.metadata || []);
+  lines.push(`vendor: ${valueOrDash(result.vendorCode)}`);
+  lines.push(`needs push: ${boolOrDash(result.needsPush)}`);
+  lines.push(`busy: ${boolOrDash(result.busy)}`);
+  return lines;
 }
 
 export function printStatus(
@@ -223,6 +276,18 @@ export function printResults(
       ),
     ].join("\n"),
   );
+}
+
+export function printResultInfo(
+  node: CliNode,
+  resultNo: number,
+  log: (msg: string) => void,
+): void {
+  const result = node
+    .getResults()
+    .find((candidate) => candidate.resultNo === resultNo);
+  if (!result) throw new Error(`no such result ${resultNo}`);
+  log(formatResultInfoLines(result).join("\n"));
 }
 
 export function parseCli(

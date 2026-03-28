@@ -2,7 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import zlib from "node:zlib";
 
-import type { PeerCapabilities, RemoteQrpState } from "../types";
+import type { PeerCapabilities, PeerRole, RemoteQrpState } from "../types";
 
 export type ProbeCtx = {
   socket: net.Socket;
@@ -42,6 +42,7 @@ export type Peer = {
   outbound: boolean;
   dialTarget?: string;
   remoteLabel: string;
+  role: PeerRole;
   capabilities: PeerCapabilities;
   inflater?: zlib.Inflate;
   deflater?: zlib.Deflate;

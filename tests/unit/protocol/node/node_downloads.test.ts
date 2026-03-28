@@ -8,6 +8,7 @@ import {
   defaultDoc,
   parseQuery,
 } from "../../../../src/protocol";
+import { TYPE } from "../../../../src/const";
 import {
   makeNode,
   makePeer,
@@ -424,20 +425,28 @@ describe("protocol node", () => {
       let queryArgs: {
         ttl: number;
         search: string;
+        parsedSearch: string;
         maxHits: number;
+        urns: string[];
       } | null = null;
 
-      (node as any).broadcast = (
-        _payloadType: number,
+      (node as any).sendToPeer = (
+        _peer: unknown,
+        payloadType: number,
         _descriptorId: Buffer,
         ttl: number,
+        _hops: number,
+        _payload: Buffer,
       ) => {
+        if (payloadType !== TYPE.PING) return;
         pingTtl = ttl;
       };
       const queries: Array<{
         ttl: number;
         search: string;
+        parsedSearch: string;
         maxHits: number;
+        urns: string[];
       }> = [];
       (node as any).broadcastQuery = (
         _descriptorId: Buffer,
@@ -447,7 +456,13 @@ describe("protocol node", () => {
         search: string,
       ) => {
         const parsed = parseQuery(payload);
-        queryArgs = { ttl, search, maxHits: parsed.maxHits };
+        queryArgs = {
+          ttl,
+          search,
+          parsedSearch: parsed.search,
+          maxHits: parsed.maxHits,
+          urns: parsed.urns,
+        };
         queries.push(queryArgs);
       };
 
@@ -468,23 +483,69 @@ describe("protocol node", () => {
       expect(queryArgs!).toEqual({
         ttl: node.config().maxTtl,
         search: "alpha",
+        parsedSearch: "alpha",
         maxHits: node.config().maxResultsPerQuery,
+        urns: [],
       });
       expect(queries).toEqual([
         {
           ttl: node.config().defaultQueryTtl,
           search: "alpha",
+          parsedSearch: "alpha",
           maxHits: node.config().maxResultsPerQuery,
+          urns: [],
         },
         {
           ttl: node.config().maxTtl,
           search: "alpha",
+          parsedSearch: "alpha",
           maxHits: node.config().maxResultsPerQuery,
+          urns: [],
         },
       ]);
+
+      node.sendQuery("urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2 alpha", 2);
+
+      expect(queries.at(-1)).toEqual({
+        ttl: 2,
+        search: "urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2 alpha",
+        parsedSearch: "alpha",
+        maxHits: node.config().maxResultsPerQuery,
+        urns: ["urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2"],
+      });
       expect(events).toEqual([
         "QUERY_SKIPPED",
         "PING_SENT",
+        "QUERY_SENT",
+        "QUERY_SENT",
+        "QUERY_SENT",
+      ]);
+
+      node.sendQuery("urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2", 2);
+
+      expect(queries.at(-1)).toEqual({
+        ttl: 2,
+        search: "urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2",
+        parsedSearch: "",
+        maxHits: node.config().maxResultsPerQuery,
+        urns: ["urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2"],
+      });
+
+      node.sendQuery("    ", 1);
+
+      expect(queries.at(-1)).toEqual({
+        ttl: 1,
+        search: "    ",
+        parsedSearch: "    ",
+        maxHits: node.config().maxResultsPerQuery,
+        urns: [],
+      });
+      expect(events).toEqual([
+        "QUERY_SKIPPED",
+        "PING_SENT",
+        "QUERY_SENT",
+        "QUERY_SENT",
+        "QUERY_SENT",
         "QUERY_SENT",
         "QUERY_SENT",
       ]);

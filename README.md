@@ -26,6 +26,7 @@ If you want a Gnutella client, this gives you:
 - local file sharing from a directory
 - network search with routed query hits
 - direct downloads, ranged resume, and push fallback
+- leaf and ultrapeer operating modes
 - optional compression, query routing, pong caching, GGEP, and `BYE`
 - a scriptable mode for repeatable command sequences
 
@@ -41,6 +42,7 @@ If you want a library, this gives you:
 ### Core Network Features
 
 - Gnutella 0.6 inbound and outbound handshake
+- legacy, leaf, and ultrapeer node modes
 - `PING` and `PONG`
 - `QUERY` and `QUERY_HIT`
 - `PUSH`
@@ -54,7 +56,10 @@ If you want a library, this gives you:
 - recursive share scanning
 - SHA-1 URN generation for shared files
 - keyword-based query matching
+- outgoing URN queries
+- browse-host style index queries
 - local result buffer with numbered results
+- detailed per-result inspection
 - `clear` command to reset the current result set
 
 ### Download Features
@@ -88,6 +93,7 @@ Edit `gnutella.json`:
 - downloads also go to `<dataDir>/downloads`
 - set `advertisedPort` if your external port differs from `listenPort`
 - optionally set `advertisedHost` only when you need to override automatic `Remote-IP` learning
+- set `config.ultrapeer` to `true` to run as an ultrapeer or `false` to force leaf mode
 
 Run the client:
 
@@ -106,6 +112,7 @@ The prompt shows:
 
 | Command                          | What it does                                                  |
 | -------------------------------- | ------------------------------------------------------------- |
+| `monitor`                        | Toggle verbose live protocol logging.                         |
 | `help`                           | Show the command list.                                        |
 | `status`                         | Show peer, share, result, and known-peer counts.              |
 | `peers`                          | List connected peers.                                         |
@@ -114,7 +121,9 @@ The prompt shows:
 | `results`                        | Show the current search-result table.                         |
 | `clear`                          | Clear the current result buffer and restart result numbering. |
 | `ping [ttl]`                     | Send a ping.                                                  |
-| `query <terms...>`               | Search the network.                                           |
+| `query <terms...>`               | Search the network. Supports quoted args, escapes, and URNs.  |
+| `browse`                         | Send the Gnutella index query used for browse-host responses. |
+| `info <resultNo>`                | Show detailed information for one buffered result.            |
 | `download <resultNo> [destPath]` | Download one result by its local result number.               |
 | `rescan`                         | Rebuild the local file index.                                 |
 | `save`                           | Write the current config to disk.                             |
@@ -150,6 +159,41 @@ When you run `query`, the node broadcasts a Gnutella query and buffers any hits 
 - Those numbers are only local UI numbers
 - `clear` wipes the buffer and starts numbering over
 - `results` prints the buffer in a readable table
+
+### Query Parsing
+
+The REPL uses a small shell-style argument parser before it sends the search text.
+
+- `search` is an alias for `query`
+- single quotes and double quotes preserve spaces
+- backslash escapes the next character
+- `query ""` sends an empty textual query
+- tokens shaped like `urn:...` are emitted as URN query extensions instead of plain text
+
+Examples:
+
+```text
+query hello world
+query "hello world"
+query ""
+query urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2
+query urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2 "alpha mix"
+```
+
+Pure URN searches go out with an empty textual search and one or more URN extensions. Mixed searches carry both the text portion and the URN list.
+
+### Browse and Result Inspection
+
+`browse` sends the special Gnutella index query: an exact four-space search string with `TTL=1`. This is the browse-host style query shape used by Gnutella nodes. It is broadcast to your currently connected peers; it is not a targeted request to one specific host.
+
+In practice:
+
+- run `browse`
+- wait for hits to come back
+- use `results` for the compact table
+- use `info <resultNo>` for the full view of one hit
+
+`info` prints the fields that matter when deciding whether to fetch a result: remote host and port, file index, servent ID, query ID and hops, vendor code, SHA-1 URN, any extra URNs, metadata, and the push/busy flags.
 
 ### Download
 
@@ -193,6 +237,18 @@ Persistent runtime state includes `serventIdHex` and the `peers` map.
 | Field     | Meaning                                                                                                     |
 | --------- | ----------------------------------------------------------------------------------------------------------- |
 | `dataDir` | Root directory for runtime data. Files you share and files you download both live in `<dataDir>/downloads`. |
+
+### Node Mode
+
+`config.ultrapeer` controls how the node presents itself to the network:
+
+- `true`: run as an ultrapeer
+- `false`: run as a leaf
+- omitted: stay in the older legacy mode
+
+When running as an ultrapeer, the node advertises ultrapeer capability in the handshake, accepts both mesh peers and leaves, relays traffic, and uses Query Routing Protocol updates for attached peers. The default connection caps mirror gtk-gnutella-style operating limits: up to `50` mesh peers plus `300` leaves.
+
+When running as a leaf, the node behaves as a shielded client and keeps up to `4` ultrapeer connections.
 
 All other networking, timing, feature, and protocol tuning values are compile-time constants in the codebase.
 
@@ -294,7 +350,7 @@ bun run gnutella.ts run --config b.json
 Then:
 
 - add each node to the other node's `state.peers` map with a value of `0`
-- put one test file in each node's `<dataDir>/shared`
+- put one test file in each node's `<dataDir>/downloads`
 - search from one side with `query <name>`
 - view results with `results`
 - fetch one with `download <resultNo>`

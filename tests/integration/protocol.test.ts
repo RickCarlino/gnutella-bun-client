@@ -154,6 +154,10 @@ async function createMeshNode(
     advertisedSpeedKBps: number;
     peers: string[];
     shares: Record<string, string>;
+    ultrapeer?: boolean;
+    enableQrp?: boolean;
+    maxConnections?: number;
+    maxLeafConnections?: number;
   },
 ): Promise<MeshNode> {
   const dir = path.join(root, name.toLowerCase());
@@ -174,6 +178,8 @@ async function createMeshNode(
   doc.config.advertisedHost = "127.0.0.1";
   doc.config.advertisedPort = options.advertisedPort;
   doc.config.dataDir = dir;
+  if (options.ultrapeer !== undefined)
+    doc.config.ultrapeer = options.ultrapeer;
   doc.state.peers = peerState(options.peers.map((peer) => [peer, nowSec]));
 
   await writeDoc(configPath, doc);
@@ -183,7 +189,8 @@ async function createMeshNode(
     onEvent: (event) => events.push(event),
   });
   overrideRuntimeConfig(node, {
-    maxConnections: 4,
+    maxConnections: options.maxConnections ?? 4,
+    maxLeafConnections: options.maxLeafConnections ?? 4,
     connectTimeoutMs: 1_000,
     pingIntervalSec: 3_600,
     reconnectIntervalSec: 3_600,
@@ -197,7 +204,7 @@ async function createMeshNode(
     maxResultsPerQuery: 10,
     advertisedSpeedKBps: options.advertisedSpeedKBps,
     enableCompression: false,
-    enableQrp: false,
+    enableQrp: options.enableQrp ?? false,
     enableBye: true,
     enablePongCaching: true,
     enableGgep: true,
@@ -617,4 +624,132 @@ describe("Integration suite (0.6)", () => {
       );
     });
   });
+
+  test("routes leaf traffic through a real ultrapeer and shields non-matching leaves with QRP", async () => {
+    await withFakeNet(async () => {
+      await withTempDir(async (root) => {
+        const [leafAPort, ultraPort, leafCPort] = await Promise.all([
+          getFreePort(),
+          getFreePort(),
+          getFreePort(),
+        ]);
+
+        const leafA = await createMeshNode(root, "A", {
+          listenPort: leafAPort,
+          advertisedPort: leafAPort,
+          advertisedSpeedKBps: 128,
+          peers: [`127.0.0.1:${ultraPort}`],
+          shares: {
+            "leaf-a-only.txt": "alpha",
+          },
+          ultrapeer: false,
+          enableQrp: true,
+        });
+        const ultra = await createMeshNode(root, "B", {
+          listenPort: ultraPort,
+          advertisedPort: ultraPort,
+          advertisedSpeedKBps: 512,
+          peers: [],
+          shares: {
+            "ultra-own.txt": "from the center",
+          },
+          ultrapeer: true,
+          enableQrp: true,
+          maxConnections: 2,
+          maxLeafConnections: 4,
+        });
+        const leafC = await createMeshNode(root, "C", {
+          listenPort: leafCPort,
+          advertisedPort: leafCPort,
+          advertisedSpeedKBps: 128,
+          peers: [`127.0.0.1:${ultraPort}`],
+          shares: {
+            "ultra-hit-c.txt": "matched only by C",
+          },
+          ultrapeer: false,
+          enableQrp: true,
+        });
+
+        try {
+          await ultra.node.start();
+          await leafA.node.start();
+          await leafC.node.start();
+
+          await waitFor(
+            () =>
+              leafA.node.peerCount() === 1 &&
+              leafC.node.peerCount() === 1 &&
+              ultra.node.connectedLeafCount() === 2 &&
+              ultra.node.connectedMeshPeerCount() === 0,
+            "leaf/ultrapeer topology to come online",
+          );
+
+          await sleep(1200);
+
+          const aResultsBefore = leafA.node.getResults().length;
+          leafA.node.sendQuery("ultra-hit-c", 2);
+          await waitFor(
+            () =>
+              newResults(leafA, aResultsBefore).some(
+                (hit) => hit.fileName === "ultra-hit-c.txt",
+              ),
+            "leaf A to receive a result from leaf C through the ultrapeer",
+            3_000,
+            () =>
+              JSON.stringify({
+                aPeers: leafA.node.getPeers(),
+                ultraPeers: ultra.node.getPeers(),
+                cPeers: leafC.node.getPeers(),
+                aResults: leafA.node.getResults(),
+                ultraRoutes: [...ultra.node.queryRoutes.entries()],
+              }),
+          );
+
+          const aHit = newResults(leafA, aResultsBefore).find(
+            (hit) => hit.fileName === "ultra-hit-c.txt",
+          );
+          expect(aHit).toEqual(
+            expect.objectContaining({
+              fileName: "ultra-hit-c.txt",
+              remoteHost: "127.0.0.1",
+              remotePort: leafCPort,
+            }),
+          );
+
+          const aQueryEventsBefore = eventsOfType(
+            leafA,
+            "QUERY_RECEIVED",
+          ).length;
+          const cQueryEventsBefore = eventsOfType(
+            leafC,
+            "QUERY_RECEIVED",
+          ).length;
+          const ultraResultsBefore = ultra.node.getResults().length;
+
+          ultra.node.sendQuery("ultra-hit-c", 2);
+
+          await waitFor(
+            () =>
+              newResults(ultra, ultraResultsBefore).some(
+                (hit) => hit.fileName === "ultra-hit-c.txt",
+              ),
+            "ultrapeer-local query to be routed to the matching leaf only",
+          );
+
+          expect(
+            eventsOfType(leafC, "QUERY_RECEIVED").length,
+          ).toBeGreaterThan(cQueryEventsBefore);
+          expect(eventsOfType(leafA, "QUERY_RECEIVED")).toHaveLength(
+            aQueryEventsBefore,
+          );
+        } finally {
+          await Promise.allSettled([
+            leafA.node.stop(),
+            ultra.node.stop(),
+            leafC.node.stop(),
+          ]);
+        }
+      });
+    });
+  }, 15_000);
 });

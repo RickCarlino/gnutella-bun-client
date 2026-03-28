@@ -18,6 +18,7 @@ import * as handshake from "./node_handshake";
 import * as lifecycle from "./node_lifecycle";
 import * as protocolRuntime from "./node_protocol_runtime";
 import * as state from "./node_state";
+import * as topology from "./node_topology";
 import * as transfer from "./node_transfer";
 import type { Peer } from "./node_types";
 import { QrpTable } from "./qrp";
@@ -63,6 +64,7 @@ type StateMethods = BoundMethods<typeof state>;
 type LifecycleMethods = BoundMethods<typeof lifecycle>;
 type HandshakeMethods = BoundMethods<typeof handshake>;
 type ProtocolRuntimeMethods = BoundMethods<typeof protocolRuntime>;
+type TopologyMethods = BoundMethods<typeof topology>;
 type TransferMethods = BoundMethods<typeof transfer>;
 
 export class GnutellaServent {
@@ -170,6 +172,18 @@ export class GnutellaServent {
   declare finishInbound06Probe: HandshakeMethods["finishInbound06Probe"];
   declare tryDecideProbe: HandshakeMethods["tryDecideProbe"];
   declare connectPeer06: HandshakeMethods["connectPeer06"];
+  declare nodeMode: TopologyMethods["nodeMode"];
+  declare classifyPeerRole: TopologyMethods["classifyPeerRole"];
+  declare peerRole: TopologyMethods["peerRole"];
+  declare countPeersByRole: TopologyMethods["countPeersByRole"];
+  declare connectedLeafCount: TopologyMethods["connectedLeafCount"];
+  declare connectedMeshPeerCount: TopologyMethods["connectedMeshPeerCount"];
+  declare availableDialSlots: TopologyMethods["availableDialSlots"];
+  declare canAcceptPeerRole: TopologyMethods["canAcceptPeerRole"];
+  declare shouldRelayQueries: TopologyMethods["shouldRelayQueries"];
+  declare shouldRelayPings: TopologyMethods["shouldRelayPings"];
+  declare isLeafPeer: TopologyMethods["isLeafPeer"];
+  declare isMeshPeer: TopologyMethods["isMeshPeer"];
   declare attachPeer: ProtocolRuntimeMethods["attachPeer"];
   declare startHttpSession: ProtocolRuntimeMethods["startHttpSession"];
   declare pendingHttpSessionHeadEnd: ProtocolRuntimeMethods["pendingHttpSessionHeadEnd"];
@@ -243,6 +257,7 @@ Object.assign(
   bindNodeMethods(state),
   bindNodeMethods(lifecycle),
   bindNodeMethods(handshake),
+  bindNodeMethods(topology),
   bindNodeMethods(protocolRuntime),
   bindNodeMethods(transfer),
 );

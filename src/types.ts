@@ -10,11 +10,22 @@ export type CliNode = {
   }>;
   getResults(): Array<{
     resultNo: number;
+    queryIdHex?: string;
+    queryHops?: number;
     remoteHost: string;
     remotePort: number;
+    speedKBps?: number;
+    fileIndex?: number;
     fileSize: number;
     fileName: string;
     serventIdHex: string;
+    viaPeerKey?: string;
+    sha1Urn?: string;
+    urns?: string[];
+    metadata?: string[];
+    vendorCode?: string;
+    needsPush?: boolean;
+    busy?: boolean;
   }>;
   getShares(): Array<{ index: number; size: number; rel: string }>;
   getStatus(): {
@@ -34,6 +45,8 @@ export type ParsedCli = {
 export type PeerAddr = { host: string; port: number };
 export type PeerState = Record<string, number>;
 export type Route = { peerKey: string; ts: number };
+type NodeMode = "legacy" | "leaf" | "ultrapeer";
+export type PeerRole = "legacy" | "leaf" | "ultrapeer";
 
 export type RemoteQrpState = {
   resetSeen: boolean;
@@ -60,6 +73,7 @@ export type PeerCapabilities = {
   ultrapeerNeeded?: boolean;
   queryRoutingVersion?: string;
   ultrapeerQueryRoutingVersion?: string;
+  isCrawler?: boolean;
   listenIp?: PeerAddr;
 };
 
@@ -158,6 +172,8 @@ export type ConfigDoc = {
     listenPort: number;
     advertisedHost?: string;
     advertisedPort?: number;
+    ultrapeer?: boolean;
+    monitorIgnoreEvents?: string[];
     dataDir: string;
   };
   state: {
@@ -171,11 +187,16 @@ export type RuntimeConfig = {
   listenPort: number;
   advertisedHost?: string;
   advertisedPort?: number;
+  ultrapeer?: boolean;
+  monitorIgnoreEvents: string[];
+  nodeMode: NodeMode;
   dataDir: string;
   downloadsDir: string;
   peers: string[];
   peerSeenThresholdSec: number;
   maxConnections: number;
+  maxUltrapeerConnections: number;
+  maxLeafConnections: number;
   connectTimeoutMs: number;
   pingIntervalSec: number;
   reconnectIntervalSec: number;
@@ -249,6 +270,15 @@ export type GnutellaEvent =
       message: string;
     })
   | (EventBase<"PEER_MESSAGE_RECEIVED"> & {
+      peer: PeerInfo;
+      payloadType: number;
+      payloadTypeName: string;
+      descriptorIdHex: string;
+      ttl: number;
+      hops: number;
+      payloadLength: number;
+    })
+  | (EventBase<"PEER_MESSAGE_SENT"> & {
       peer: PeerInfo;
       payloadType: number;
       payloadTypeName: string;

@@ -5,6 +5,7 @@ import {
   errMsg,
   parseCli,
   printPeers,
+  printResultInfo,
   printResults,
   printShares,
   printStatus,
@@ -144,6 +145,61 @@ describe("cli_shared", () => {
         "21  giant.iso                                         3.5GB  7.7.7.7",
       ].join("\n"),
     ]);
+  });
+
+  test("prints detailed result info and errors when missing", () => {
+    const logs: string[] = [];
+    const node = makeNode({
+      getResults: () => [
+        {
+          resultNo: 12,
+          queryIdHex: "aa".repeat(16),
+          queryHops: 2,
+          remoteHost: "10.0.0.2",
+          remotePort: 6346,
+          speedKBps: 512,
+          fileIndex: 7,
+          fileSize: 1200,
+          fileName: "zz-top.bin",
+          serventIdHex: "bb".repeat(16),
+          viaPeerKey: "peer-7",
+          sha1Urn: "urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2",
+          urns: ["urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2"],
+          metadata: ["128 kbps"],
+          vendorCode: "LIME",
+          needsPush: false,
+          busy: true,
+        },
+      ],
+    });
+
+    printResultInfo(node, 12, (msg) => logs.push(msg));
+
+    expect(logs).toEqual([
+      [
+        "result: #12",
+        'file: "zz-top.bin"',
+        "size: 1.2KB (1200B)",
+        "remote: 10.0.0.2:6346",
+        "speed: 512KB/s",
+        "file index: 7",
+        `servent id: ${"bb".repeat(16)}`,
+        `query id: ${"aa".repeat(16)}`,
+        "query hops: 2",
+        "via peer: peer-7",
+        "sha1 urn: urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2",
+        "other urns: -",
+        "metadata:",
+        "  128 kbps",
+        "vendor: LIME",
+        "needs push: false",
+        "busy: true",
+      ].join("\n"),
+    ]);
+
+    expect(() => printResultInfo(node, 99, () => void 0)).toThrow(
+      "no such result 99",
+    );
   });
 
   test("caps displayed result counts at 999", () => {

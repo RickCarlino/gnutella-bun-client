@@ -160,9 +160,11 @@ export async function connectKnownPeers(
     version: c.userAgent,
     connectTimeoutMs: bootstrapTimeoutMs,
     connectConcurrency: BOOTSTRAP_CONNECT_CONCURRENCY,
-    connectedCount: () => node.peerCount(),
-    availableSlots: () =>
-      Math.max(0, c.maxConnections - node.peerCount() - node.dialing.size),
+    connectedCount: () =>
+      node.nodeMode() === "ultrapeer"
+        ? node.connectedMeshPeerCount()
+        : node.peerCount(),
+    availableSlots: () => node.availableDialSlots(),
     connectPeer: (host, port, timeoutMs) =>
       node.connectPeer(host, port, timeoutMs),
     addPeer: (peer) => {

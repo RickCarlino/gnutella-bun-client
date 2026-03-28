@@ -12,6 +12,7 @@ import {
   errMsg,
   parseCli,
   printPeers,
+  printResultInfo,
   printResults,
   printShares,
   printStatus,
@@ -23,9 +24,16 @@ import type { ConnectPeerResult, GnutellaEvent } from "./types";
 
 let activeRl: readline.Interface | null = null;
 let activeNode: GnutellaServent | null = null;
+let monitorEnabled = false;
+let monitorIgnoreTokens = new Set<string>();
 let promptThrobberFrame = PROMPT_THROBBER_FRAMES.length - 1;
 let promptThrobberTimer: ReturnType<typeof setTimeout> | null = null;
 let promptThrobberInitial = true;
+
+type MonitorLogEntry = {
+  line: string;
+  tags: string[];
+};
 
 function padNum(value: number, width: number): string {
   return String(value).padStart(width, "0");
@@ -36,9 +44,23 @@ function promptThrobber(): string {
   return PROMPT_THROBBER_FRAMES[promptThrobberFrame] || " ";
 }
 
+function peerLimitDisplay(node: GnutellaServent): number {
+  const c = node.config();
+  if (c.nodeMode === "ultrapeer")
+    return c.maxConnections + c.maxLeafConnections;
+  if (c.nodeMode === "leaf") return c.maxUltrapeerConnections;
+  return c.maxConnections;
+}
+
 function promptText(node: GnutellaServent): string {
   const status = node.getStatus();
-  return `[${padNum(status.peers, 2)}/${padNum(node.config().maxConnections, 2)}${promptThrobber()}${padNum(displayResultCount(status.results), 3)}] Gnutella> `;
+  const peerLimit = peerLimitDisplay(node);
+  const peerWidth = Math.max(
+    2,
+    String(status.peers).length,
+    String(peerLimit).length,
+  );
+  return `[${padNum(status.peers, peerWidth)}/${padNum(peerLimit, peerWidth)}${promptThrobber()}${padNum(displayResultCount(status.results), 3)}] `;
 }
 
 function stopPromptThrobber(): void {
@@ -81,9 +103,211 @@ function log(msg: string): void {
   redrawPrompt();
 }
 
+function shortDescriptorId(hex: string): string {
+  return hex.slice(0, 8);
+}
+
+function quoted(value: string): string {
+  return JSON.stringify(value);
+}
+
+function describePeer(
+  event: Extract<GnutellaEvent, { peer: { remoteLabel: string } }>,
+): string {
+  const parts = [
+    event.peer.remoteLabel,
+    `dir=${event.peer.outbound ? "out" : "in"}`,
+  ];
+  if (event.peer.userAgent)
+    parts.push(`agent=${quoted(event.peer.userAgent)}`);
+  return parts.join(" ");
+}
+
+function monitorEntry(line: string, ...tags: string[]): MonitorLogEntry {
+  return { line, tags };
+}
+
+function setMonitorIgnoreTokens(tokens: string[]): void {
+  monitorIgnoreTokens = new Set(tokens);
+}
+
+function shouldIgnoreMonitorEntry(entry: MonitorLogEntry): boolean {
+  return entry.tags.some((tag) => monitorIgnoreTokens.has(tag));
+}
+
+function formatLifecycleMonitorEvent(
+  event: GnutellaEvent,
+): MonitorLogEntry | undefined {
+  switch (event.type) {
+    case "STARTED":
+      return monitorEntry(
+        `[started] listen=${event.listenHost}:${event.listenPort} advertised=${event.advertisedHost}:${event.advertisedPort}`,
+        "STARTED",
+      );
+    case "IDENTITY":
+      return monitorEntry(
+        `[identity] serventId=${event.serventIdHex}`,
+        "IDENTITY",
+      );
+    case "SHARES_REFRESHED":
+      return monitorEntry(
+        `[shares] count=${event.count} totalKiB=${event.totalKBytes}`,
+        "SHARES_REFRESHED",
+      );
+    case "MAINTENANCE_ERROR":
+      return monitorEntry(
+        `[maintenance] op=${event.operation} message=${quoted(event.message)}`,
+        "MAINTENANCE_ERROR",
+      );
+    case "PROBE_REJECTED":
+      return monitorEntry(
+        `[probe rejected] message=${quoted(event.message)}`,
+        "PROBE_REJECTED",
+      );
+  }
+}
+
+function formatPeerMonitorEvent(
+  event: GnutellaEvent,
+): MonitorLogEntry | undefined {
+  switch (event.type) {
+    case "PEER_CONNECTED":
+      return monitorEntry(
+        `[peer up] ${describePeer(event)}`,
+        "PEER_CONNECTED",
+      );
+    case "PEER_DROPPED":
+      return monitorEntry(
+        `[peer down] ${describePeer(event)} message=${quoted(event.message)}`,
+        "PEER_DROPPED",
+      );
+    case "PEER_MESSAGE_RECEIVED":
+      return monitorEntry(
+        `[rx] ${event.payloadTypeName} id=${shortDescriptorId(event.descriptorIdHex)} ttl=${event.ttl} hops=${event.hops} len=${event.payloadLength} from=${event.peer.remoteLabel}`,
+        "PEER_MESSAGE_RECEIVED",
+        event.payloadTypeName,
+        `RX:${event.payloadTypeName}`,
+      );
+    case "PEER_MESSAGE_SENT":
+      return monitorEntry(
+        `[tx] ${event.payloadTypeName} id=${shortDescriptorId(event.descriptorIdHex)} ttl=${event.ttl} hops=${event.hops} len=${event.payloadLength} to=${event.peer.remoteLabel}`,
+        "PEER_MESSAGE_SENT",
+        event.payloadTypeName,
+        `TX:${event.payloadTypeName}`,
+      );
+    case "PONG":
+      return monitorEntry(
+        `[pong] ${event.ip}:${event.port} files=${event.files} kbytes=${event.kbytes}`,
+        "PONG",
+        "EVENT:PONG",
+      );
+  }
+}
+
+function formatQueryMonitorEvent(
+  event: GnutellaEvent,
+): MonitorLogEntry | undefined {
+  switch (event.type) {
+    case "QUERY_RECEIVED":
+      return monitorEntry(
+        `[query rx] id=${shortDescriptorId(event.descriptorIdHex)} ttl=${event.ttl} hops=${event.hops} from=${event.peer.remoteLabel} urns=${event.urns.length} search=${quoted(event.search)}`,
+        "QUERY_RECEIVED",
+        "EVENT:QUERY_RECEIVED",
+        "QUERY",
+        "RX:QUERY",
+      );
+    case "QUERY_RESULT":
+      return monitorEntry(
+        `[query hit] #${event.hit.resultNo} via=${event.hit.viaPeerKey} remote=${event.hit.remoteHost}:${event.hit.remotePort} size=${event.hit.fileSize} name=${quoted(event.hit.fileName)}`,
+        "QUERY_RESULT",
+        "EVENT:QUERY_RESULT",
+        "QUERY_HIT",
+      );
+    case "PING_SENT":
+      return monitorEntry(
+        `[ping tx] id=${shortDescriptorId(event.descriptorIdHex)} ttl=${event.ttl}`,
+        "PING_SENT",
+        "EVENT:PING_SENT",
+        "PING",
+        "TX:PING",
+      );
+    case "QUERY_SENT":
+      return monitorEntry(
+        `[query tx] id=${shortDescriptorId(event.descriptorIdHex)} ttl=${event.ttl} search=${quoted(event.search)}`,
+        "QUERY_SENT",
+        "EVENT:QUERY_SENT",
+        "QUERY",
+        "TX:QUERY",
+      );
+    case "QUERY_SKIPPED":
+      return monitorEntry(
+        `[query skip] reason=${event.reason}`,
+        "QUERY_SKIPPED",
+      );
+  }
+}
+
+function formatTransferMonitorEvent(
+  event: GnutellaEvent,
+): MonitorLogEntry | undefined {
+  switch (event.type) {
+    case "PUSH_REQUESTED":
+      return monitorEntry(
+        `[push requested] fileIndex=${event.fileIndex} ip=${event.ip}:${event.port} name=${quoted(event.fileName)}`,
+        "PUSH_REQUESTED",
+        "PUSH",
+      );
+    case "PUSH_CALLBACK_FAILED":
+      return monitorEntry(
+        `[push callback failed] message=${quoted(event.message)}`,
+        "PUSH_CALLBACK_FAILED",
+      );
+    case "PUSH_UPLOAD_FAILED":
+      return monitorEntry(
+        `[push upload failed] message=${quoted(event.message)}`,
+        "PUSH_UPLOAD_FAILED",
+      );
+    case "DOWNLOAD_SUCCEEDED":
+      return monitorEntry(
+        `[download ok] mode=${event.mode} result=${event.resultNo} remote=${event.remoteHost}:${event.remotePort} path=${quoted(event.destPath)}`,
+        "DOWNLOAD_SUCCEEDED",
+      );
+    case "DOWNLOAD_DIRECT_FAILED":
+      return monitorEntry(
+        `[download failed] result=${event.resultNo} remote=${event.remoteHost}:${event.remotePort} path=${quoted(event.destPath)} message=${quoted(event.message)}`,
+        "DOWNLOAD_DIRECT_FAILED",
+      );
+  }
+}
+
+function formatMonitorEvent(
+  event: GnutellaEvent,
+): MonitorLogEntry | undefined {
+  return (
+    formatLifecycleMonitorEvent(event) ||
+    formatPeerMonitorEvent(event) ||
+    formatQueryMonitorEvent(event) ||
+    formatTransferMonitorEvent(event)
+  );
+}
+
 function handleNodeEvent(event: GnutellaEvent): void {
-  if (event.type === "PEER_MESSAGE_RECEIVED") {
-    throbPrompt();
+  if (!monitorEnabled) {
+    if (event.type === "PEER_MESSAGE_RECEIVED") {
+      throbPrompt();
+      return;
+    }
+    redrawPrompt();
+    return;
+  }
+  const entry = formatMonitorEvent(event);
+  if (entry) {
+    if (shouldIgnoreMonitorEntry(entry)) {
+      if (event.type === "PEER_MESSAGE_RECEIVED") throbPrompt();
+      else redrawPrompt();
+      return;
+    }
+    log(entry.line);
     return;
   }
   redrawPrompt();
@@ -135,6 +359,28 @@ function pingTtlFor(node: GnutellaServent, args: string[]): number {
   return args[1] ? Number(args[1]) : node.config().defaultPingTtl;
 }
 
+async function handleBrowseCommand(
+  node: GnutellaServent,
+  args: string[],
+): Promise<boolean> {
+  if (args.length !== 1) throw new Error("usage: browse");
+  node.sendQuery("    ", 1);
+  log("browse query sent");
+  return true;
+}
+
+async function handleInfoCommand(
+  node: GnutellaServent,
+  args: string[],
+): Promise<boolean> {
+  if (args.length !== 2) throw new Error("usage: info <resultNo>");
+  const resultNo = Number(args[1]);
+  if (!Number.isInteger(resultNo) || resultNo < 1)
+    throw new Error("usage: info <resultNo>");
+  printResultInfo(node, resultNo, log);
+  return true;
+}
+
 type CommandHandler = (
   node: GnutellaServent,
   args: string[],
@@ -148,6 +394,12 @@ const COMMAND_ALIASES: Record<string, string> = {
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   help: async () => {
     printHelp();
+    return true;
+  },
+  monitor: async (_node, args) => {
+    if (args.length !== 1) throw new Error("usage: monitor");
+    monitorEnabled = !monitorEnabled;
+    log(`monitor ${monitorEnabled ? "on" : "off"}`);
     return true;
   },
   status: async (node) => {
@@ -180,6 +432,8 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     node.sendQuery(args.slice(1).join(" "));
     return true;
   },
+  browse: handleBrowseCommand,
+  info: handleInfoCommand,
   download: handleDownloadCommand,
   rescan: async (node) => {
     await node.refreshShares();
@@ -266,6 +520,8 @@ export async function main(argv = process.argv.slice(2)) {
   const node = new GnutellaServent(cli.config, doc, {
     onEvent: handleNodeEvent,
   });
+  monitorEnabled = false;
+  setMonitorIgnoreTokens(node.config().monitorIgnoreEvents);
 
   let shuttingDown = false;
   const shutdown = () => {

@@ -48,6 +48,7 @@ function makePeer(label = "1.2.3.4:6346"): Peer {
     outbound: false,
     dialTarget: label,
     remoteLabel: label,
+    role: "legacy",
     capabilities: {
       version: "0.6",
       headers: {},
@@ -59,6 +60,7 @@ function makePeer(label = "1.2.3.4:6346"): Peer {
       compressOut: false,
       isUltrapeer: false,
       ultrapeerNeeded: false,
+      isCrawler: false,
       listenIp: { host: "5.6.7.8", port: 6347 },
     },
     remoteQrp: {
@@ -89,6 +91,9 @@ describe("protocol config and public helpers", () => {
       expect(created.config.dataDir).toBe(path.join(dir, "nested"));
       expect(created.config.advertisedHost).toBeUndefined();
       expect(created.config.advertisedPort).toBeUndefined();
+      expect(createdRuntime.maxConnections).toBe(50);
+      expect(createdRuntime.maxUltrapeerConnections).toBe(4);
+      expect(createdRuntime.maxLeafConnections).toBe(300);
       await expect(fs.stat(configPath)).resolves.toBeDefined();
       await expect(
         fs.stat(createdRuntime.downloadsDir),
@@ -130,10 +135,7 @@ describe("protocol config and public helpers", () => {
       const configPath = path.join(dir, "protocol.json");
 
       const created = await loadDoc(configPath);
-      const runtime = new GnutellaServent(
-        configPath,
-        created,
-      ).config();
+      const runtime = new GnutellaServent(configPath, created).config();
 
       expect(created.config.dataDir).toBe(dir);
       await expect(fs.stat(configPath)).resolves.toBeDefined();
@@ -223,6 +225,58 @@ describe("protocol config and public helpers", () => {
     });
   });
 
+  test("persists explicit leaf and ultrapeer modes in config", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      doc.config.ultrapeer = true;
+
+      await writeDoc(configPath, doc);
+      const ultrapeerDoc = await loadDoc(configPath);
+      expect(ultrapeerDoc.config.ultrapeer).toBe(true);
+      expect(
+        new GnutellaServent(configPath, ultrapeerDoc).config().nodeMode,
+      ).toBe("ultrapeer");
+
+      ultrapeerDoc.config.ultrapeer = false;
+      await writeDoc(configPath, ultrapeerDoc);
+      const leafDoc = await loadDoc(configPath);
+      expect(leafDoc.config.ultrapeer).toBe(false);
+      expect(
+        new GnutellaServent(configPath, leafDoc).config().nodeMode,
+      ).toBe("leaf");
+    });
+  });
+
+  test("normalizes monitor ignore filters in config", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      doc.config.monitorIgnoreEvents = [
+        " ping ",
+        "PONG",
+        "rx:ping",
+        "",
+        "PONG",
+      ] as never;
+
+      await writeDoc(configPath, doc);
+      const loaded = await loadDoc(configPath);
+      const runtime = new GnutellaServent(configPath, loaded).config();
+
+      expect(loaded.config.monitorIgnoreEvents).toEqual([
+        "PING",
+        "PONG",
+        "RX:PING",
+      ]);
+      expect(runtime.monitorIgnoreEvents).toEqual([
+        "PING",
+        "PONG",
+        "RX:PING",
+      ]);
+    });
+  });
+
   test("builds GET requests with Host headers and splits quoted args", () => {
     expect(
       buildGetRequest(12, "dir#/file name.txt", 128, "1.2.3.4", 6346),
@@ -240,6 +294,12 @@ describe("protocol config and public helpers", () => {
       "three words",
       "escaped space",
       'plain"quote',
+    ]);
+    expect(splitArgs(`query "" "two  words" plain\\ space`)).toEqual([
+      "query",
+      "",
+      "two  words",
+      "plain space",
     ]);
   });
 

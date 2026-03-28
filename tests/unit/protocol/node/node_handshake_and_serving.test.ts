@@ -47,21 +47,30 @@ describe("protocol node", () => {
   test("normalizes query TTL plus hops and drops excessive query TTL values", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
-      const peer = makePeer();
-      let broadcastArgs: {
+      const peer = makePeer("source-peer");
+      const other = makePeer("other-peer");
+      other.role = "ultrapeer";
+      node.peers.set(other.key, other);
+      let forwarded: {
         ttl: number;
         hops: number;
-        search: string;
+        descriptorId: string;
       } | null = null;
       let responded = false;
-      (node as any).broadcastQuery = (
-        _descriptorId: Buffer,
+      (node as any).sendToPeer = (
+        target: { key: string },
+        payloadType: number,
+        descriptorId: Buffer,
         ttl: number,
         hops: number,
         _payload: Buffer,
-        search: string,
       ) => {
-        broadcastArgs = { ttl, hops, search };
+        if (target.key !== other.key || payloadType !== TYPE.QUERY) return;
+        forwarded = {
+          ttl,
+          hops,
+          descriptorId: descriptorId.toString("hex"),
+        };
       };
       (node as any).respondQueryHit = () => {
         responded = true;
@@ -75,9 +84,13 @@ describe("protocol node", () => {
       );
 
       expect(responded).toBe(true);
-      expect(broadcastArgs!).toEqual({ ttl: 2, hops: 5, search: "alpha" });
+      expect(forwarded!).toEqual({
+        ttl: 2,
+        hops: 5,
+        descriptorId: "11".repeat(16),
+      });
 
-      broadcastArgs = null;
+      forwarded = null;
       responded = false;
       node.handleDescriptor(
         peer as never,
@@ -86,7 +99,7 @@ describe("protocol node", () => {
       );
 
       expect(responded).toBe(false);
-      expect(broadcastArgs).toBeNull();
+      expect(forwarded).toBeNull();
     });
   });
 
@@ -249,7 +262,6 @@ describe("protocol node", () => {
         expect(node.baseHandshakeHeaders()).toMatchObject({
           "user-agent": "GnutellaBun/0.6",
           "x-ultrapeer": "False",
-          "x-ultrapeer-needed": "False",
           "listen-ip": "7.7.7.7:7777",
           "x-max-ttl": "7",
           "x-query-routing": "0.1",
