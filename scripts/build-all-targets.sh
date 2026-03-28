@@ -19,7 +19,6 @@ TARGETS=(
   bun-darwin-arm64
   bun-windows-x64
   bun-windows-x64-baseline
-  bun-windows-arm64
 )
 
 mkdir -p "$OUTDIR"

@@ -125,6 +125,22 @@ describe("protocol config and public helpers", () => {
     });
   });
 
+  test("creates a default config when the parent directory already exists", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+
+      const created = await loadDoc(configPath);
+      const runtime = new GnutellaServent(
+        configPath,
+        created,
+      ).config();
+
+      expect(created.config.dataDir).toBe(dir);
+      await expect(fs.stat(configPath)).resolves.toBeDefined();
+      await expect(fs.stat(runtime.downloadsDir)).resolves.toBeDefined();
+    });
+  });
+
   test("exposes peer user agents through public peer info", async () => {
     await withTempDir(async (dir) => {
       const configPath = path.join(dir, "protocol.json");

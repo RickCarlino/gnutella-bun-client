@@ -97,7 +97,15 @@ export async function fileExists(p: string): Promise<boolean> {
 }
 
 export async function ensureDir(p: string): Promise<void> {
-  await fsp.mkdir(p, { recursive: true });
+  try {
+    await fsp.mkdir(p, { recursive: true });
+  } catch (e) {
+    // Bun's compiled Windows runtime can report EEXIST for an already-existing
+    // directory on first-run config creation.
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    const st = await fsp.stat(p).catch(() => null);
+    if (!st?.isDirectory()) throw e;
+  }
 }
 
 export async function walkFiles(root: string): Promise<string[]> {
