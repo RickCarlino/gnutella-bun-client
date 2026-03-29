@@ -1,3 +1,4 @@
+import { errMsg } from "./shared";
 import { RESULT_NAME_WIDTH_MAX } from "./const";
 import type { CliNode, ParsedCli } from "./types";
 
@@ -26,10 +27,6 @@ export function displayResultCount(count: number): number {
   const safeCount =
     Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
   return Math.min(RESULT_COUNT_DISPLAY_MAX, safeCount);
-}
-
-export function errMsg(e: any): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 function sanitizeTableCell(
@@ -310,7 +307,7 @@ export function runExecCommands(
   log: (msg: string) => void,
   sleep: (ms: number) => Promise<void>,
   runCommand: (line: string) => Promise<boolean>,
-  errMsg: (e: any) => string,
+  formatError: (e: unknown) => string,
 ): void {
   if (!execCmds.length) return;
   void (async () => {
@@ -321,8 +318,10 @@ export function runExecCommands(
         const keep = await runCommand(cmd);
         if (!keep) return;
       } catch (e) {
-        log(`command failed: ${errMsg(e)}`);
+        log(`command failed: ${formatError(e)}`);
       }
     }
   })();
 }
+
+export { errMsg };

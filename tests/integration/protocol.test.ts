@@ -132,11 +132,7 @@ function overrideRuntimeConfig(
   node: GnutellaServent,
   patch: Partial<RuntimeConfig>,
 ): void {
-  const original = node.config.bind(node);
-  (node as unknown as { config: () => RuntimeConfig }).config = () => ({
-    ...original(),
-    ...patch,
-  });
+  node.updateRuntimeConfig(patch);
 }
 
 function peerState(

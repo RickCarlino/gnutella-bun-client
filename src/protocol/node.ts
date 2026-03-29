@@ -2,18 +2,31 @@ import net from "node:net";
 import path from "node:path";
 
 import { LOCAL_ROUTE } from "../const";
-import type { GWebCacheBootstrapState } from "../gwebcache_client";
+import {
+  connectBootstrapPeers,
+  reportSelfToGWebCaches,
+  type GWebCacheBootstrapState,
+} from "../gwebcache_client";
+import { sleep } from "../shared";
 import type {
   ConfigDoc,
   DownloadRecord,
+  GnutellaServentCollaboratorOverrides,
+  GnutellaServentCollaborators,
   GnutellaEventListener,
   GnutellaServentOptions,
   PendingPush,
   Route,
+  RuntimeConfig,
   SearchHit,
   ShareFile,
 } from "../types";
 import { fromHex16, randomId16, rawHex16 } from "./core_utils";
+import {
+  applyRuntimeConfigPatch,
+  configDocForRuntime,
+  runtimeConfigFor,
+} from "./peer_state";
 import * as handshake from "./node_handshake";
 import * as lifecycle from "./node_lifecycle";
 import * as protocolRuntime from "./node_protocol_runtime";
@@ -51,12 +64,99 @@ function bindNodeMethods<T extends Record<string, unknown>>(
   return out as BoundMethods<T>;
 }
 
+function defaultCollaborators(): GnutellaServentCollaborators {
+  return {
+    clock: {
+      now: () => Date.now(),
+    },
+    scheduler: {
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (timer) => clearTimeout(timer),
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (timer) => clearInterval(timer),
+      sleep,
+    },
+    netFactory: {
+      createConnection: (options) => net.createConnection(options),
+      createServer: (listener) => net.createServer(listener),
+    },
+    bootstrapClient: {
+      connectBootstrapPeers,
+      reportSelfToGWebCaches,
+    },
+  };
+}
+
+function buildCollaborators(
+  overrides?: GnutellaServentCollaboratorOverrides,
+): GnutellaServentCollaborators {
+  const defaults = defaultCollaborators();
+  return {
+    clock: { ...defaults.clock, ...overrides?.clock },
+    scheduler: { ...defaults.scheduler, ...overrides?.scheduler },
+    netFactory: { ...defaults.netFactory, ...overrides?.netFactory },
+    bootstrapClient: {
+      ...defaults.bootstrapClient,
+      ...overrides?.bootstrapClient,
+    },
+  };
+}
+
 const nodeCoreMethods = {
   randomId16(_node: GnutellaServent): Buffer {
     return randomId16();
   },
   rawHex16(_node: GnutellaServent, hex: string): Buffer {
     return rawHex16(hex);
+  },
+  now(node: GnutellaServent): number {
+    return node.collaborators.clock.now();
+  },
+  sleep(node: GnutellaServent, ms: number): Promise<void> {
+    return node.collaborators.scheduler.sleep(ms);
+  },
+  createConnection(
+    node: GnutellaServent,
+    options: net.NetConnectOpts,
+  ): net.Socket {
+    return node.collaborators.netFactory.createConnection(options);
+  },
+  createServer(
+    node: GnutellaServent,
+    listener: (socket: net.Socket) => void,
+  ): net.Server {
+    return node.collaborators.netFactory.createServer(listener);
+  },
+  connectBootstrapPeers(
+    node: GnutellaServent,
+    options: Parameters<
+      GnutellaServentCollaborators["bootstrapClient"]["connectBootstrapPeers"]
+    >[0],
+  ) {
+    return node.collaborators.bootstrapClient.connectBootstrapPeers(
+      options,
+    );
+  },
+  reportSelfToGWebCaches(
+    node: GnutellaServent,
+    options: Parameters<
+      GnutellaServentCollaborators["bootstrapClient"]["reportSelfToGWebCaches"]
+    >[0],
+  ) {
+    return node.collaborators.bootstrapClient.reportSelfToGWebCaches(
+      options,
+    );
+  },
+  updateRuntimeConfig(
+    node: GnutellaServent,
+    patch: Partial<RuntimeConfig>,
+  ): RuntimeConfig {
+    node.runtimeConfig = applyRuntimeConfigPatch(
+      node.runtimeConfig,
+      patch,
+    );
+    node.doc.config = configDocForRuntime(node.runtimeConfig);
+    return node.runtimeConfig;
   },
 };
 
@@ -72,6 +172,9 @@ type TransferMethods = BoundMethods<typeof transfer>;
 export class GnutellaServent {
   configPath: string;
   doc: ConfigDoc;
+  persistedState: ConfigDoc["state"];
+  runtimeConfig: RuntimeConfig;
+  collaborators: GnutellaServentCollaborators;
   serventId: Buffer;
   server: net.Server | null = null;
   peers = new Map<string, Peer>();
@@ -104,6 +207,13 @@ export class GnutellaServent {
   pendingAdvertisedSubnets = new Set<string>();
   declare randomId16: CoreMethods["randomId16"];
   declare rawHex16: CoreMethods["rawHex16"];
+  declare now: CoreMethods["now"];
+  declare sleep: CoreMethods["sleep"];
+  declare createConnection: CoreMethods["createConnection"];
+  declare createServer: CoreMethods["createServer"];
+  declare connectBootstrapPeers: CoreMethods["connectBootstrapPeers"];
+  declare reportSelfToGWebCaches: CoreMethods["reportSelfToGWebCaches"];
+  declare updateRuntimeConfig: CoreMethods["updateRuntimeConfig"];
   declare subscribe: StateMethods["subscribe"];
   declare emitEvent: StateMethods["emitEvent"];
   declare emitMaintenanceError: StateMethods["emitMaintenanceError"];
@@ -256,6 +366,13 @@ export class GnutellaServent {
   ) {
     this.configPath = path.resolve(configPath);
     this.doc = doc;
+    this.persistedState = this.doc.state;
+    this.runtimeConfig = applyRuntimeConfigPatch(
+      runtimeConfigFor(this.configPath, doc),
+      options.runtimeConfig || {},
+    );
+    this.doc.config = configDocForRuntime(this.runtimeConfig);
+    this.collaborators = buildCollaborators(options.collaborators);
     this.serventId = fromHex16(doc.state.serventIdHex);
     if (options.onEvent) this.listeners.add(options.onEvent);
   }

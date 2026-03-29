@@ -110,6 +110,7 @@ function maybeStartTlsSocket(
 }
 
 function waitForSecureTlsSocket(
+  node: GnutellaServent,
   socket: tls.TLSSocket,
   mode: "client" | "server",
   timeoutMs: number,
@@ -117,7 +118,7 @@ function waitForSecureTlsSocket(
   return new Promise((resolve, reject) => {
     let settled = false;
     const cleanup = () => {
-      clearTimeout(timer);
+      node.collaborators.scheduler.clearTimeout(timer);
       for (const event of secureEventNames(mode)) {
         socket.off(event, onSecure);
       }
@@ -139,7 +140,7 @@ function waitForSecureTlsSocket(
     const onSecure = () => finish(socket);
     const onError = (error: unknown) => fail(error);
     const onClose = () => fail(new Error("TLS socket closed"));
-    const timer = setTimeout(() => {
+    const timer = node.collaborators.scheduler.setTimeout(() => {
       fail(new Error("TLS handshake timeout"));
     }, timeoutMs);
 
@@ -238,5 +239,5 @@ export async function upgradeSocketToTls(
   upgraded.setNoDelay(true);
   maybeStartTlsSocket(upgraded, mode);
   upgraded.resume();
-  return await waitForSecureTlsSocket(upgraded, mode, timeoutMs);
+  return await waitForSecureTlsSocket(node, upgraded, mode, timeoutMs);
 }

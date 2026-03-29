@@ -28,7 +28,10 @@ describe("protocol node topology", () => {
         }),
       ).toBe("leaf");
 
-      node.doc.config.ultrapeer = true;
+      overrideRuntimeConfig(node, {
+        ultrapeer: true,
+        nodeMode: "ultrapeer",
+      });
 
       expect(node.nodeMode()).toBe("ultrapeer");
       expect(
@@ -86,8 +89,9 @@ describe("protocol node topology", () => {
   test("enforces ultrapeer admission rules and slot counts", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
-      node.doc.config.ultrapeer = true;
       overrideRuntimeConfig(node, {
+        ultrapeer: true,
+        nodeMode: "ultrapeer",
         maxConnections: 2,
         maxLeafConnections: 1,
       });

@@ -263,7 +263,6 @@ export function runtimeConfigFor(
   const dataDir = resolveDataDir(configPath, {
     data_dir: doc.config.dataDir,
   });
-  const peers = trimPeerState(doc.state.peers);
   const monitorIgnoreEvents =
     normalizedMonitorIgnoreEvents(doc.config.monitorIgnoreEvents) || [];
   return {
@@ -281,7 +280,6 @@ export function runtimeConfigFor(
     nodeMode: doc.config.ultrapeer === true ? "ultrapeer" : "leaf",
     dataDir,
     downloadsDir: path.join(dataDir, DATA_DOWNLOADS_DIRNAME),
-    peers: peerStateTargets(peers),
     peerSeenThresholdSec: PEER_SEEN_THRESHOLD_SEC,
     maxConnections:
       positiveIntegerOrUndefined(doc.config.maxConnections) ||
@@ -315,6 +313,41 @@ export function runtimeConfigFor(
     enableGgep: ENABLE_GGEP,
     serveUriRes: SERVE_URI_RES,
     vendorCode: DEFAULT_VENDOR_CODE,
+  };
+}
+
+export function applyRuntimeConfigPatch(
+  config: RuntimeConfig,
+  patch: Partial<RuntimeConfig>,
+): RuntimeConfig {
+  const next = {
+    ...config,
+    ...patch,
+  };
+  if (patch.nodeMode && patch.ultrapeer == null) {
+    next.ultrapeer = patch.nodeMode === "ultrapeer";
+  } else if (patch.ultrapeer != null && patch.nodeMode == null) {
+    next.nodeMode = patch.ultrapeer ? "ultrapeer" : "leaf";
+  }
+  return next;
+}
+
+export function configDocForRuntime(
+  config: RuntimeConfig,
+): ConfigDoc["config"] {
+  return {
+    listenHost: config.listenHost,
+    listenPort: config.listenPort,
+    advertisedHost: config.advertisedHost,
+    advertisedPort: config.advertisedPort,
+    ultrapeer: config.ultrapeer,
+    maxConnections: config.maxConnections,
+    maxUltrapeerConnections: config.maxUltrapeerConnections,
+    maxLeafConnections: config.maxLeafConnections,
+    monitorIgnoreEvents: config.monitorIgnoreEvents.length
+      ? [...config.monitorIgnoreEvents]
+      : undefined,
+    dataDir: config.dataDir,
   };
 }
 

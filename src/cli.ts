@@ -22,26 +22,40 @@ import { GnutellaServent, loadDoc, writeDoc } from "./protocol";
 import { sleep, splitArgs } from "./shared";
 import type { ConnectPeerResult, GnutellaEvent } from "./types";
 
-let activeRl: readline.Interface | null = null;
-let activeNode: GnutellaServent | null = null;
-let monitorEnabled = false;
-let monitorIgnoreTokens = new Set<string>();
-let promptThrobberFrame = PROMPT_THROBBER_FRAMES.length - 1;
-let promptThrobberTimer: ReturnType<typeof setTimeout> | null = null;
-let promptThrobberInitial = true;
-
 type MonitorLogEntry = {
   line: string;
   tags: string[];
 };
 
+type CliSession = {
+  rl: readline.Interface | null;
+  node: GnutellaServent;
+  monitorEnabled: boolean;
+  monitorIgnoreTokens: Set<string>;
+  promptFrame: number;
+  promptTimer: ReturnType<typeof setTimeout> | null;
+  promptInitial: boolean;
+};
+
+function createCliSession(node: GnutellaServent): CliSession {
+  return {
+    rl: null,
+    node,
+    monitorEnabled: false,
+    monitorIgnoreTokens: new Set<string>(),
+    promptFrame: PROMPT_THROBBER_FRAMES.length - 1,
+    promptTimer: null,
+    promptInitial: true,
+  };
+}
+
 function padNum(value: number, width: number): string {
   return String(value).padStart(width, "0");
 }
 
-function promptThrobber(): string {
-  if (promptThrobberInitial) return " ";
-  return PROMPT_THROBBER_FRAMES[promptThrobberFrame] || " ";
+function promptThrobber(session: CliSession): string {
+  if (session.promptInitial) return " ";
+  return PROMPT_THROBBER_FRAMES[session.promptFrame] || " ";
 }
 
 function peerLimitDisplay(node: GnutellaServent): number {
@@ -52,55 +66,55 @@ function peerLimitDisplay(node: GnutellaServent): number {
   return c.maxConnections;
 }
 
-function promptText(node: GnutellaServent): string {
-  const status = node.getStatus();
-  const peerLimit = peerLimitDisplay(node);
+function promptText(session: CliSession): string {
+  const status = session.node.getStatus();
+  const peerLimit = peerLimitDisplay(session.node);
   const peerWidth = Math.max(
     2,
     String(status.peers).length,
     String(peerLimit).length,
   );
-  return `[${padNum(status.peers, peerWidth)}/${padNum(peerLimit, peerWidth)}${promptThrobber()}${padNum(displayResultCount(status.results), 3)}] `;
+  return `[${padNum(status.peers, peerWidth)}/${padNum(peerLimit, peerWidth)}${promptThrobber(session)}${padNum(displayResultCount(status.results), 3)}] `;
 }
 
-function stopPromptThrobber(): void {
-  if (promptThrobberTimer) clearTimeout(promptThrobberTimer);
-  promptThrobberTimer = null;
-  promptThrobberFrame = PROMPT_THROBBER_FRAMES.length - 1;
-  promptThrobberInitial = true;
+function stopPromptThrobber(session: CliSession): void {
+  if (session.promptTimer) clearTimeout(session.promptTimer);
+  session.promptTimer = null;
+  session.promptFrame = PROMPT_THROBBER_FRAMES.length - 1;
+  session.promptInitial = true;
 }
 
-function stepPromptThrobber(): void {
-  if (promptThrobberFrame >= PROMPT_THROBBER_FRAMES.length - 1) {
-    promptThrobberTimer = null;
-    redrawPrompt();
+function stepPromptThrobber(session: CliSession): void {
+  if (session.promptFrame >= PROMPT_THROBBER_FRAMES.length - 1) {
+    session.promptTimer = null;
+    redrawPrompt(session);
     return;
   }
-  promptThrobberTimer = setTimeout(() => {
-    promptThrobberFrame++;
-    redrawPrompt();
-    stepPromptThrobber();
+  session.promptTimer = setTimeout(() => {
+    session.promptFrame++;
+    redrawPrompt(session);
+    stepPromptThrobber(session);
   }, PROMPT_THROBBER_INTERVAL_MS);
 }
 
-function throbPrompt(): void {
-  promptThrobberInitial = false;
+function throbPrompt(session: CliSession): void {
+  session.promptInitial = false;
   if (!process.stdin.isTTY) return;
-  if (promptThrobberTimer) clearTimeout(promptThrobberTimer);
-  promptThrobberFrame = 0;
-  redrawPrompt();
-  stepPromptThrobber();
+  if (session.promptTimer) clearTimeout(session.promptTimer);
+  session.promptFrame = 0;
+  redrawPrompt(session);
+  stepPromptThrobber(session);
 }
 
-function redrawPrompt(): void {
-  if (!activeRl || !activeNode || !process.stdin.isTTY) return;
-  activeRl.setPrompt(promptText(activeNode));
-  activeRl.prompt(true);
+function redrawPrompt(session: CliSession): void {
+  if (!session.rl || !process.stdin.isTTY) return;
+  session.rl.setPrompt(promptText(session));
+  session.rl.prompt(true);
 }
 
-function log(msg: string): void {
+function log(session: CliSession, msg: string): void {
   process.stdout.write(`${msg}\n`);
-  redrawPrompt();
+  redrawPrompt(session);
 }
 
 function shortDescriptorId(hex: string): string {
@@ -128,12 +142,18 @@ function monitorEntry(line: string, ...tags: string[]): MonitorLogEntry {
   return { line, tags };
 }
 
-function setMonitorIgnoreTokens(tokens: string[]): void {
-  monitorIgnoreTokens = new Set(tokens);
+function setMonitorIgnoreTokens(
+  session: CliSession,
+  tokens: string[],
+): void {
+  session.monitorIgnoreTokens = new Set(tokens);
 }
 
-function shouldIgnoreMonitorEntry(entry: MonitorLogEntry): boolean {
-  return entry.tags.some((tag) => monitorIgnoreTokens.has(tag));
+function shouldIgnoreMonitorEntry(
+  session: CliSession,
+  entry: MonitorLogEntry,
+): boolean {
+  return entry.tags.some((tag) => session.monitorIgnoreTokens.has(tag));
 }
 
 function formatLifecycleMonitorEvent(
@@ -305,45 +325,49 @@ function formatMonitorEvent(
   );
 }
 
-function handleNodeEvent(event: GnutellaEvent): void {
-  if (!monitorEnabled) {
+function handleNodeEvent(session: CliSession, event: GnutellaEvent): void {
+  if (!session.monitorEnabled) {
     if (event.type === "PEER_MESSAGE_RECEIVED") {
-      throbPrompt();
+      throbPrompt(session);
       return;
     }
-    redrawPrompt();
+    redrawPrompt(session);
     return;
   }
   const entry = formatMonitorEvent(event);
   if (entry) {
-    if (shouldIgnoreMonitorEntry(entry)) {
-      if (event.type === "PEER_MESSAGE_RECEIVED") throbPrompt();
-      else redrawPrompt();
+    if (shouldIgnoreMonitorEntry(session, entry)) {
+      if (event.type === "PEER_MESSAGE_RECEIVED") throbPrompt(session);
+      else redrawPrompt(session);
       return;
     }
-    log(entry.line);
+    log(session, entry.line);
     return;
   }
-  redrawPrompt();
+  redrawPrompt(session);
 }
 
-function printHelp(): void {
-  for (const line of CLI_HELP_LINES) log(line);
+function printHelp(session: CliSession): void {
+  for (const line of CLI_HELP_LINES) log(session, line);
 }
 
-function logConnectResult(result: ConnectPeerResult): void {
+function logConnectResult(
+  session: CliSession,
+  result: ConnectPeerResult,
+): void {
   switch (result.status) {
     case "connected":
-      log(`peer ${result.peer} connected`);
+      log(session, `peer ${result.peer} connected`);
       return;
     case "already-connected":
-      log(`peer ${result.peer} already connected`);
+      log(session, `peer ${result.peer} already connected`);
       return;
     case "dialing":
-      log(`peer ${result.peer} already dialing`);
+      log(session, `peer ${result.peer} already dialing`);
       return;
     case "saved":
       log(
+        session,
         `peer ${result.peer} saved for retry; connect failed: ${result.message}`,
       );
       return;
@@ -351,21 +375,21 @@ function logConnectResult(result: ConnectPeerResult): void {
 }
 
 async function handleConnectCommand(
-  node: GnutellaServent,
+  session: CliSession,
   args: string[],
 ): Promise<boolean> {
   if (args.length !== 2) throw new Error("usage: connect <host:port>");
-  logConnectResult(await node.connectToPeer(args[1]));
+  logConnectResult(session, await session.node.connectToPeer(args[1]));
   return true;
 }
 
 async function handleDownloadCommand(
-  node: GnutellaServent,
+  session: CliSession,
   args: string[],
 ): Promise<boolean> {
   if (args.length < 2)
     throw new Error("usage: download <resultNo> [destPath]");
-  await node.downloadResult(Number(args[1]), args[2]);
+  await session.node.downloadResult(Number(args[1]), args[2]);
   return true;
 }
 
@@ -374,29 +398,29 @@ function pingTtlFor(node: GnutellaServent, args: string[]): number {
 }
 
 async function handleBrowseCommand(
-  node: GnutellaServent,
+  session: CliSession,
   args: string[],
 ): Promise<boolean> {
   if (args.length !== 1) throw new Error("usage: browse");
-  node.sendQuery("    ", 1);
-  log("browse query sent");
+  session.node.sendQuery("    ", 1);
+  log(session, "browse query sent");
   return true;
 }
 
 async function handleInfoCommand(
-  node: GnutellaServent,
+  session: CliSession,
   args: string[],
 ): Promise<boolean> {
   if (args.length !== 2) throw new Error("usage: info <resultNo>");
   const resultNo = Number(args[1]);
   if (!Number.isInteger(resultNo) || resultNo < 1)
     throw new Error("usage: info <resultNo>");
-  printResultInfo(node, resultNo, log);
+  printResultInfo(session.node, resultNo, (msg) => log(session, msg));
   return true;
 }
 
 type CommandHandler = (
-  node: GnutellaServent,
+  session: CliSession,
   args: string[],
 ) => Promise<boolean>;
 
@@ -406,71 +430,71 @@ const COMMAND_ALIASES: Record<string, string> = {
 };
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
-  help: async () => {
-    printHelp();
+  help: async (session) => {
+    printHelp(session);
     return true;
   },
-  monitor: async (_node, args) => {
+  monitor: async (session, args) => {
     if (args.length !== 1) throw new Error("usage: monitor");
-    monitorEnabled = !monitorEnabled;
-    log(`monitor ${monitorEnabled ? "on" : "off"}`);
+    session.monitorEnabled = !session.monitorEnabled;
+    log(session, `monitor ${session.monitorEnabled ? "on" : "off"}`);
     return true;
   },
-  status: async (node) => {
-    printStatus(node, log);
+  status: async (session) => {
+    printStatus(session.node, (msg) => log(session, msg));
     return true;
   },
-  peers: async (node) => {
-    printPeers(node, log);
+  peers: async (session) => {
+    printPeers(session.node, (msg) => log(session, msg));
     return true;
   },
   connect: handleConnectCommand,
-  shares: async (node) => {
-    printShares(node, log);
+  shares: async (session) => {
+    printShares(session.node, (msg) => log(session, msg));
     return true;
   },
-  results: async (node) => {
-    printResults(node, log);
+  results: async (session) => {
+    printResults(session.node, (msg) => log(session, msg));
     return true;
   },
-  clear: async (node) => {
-    node.clearResults();
-    log("results cleared");
+  clear: async (session) => {
+    session.node.clearResults();
+    log(session, "results cleared");
     return true;
   },
-  ping: async (node, args) => {
-    node.sendPing(pingTtlFor(node, args));
+  ping: async (session, args) => {
+    session.node.sendPing(pingTtlFor(session.node, args));
     return true;
   },
-  query: async (node, args) => {
-    node.sendQuery(args.slice(1).join(" "));
+  query: async (session, args) => {
+    session.node.sendQuery(args.slice(1).join(" "));
     return true;
   },
   browse: handleBrowseCommand,
   info: handleInfoCommand,
   download: handleDownloadCommand,
-  rescan: async (node) => {
-    await node.refreshShares();
-    printStatus(node, log);
+  rescan: async (session) => {
+    await session.node.refreshShares();
+    printStatus(session.node, (msg) => log(session, msg));
     return true;
   },
-  save: async (node) => {
-    await node.save();
-    log("saved");
+  save: async (session) => {
+    await session.node.save();
+    log(session, "saved");
     return true;
   },
   sleep: async (_node, args) => {
     await sleep(Number(args[1] || 0) * 1000);
     return true;
   },
-  quit: async (node) => {
-    await node.stop();
+  quit: async (session) => {
+    await session.node.stop();
     return false;
   },
 };
 
 async function runCommand(
-  node: GnutellaServent,
+  session: CliSession,
   line: string,
 ): Promise<boolean> {
   const args = splitArgs(line.trim());
@@ -479,43 +503,41 @@ async function runCommand(
   const command = COMMAND_ALIASES[rawCommand] || rawCommand;
   const handler = COMMAND_HANDLERS[command];
   if (!handler) throw new Error(`unknown command: ${rawCommand}`);
-  return await handler(node, args);
+  return await handler(session, args);
 }
 
 function startRepl(
-  node: GnutellaServent,
+  session: CliSession,
   execCmds: string[],
 ): readline.Interface | null {
   runExecCommands(
     execCmds,
-    log,
+    (msg) => log(session, msg),
     sleep,
-    (cmd) => runCommand(node, cmd),
+    (cmd) => runCommand(session, cmd),
     errMsg,
   );
   if (!process.stdin.isTTY) return null;
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: promptText(node),
+    prompt: promptText(session),
   });
-  activeRl = rl;
-  activeNode = node;
+  session.rl = rl;
   rl.on("line", (line) => {
-    void runCommand(node, line)
+    void runCommand(session, line)
       .then((keep) => {
-        if (keep) redrawPrompt();
+        if (keep) redrawPrompt(session);
       })
       .catch((e) => {
-        log(errMsg(e));
+        log(session, errMsg(e));
       });
   });
   rl.on("close", () => {
-    if (activeRl === rl) activeRl = null;
-    if (activeNode === node) activeNode = null;
-    stopPromptThrobber();
+    if (session.rl === rl) session.rl = null;
+    stopPromptThrobber(session);
   });
-  redrawPrompt();
+  redrawPrompt(session);
   return rl;
 }
 
@@ -531,11 +553,10 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error(`unsupported command ${cli.command}`);
 
   const doc = await loadDoc(cli.config);
-  const node = new GnutellaServent(cli.config, doc, {
-    onEvent: handleNodeEvent,
-  });
-  monitorEnabled = false;
-  setMonitorIgnoreTokens(node.config().monitorIgnoreEvents);
+  const node = new GnutellaServent(cli.config, doc);
+  const session = createCliSession(node);
+  node.subscribe((event) => handleNodeEvent(session, event));
+  setMonitorIgnoreTokens(session, node.config().monitorIgnoreEvents);
 
   let shuttingDown = false;
   const shutdown = () => {
@@ -548,6 +569,6 @@ export async function main(argv = process.argv.slice(2)) {
   process.on("SIGTERM", shutdown);
 
   await node.start();
-  const rl = startRepl(node, cli.exec);
+  const rl = startRepl(session, cli.exec);
   rl?.on("close", shutdown);
 }

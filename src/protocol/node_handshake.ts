@@ -659,7 +659,7 @@ export async function connectPeer06(
     `timeoutMs=${timeoutMs}`,
   );
   await new Promise<void>((resolve, reject) => {
-    const socket = net.createConnection({ host, port });
+    const socket = node.createConnection({ host, port });
     socket.setNoDelay(true);
     let decided = false;
     let buf = Buffer.alloc(0);

@@ -1,3 +1,12 @@
+import type { NetConnectOpts, Server, Socket } from "node:net";
+
+import type {
+  ConnectBootstrapOptions,
+  ConnectBootstrapResult,
+  ReportSelfOptions,
+  ReportSelfResult,
+} from "./gwebcache/types";
+
 type EventBase<T extends string> = { type: T; at: string };
 
 export type CliNode = {
@@ -155,8 +164,8 @@ export type PendingPush = {
   result: SearchHit;
   destPath: string;
   createdAt: number;
-  resolve: (v: any) => void;
-  reject: (e: any) => void;
+  resolve: (value: unknown) => void;
+  reject: (error: unknown) => void;
 };
 
 export type DownloadRecord = {
@@ -198,7 +207,6 @@ export type RuntimeConfig = {
   nodeMode: NodeMode;
   dataDir: string;
   downloadsDir: string;
-  peers: string[];
   peerSeenThresholdSec: number;
   maxConnections: number;
   maxUltrapeerConnections: number;
@@ -360,7 +368,52 @@ export type GnutellaEvent =
     });
 
 export type GnutellaEventListener = (event: GnutellaEvent) => void;
-export type GnutellaServentOptions = { onEvent?: GnutellaEventListener };
+type NodeClock = {
+  now: () => number;
+};
+
+type NodeScheduler = {
+  setTimeout: (fn: () => void, ms: number) => NodeJS.Timeout;
+  clearTimeout: (timer: NodeJS.Timeout) => void;
+  setInterval: (fn: () => void, ms: number) => NodeJS.Timeout;
+  clearInterval: (timer: NodeJS.Timeout) => void;
+  sleep: (ms: number) => Promise<void>;
+};
+
+type NodeNetFactory = {
+  createConnection: (options: NetConnectOpts) => Socket;
+  createServer: (listener: (socket: Socket) => void) => Server;
+};
+
+type NodeBootstrapClient = {
+  connectBootstrapPeers: (
+    options: ConnectBootstrapOptions,
+  ) => Promise<ConnectBootstrapResult>;
+  reportSelfToGWebCaches: (
+    options: ReportSelfOptions,
+  ) => Promise<ReportSelfResult>;
+};
+
+export type GnutellaServentCollaborators = {
+  clock: NodeClock;
+  scheduler: NodeScheduler;
+  netFactory: NodeNetFactory;
+  bootstrapClient: NodeBootstrapClient;
+};
+
+export type GnutellaServentCollaboratorOverrides = {
+  clock?: Partial<NodeClock>;
+  scheduler?: Partial<NodeScheduler>;
+  netFactory?: Partial<NodeNetFactory>;
+  bootstrapClient?: Partial<NodeBootstrapClient>;
+};
+
+export type GnutellaServentOptions = {
+  onEvent?: GnutellaEventListener;
+  runtimeConfig?: Partial<RuntimeConfig>;
+  collaborators?: GnutellaServentCollaboratorOverrides;
+};
+
 export type ConnectPeerResult = {
   peer: string;
   status: "connected" | "already-connected" | "dialing" | "saved";

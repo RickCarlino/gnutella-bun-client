@@ -6,7 +6,7 @@ export function ts(): string {
   return new Date().toISOString();
 }
 
-export function errMsg(e: any): string {
+export function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 

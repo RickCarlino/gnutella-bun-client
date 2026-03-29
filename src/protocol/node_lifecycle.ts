@@ -1,12 +1,9 @@
-import net from "node:net";
-
 import {
   BOOTSTRAP_CONNECT_CONCURRENCY,
   BOOTSTRAP_CONNECT_TIMEOUT_DIVISOR,
   BYE_DEFAULT_CODE,
 } from "../const";
-import { connectBootstrapPeers } from "../gwebcache_client";
-import { normalizePeer, parsePeer, sleep, ts } from "../shared";
+import { normalizePeer, parsePeer, ts } from "../shared";
 import type { GnutellaServent } from "./node";
 import type { Peer } from "./node_types";
 import type { MaintenanceOperation } from "./node_state";
@@ -64,8 +61,10 @@ export async function start(node: GnutellaServent): Promise<void> {
 }
 
 function clearTimers(node: GnutellaServent): void {
-  for (const t of node.timers) clearInterval(t);
-  for (const t of node.timeouts) clearTimeout(t);
+  for (const t of node.timers)
+    node.collaborators.scheduler.clearInterval(t);
+  for (const t of node.timeouts)
+    node.collaborators.scheduler.clearTimeout(t);
   node.gwebCacheReportTimer = undefined;
 }
 
@@ -102,7 +101,7 @@ async function waitForByeAcks(node: GnutellaServent): Promise<void> {
   if (!closingPeers.length) return;
   await Promise.race([
     Promise.allSettled(closingPeers.map((peer) => waitForPeerClose(peer))),
-    sleep(2000),
+    node.sleep(2000),
   ]);
 }
 
@@ -127,7 +126,7 @@ export async function stop(node: GnutellaServent): Promise<void> {
 
 export async function startServer(node: GnutellaServent): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const server = net.createServer((socket) => node.handleProbe(socket));
+    const server = node.createServer((socket) => node.handleProbe(socket));
     server.on("error", reject);
     server.listen(
       node.config().listenPort,
@@ -149,12 +148,12 @@ export async function connectKnownPeers(
     node.gwebCacheBootstrapState.lastExhaustedPeerSet = undefined;
   }
   const c = node.config();
-  const peers = bootstrapFreshPeers ? [] : c.peers;
+  const peers = bootstrapFreshPeers ? [] : node.getKnownPeers();
   const bootstrapTimeoutMs = Math.max(
     1,
     Math.floor(c.connectTimeoutMs / BOOTSTRAP_CONNECT_TIMEOUT_DIVISOR),
   );
-  await connectBootstrapPeers({
+  await node.connectBootstrapPeers({
     peers,
     client: c.vendorCode,
     version: c.userAgent,

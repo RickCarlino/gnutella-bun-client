@@ -41,7 +41,7 @@ describe("protocol node", () => {
         fileName: string;
         destPath: string;
       } | null = null;
-      (node as any).downloadOverSocket = async (
+      node.downloadOverSocket = async (
         _socket: net.Socket,
         fileIndex: number,
         fileName: string,
@@ -78,45 +78,46 @@ describe("protocol node", () => {
 
   test("allows any follow-up GET on a push callback socket", async () => {
     await withTempDir(async (dir) => {
-      const node = makeNode(path.join(dir, "protocol.json"));
+      const socket = new MockSocket("5.6.7.8", 7654);
+      const node = makeNode(path.join(dir, "protocol.json"), {
+        collaborators: {
+          netFactory: {
+            createConnection: () => socket as unknown as net.Socket,
+          },
+        },
+      });
       const share = makeShare(1, path.join(dir, "alpha.txt"), "alpha.txt");
       node.shares = [share];
       node.sharesByIndex = new Map([[share.index, share]]);
 
-      const socket = new MockSocket("5.6.7.8", 7654);
       let headSeen = "";
       let existingCalled = false;
-      (node as any).handleIncomingGet = async (
+      node.handleIncomingGet = async (
         _socket: net.Socket,
         head: string,
       ) => {
         headSeen = head;
+        return false;
       };
-      (node as any).handleExistingGet = async () => {
+      node.handleExistingGet = async () => {
         existingCalled = true;
+        return false;
       };
 
-      const originalCreateConnection = net.createConnection;
-      (net as any).createConnection = () =>
-        socket as unknown as net.Socket;
-      try {
-        await node.fulfillPush({
-          serventId: Buffer.from(node.serventId),
-          serventIdHex: node.serventId.toString("hex"),
-          fileIndex: 1,
-          ip: "5.6.7.8",
-          port: 7654,
-          ggep: Buffer.alloc(0),
-        });
-        socket.emit("connect");
-        socket.emit(
-          "data",
-          Buffer.from("GET /get/2/other.bin HTTP/1.0\r\n\r\n", "latin1"),
-        );
-        await Promise.resolve();
-      } finally {
-        (net as any).createConnection = originalCreateConnection;
-      }
+      await node.fulfillPush({
+        serventId: Buffer.from(node.serventId),
+        serventIdHex: node.serventId.toString("hex"),
+        fileIndex: 1,
+        ip: "5.6.7.8",
+        port: 7654,
+        ggep: Buffer.alloc(0),
+      });
+      socket.emit("connect");
+      socket.emit(
+        "data",
+        Buffer.from("GET /get/2/other.bin HTTP/1.0\r\n\r\n", "latin1"),
+      );
+      await Promise.resolve();
 
       expect(socket.writes[0]?.toString("latin1")).toContain(
         `GIV 1:${node.serventId.toString("hex")}/alpha.txt`,
@@ -139,7 +140,7 @@ describe("protocol node", () => {
 
       await fs.mkdir(path.dirname(destPath), { recursive: true });
       await fs.writeFile(destPath, "hello", "utf8");
-      (node as any).readHttpDownload = async (
+      node.readHttpDownload = async (
         _socket: net.Socket,
         passedDestPath: string,
         label: string,
@@ -271,7 +272,7 @@ describe("protocol node", () => {
 
       await fs.mkdir(path.dirname(destPath), { recursive: true });
       await fs.writeFile(destPath, "hello", "utf8");
-      (node as any).directDownloadViaRequest = async (
+      node.directDownloadViaRequest = async (
         _host: string,
         _port: number,
         request: string,
@@ -321,7 +322,7 @@ describe("protocol node", () => {
       const fallbackPath = path.join(dir, "custom", "push.bin");
 
       node.lastResults = [hit as never];
-      (node as any).directDownload = async () => ({ ok: true });
+      node.directDownload = async () => ({ ok: true });
 
       await node.downloadResult(7);
       expect(node.getDownloads()).toHaveLength(1);
@@ -339,13 +340,10 @@ describe("protocol node", () => {
 
       events.length = 0;
       node.downloads = [];
-      (node as any).directDownload = async () => {
+      node.directDownload = async () => {
         throw new Error("direct failed");
       };
-      (node as any).sendPush = async (
-        _hit: unknown,
-        destPath: string,
-      ) => ({
+      node.sendPush = async (_hit: unknown, destPath: string) => ({
         destPath,
       });
 
@@ -390,10 +388,7 @@ describe("protocol node", () => {
       await fs.mkdir(path.dirname(occupiedPath), { recursive: true });
       await fs.writeFile(occupiedPath, "existing", "utf8");
       node.lastResults = [hit as never];
-      (node as any).directDownload = async (
-        _hit: unknown,
-        destPath: string,
-      ) => {
+      node.directDownload = async (_hit: unknown, destPath: string) => {
         seenDestPath = destPath;
         return { ok: true };
       };
@@ -430,7 +425,7 @@ describe("protocol node", () => {
         urns: string[];
       } | null = null;
 
-      (node as any).sendToPeer = (
+      node.sendToPeer = (
         _peer: unknown,
         payloadType: number,
         _descriptorId: Buffer,
@@ -448,7 +443,7 @@ describe("protocol node", () => {
         maxHits: number;
         urns: string[];
       }> = [];
-      (node as any).broadcastQuery = (
+      node.broadcastQuery = (
         _descriptorId: Buffer,
         ttl: number,
         _hops: number,

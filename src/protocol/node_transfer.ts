@@ -353,7 +353,7 @@ export async function directDownloadViaRequest(
   destPath: string,
   existing: number,
 ): Promise<unknown> {
-  const socket = net.createConnection({ host, port });
+  const socket = node.createConnection({ host, port });
   socket.setNoDelay(true);
   socket.setTimeout(node.config().downloadTimeoutMs, () =>
     socket.destroy(new Error("download timeout")),
@@ -586,7 +586,7 @@ export async function sendPush(
       serventIdHex: hit.serventIdHex,
       result: hit,
       destPath,
-      createdAt: Date.now(),
+      createdAt: node.now(),
       resolve,
       reject,
     });

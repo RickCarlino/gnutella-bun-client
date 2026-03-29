@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import net from "node:net";
+import type net from "node:net";
 import zlib from "node:zlib";
 
 import {
@@ -9,7 +9,7 @@ import {
   TYPE,
   TYPE_NAME,
 } from "../const";
-import { errMsg, sleep, toBuffer, ts } from "../shared";
+import { errMsg, toBuffer, ts } from "../shared";
 import type {
   PendingPush,
   PeerRole,
@@ -66,7 +66,7 @@ export function attachPeer(
   initialBuf: Buffer = Buffer.alloc(0),
   dialTarget?: string,
 ): Peer {
-  const connectedAt = Date.now();
+  const connectedAt = node.now();
   const key = `peer-${++node.peerSeq}`;
   const peer: Peer = {
     key,
@@ -158,15 +158,15 @@ export function attachPeer(
     at: ts(),
     peer: node.peerInfo(peer),
   });
-  setTimeout(() => node.sendPing(1), 300);
+  node.scheduleOnce(300, () => node.sendPing(1));
   if (
     node.config().enableQrp &&
     (capabilities.queryRoutingVersion ||
       capabilities.ultrapeerQueryRoutingVersion)
   ) {
-    setTimeout(
-      () => void node.sendQrpTable(peer).catch(() => void 0),
+    node.scheduleOnce(
       500,
+      () => void node.sendQrpTable(peer).catch(() => void 0),
     );
   }
   return peer;
@@ -489,7 +489,7 @@ export function cachePongPayload(
   const digest = crypto.createHash("sha1").update(payload).digest("hex");
   node.pongCache.set(digest, {
     payload: Buffer.from(payload),
-    at: Date.now(),
+    at: node.now(),
   });
   if (node.pongCache.size <= 64) return;
   const oldest = [...node.pongCache.entries()]
@@ -523,12 +523,12 @@ export function onPingDescriptor(
 ): void {
   node.pingRoutes.set(hdr.descriptorIdHex, {
     peerKey: peer.key,
-    ts: Date.now(),
+    ts: node.now(),
   });
   node.respondPong(peer, hdr);
   if (!node.shouldRelayPings()) return;
-  if (hdr.ttl <= 1 || Date.now() - peer.lastPingAt < 1000) return;
-  peer.lastPingAt = Date.now();
+  if (hdr.ttl <= 1 || node.now() - peer.lastPingAt < 1000) return;
+  peer.lastPingAt = node.now();
   broadcastPingToPeers(
     node,
     hdr.descriptorId,
@@ -563,7 +563,7 @@ export function onQueryDescriptor(
   if (node.shouldIgnoreQuery(hdr, q)) return;
   node.queryRoutes.set(hdr.descriptorIdHex, {
     peerKey: peer.key,
-    ts: Date.now(),
+    ts: node.now(),
   });
   node.respondQueryHit(peer, hdr, q);
   if (!node.shouldRelayQueries()) return;
@@ -675,7 +675,7 @@ export async function sendQrpTable(
       0,
       patch,
     );
-    await sleep(5);
+    await node.sleep(5);
   }
 }
 
@@ -814,7 +814,7 @@ export function onQueryHit(
   const qh = parseQueryHit(payload);
   node.pushRoutes.set(qh.serventIdHex, {
     peerKey: peer.key,
-    ts: Date.now(),
+    ts: node.now(),
   });
   const route = node.queryRoutes.get(hdr.descriptorIdHex);
   if (!route) return;
@@ -908,7 +908,7 @@ export async function fulfillPush(
     ip: push.ip,
     port: push.port,
   });
-  const socket = net.createConnection({ host: push.ip, port: push.port });
+  const socket = node.createConnection({ host: push.ip, port: push.port });
   socket.setNoDelay(true);
   socket.setTimeout(node.config().downloadTimeoutMs, () =>
     socket.destroy(new Error("push connect timeout")),

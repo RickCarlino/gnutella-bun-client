@@ -85,7 +85,6 @@ describe("protocol node", () => {
   test("connectKnownPeers prioritizes the most recently stable peers", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
-      node.doc.config.ultrapeer = true;
       const nowSec = Math.floor(Date.now() / 1000);
       node.doc.state.peers = peerState([
         ["9.9.9.9:9999", nowSec],
@@ -94,6 +93,8 @@ describe("protocol node", () => {
         ["2.2.2.2:2222", 0],
       ]);
       overrideRuntimeConfig(node, {
+        ultrapeer: true,
+        nodeMode: "ultrapeer",
         maxConnections: 2,
         connectTimeoutMs: 5000,
       });
@@ -101,7 +102,7 @@ describe("protocol node", () => {
       const started: string[] = [];
       const releases: Array<() => void> = [];
 
-      (node as any).connectPeer = async (host: string, port: number) => {
+      node.connectPeer = async (host: string, port: number) => {
         const target = `${host}:${port}`;
         started.push(target);
         node.dialing.add(target);
@@ -155,7 +156,6 @@ describe("protocol node", () => {
   test("connectKnownPeers bootstraps multiple peer dials in parallel", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
-      node.doc.config.ultrapeer = true;
       const nowSec = Math.floor(Date.now() / 1000);
       node.doc.state.peers = peerState([
         ["1.1.1.1:1111", nowSec],
@@ -165,6 +165,8 @@ describe("protocol node", () => {
         ["5.5.5.5:5555", nowSec - 4],
       ]);
       overrideRuntimeConfig(node, {
+        ultrapeer: true,
+        nodeMode: "ultrapeer",
         maxConnections: 3,
         connectTimeoutMs: 5000,
       });
@@ -176,10 +178,10 @@ describe("protocol node", () => {
       let inFlight = 0;
       let maxInFlight = 0;
 
-      (node as any).connectPeer = async (
+      node.connectPeer = async (
         host: string,
         port: number,
-        timeoutMs: number,
+        timeoutMs = 0,
       ) => {
         const target = `${host}:${port}`;
         started.push(target);
@@ -254,10 +256,10 @@ describe("protocol node", () => {
           return new Response("I|pong|ModernCache 2.0|gnutella\n");
         }) as typeof fetch;
 
-        (node as any).connectPeer = async (
+        node.connectPeer = async (
           host: string,
           port: number,
-          timeoutMs: number,
+          timeoutMs = 0,
         ) => {
           dialed.push(`${host}:${port}:${timeoutMs}`);
           throw new Error("offline");
@@ -301,7 +303,7 @@ describe("protocol node", () => {
           return new Response("I|pong|ModernCache 2.0|gnutella\n");
         }) as typeof fetch;
 
-        (node as any).connectPeer = async () => {
+        node.connectPeer = async () => {
           throw new Error("offline");
         };
 
@@ -319,24 +321,26 @@ describe("protocol node", () => {
 
   test("refreshGWebCacheReport waits five minutes of connectivity and cancels when peers drop to zero", async () => {
     await withTempDir(async (dir) => {
-      const node = makeNode(path.join(dir, "protocol.json"));
       const scheduled: Array<{
         ms: number;
         fn: () => void;
         timer: NodeJS.Timeout;
       }> = [];
       const canceled: NodeJS.Timeout[] = [];
-
-      (node as any).scheduleOnce = (ms: number, fn: () => void) => {
-        const timer = {} as NodeJS.Timeout;
-        scheduled.push({ ms, fn, timer });
-        return timer;
-      };
-      (node as any).cancelTimeout = (
-        timer: NodeJS.Timeout | undefined,
-      ) => {
-        if (timer) canceled.push(timer);
-      };
+      const node = makeNode(path.join(dir, "protocol.json"), {
+        collaborators: {
+          scheduler: {
+            setTimeout: (fn: () => void, ms: number) => {
+              const timer = {} as NodeJS.Timeout;
+              scheduled.push({ ms, fn, timer });
+              return timer;
+            },
+            clearTimeout: (timer: NodeJS.Timeout) => {
+              canceled.push(timer);
+            },
+          },
+        },
+      });
 
       node.peers.set("peer-1", makePeer("6.6.6.6:6346"));
       node.refreshGWebCacheReport();
@@ -355,14 +359,32 @@ describe("protocol node", () => {
 
   test("gwebcache self-report only gets one session attempt", async () => {
     await withTempDir(async (dir) => {
-      const node = makeNode(path.join(dir, "protocol.json"));
       const scheduled: Array<{ ms: number; fn: () => void }> = [];
-
-      (node as any).scheduleOnce = (ms: number, fn: () => void) => {
-        scheduled.push({ ms, fn });
-        return {} as NodeJS.Timeout;
-      };
-      (node as any).announceSelfToGWebCaches = async () => {};
+      const reportedIps: string[] = [];
+      const node = makeNode(path.join(dir, "protocol.json"), {
+        runtimeConfig: {
+          advertisedHost: "66.132.55.12",
+          advertisedPort: 6346,
+        },
+        collaborators: {
+          scheduler: {
+            setTimeout: (fn: () => void, ms: number) => {
+              scheduled.push({ ms, fn });
+              return {} as NodeJS.Timeout;
+            },
+          },
+          bootstrapClient: {
+            reportSelfToGWebCaches: async ({ ip }) => {
+              reportedIps.push(ip);
+              return {
+                attemptedCaches: [],
+                reportedCaches: [],
+                errors: [],
+              };
+            },
+          },
+        },
+      });
 
       node.peers.set("peer-1", makePeer("6.6.6.6:6346"));
       node.refreshGWebCacheReport();
@@ -375,6 +397,7 @@ describe("protocol node", () => {
       node.refreshGWebCacheReport();
 
       expect(node.gwebCacheReportAttempted).toBe(true);
+      expect(reportedIps).toEqual(["66.132.55.12:6346"]);
       expect(scheduled).toHaveLength(1);
     });
   });

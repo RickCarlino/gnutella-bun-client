@@ -15,7 +15,6 @@ cd "$REPO_ROOT"
 
 run_step "Type checker" bun run typecheck
 run_step "jscpd" bun run dupcheck
-run_step "Prettier write" bun run format:write
 run_step "ESLint" bun run lint
 run_step "ts-unused-exports" bun run unused-exports
 run_step "Unit tests" bun run test:unit

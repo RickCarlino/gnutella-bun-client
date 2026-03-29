@@ -20,7 +20,6 @@ import {
   unique,
   walkFiles,
 } from "../shared";
-import { reportSelfToGWebCaches } from "../gwebcache_client";
 import type {
   ConnectPeerResult,
   DownloadRecord,
@@ -37,11 +36,11 @@ import type {
 import { observedAdvertisedHostCandidate } from "./handshake";
 import {
   appendPathSuffix,
+  configDocForRuntime,
   detectLocalAdvertisedIpv4,
   peerStateEquals,
   peerStateTargets,
   rememberPeerInState,
-  runtimeConfigFor,
   sortPeerStateEntries,
   trimPeerState,
   writeDoc,
@@ -90,7 +89,7 @@ export function schedule(
   ms: number,
   fn: () => void,
 ): void {
-  node.timers.push(setInterval(fn, ms));
+  node.timers.push(node.collaborators.scheduler.setInterval(fn, ms));
 }
 
 export function scheduleOnce(
@@ -98,7 +97,7 @@ export function scheduleOnce(
   ms: number,
   fn: () => void,
 ): NodeJS.Timeout {
-  const timer = setTimeout(() => {
+  const timer = node.collaborators.scheduler.setTimeout(() => {
     node.timeouts = node.timeouts.filter(
       (candidate) => candidate !== timer,
     );
@@ -113,7 +112,7 @@ export function cancelTimeout(
   timer: NodeJS.Timeout | undefined,
 ): void {
   if (!timer) return;
-  clearTimeout(timer);
+  node.collaborators.scheduler.clearTimeout(timer);
   node.timeouts = node.timeouts.filter((candidate) => candidate !== timer);
 }
 
@@ -137,7 +136,7 @@ export function peerCount(node: GnutellaServent): number {
 }
 
 export function config(node: GnutellaServent): RuntimeConfig {
-  return runtimeConfigFor(node.configPath, node.doc);
+  return node.runtimeConfig;
 }
 
 export function configuredAdvertisedHost(
@@ -234,8 +233,10 @@ export async function save(node: GnutellaServent): Promise<void> {
   const c = node.config();
   for (const peer of node.peers.values()) node.markPeerSeenIfStable(peer);
   node.pruneExpiredKnownPeers();
-  node.doc.state.peers = trimPeerState(node.doc.state.peers);
-  node.doc.state.serventIdHex = node.serventId.toString("hex");
+  node.persistedState.peers = trimPeerState(node.persistedState.peers);
+  node.persistedState.serventIdHex = node.serventId.toString("hex");
+  node.doc.config = configDocForRuntime(node.runtimeConfig);
+  node.doc.state = node.persistedState;
   await ensureDir(path.dirname(node.configPath));
   await ensureDir(c.downloadsDir);
   await writeDoc(node.configPath, node.doc);
@@ -297,8 +298,8 @@ function rememberKnownPeer(
   timestamp: number,
 ): void {
   if (!host || !port || node.isSelfPeer(host, port)) return;
-  node.doc.state.peers = rememberPeerInState(
-    node.doc.state.peers,
+  node.persistedState.peers = rememberPeerInState(
+    node.persistedState.peers,
     normalizePeer(host, port),
     timestamp,
   );
@@ -327,8 +328,8 @@ export function updateKnownPeerLastSeen(
 }
 
 export function peerSeenTimestamp(
-  _node: GnutellaServent,
-  nowMs = Date.now(),
+  node: GnutellaServent,
+  nowMs = node.now(),
 ): number {
   return Math.max(0, Math.floor(nowMs / 1000));
 }
@@ -338,7 +339,7 @@ export function pruneExpiredKnownPeers(
   nowSec?: number,
 ): boolean {
   const timestamp = nowSec ?? node.peerSeenTimestamp();
-  const current = trimPeerState(node.doc.state.peers);
+  const current = trimPeerState(node.persistedState.peers);
   const filtered = Object.fromEntries(
     sortPeerStateEntries(current).filter(
       ([, lastSeen]) =>
@@ -346,13 +347,13 @@ export function pruneExpiredKnownPeers(
     ),
   ) as PeerState;
   if (peerStateEquals(current, filtered)) return false;
-  node.doc.state.peers = filtered;
+  node.persistedState.peers = filtered;
   node.gwebCacheBootstrapState.lastExhaustedPeerSet = undefined;
   return true;
 }
 
 export function shouldBootstrapFreshPeers(node: GnutellaServent): boolean {
-  const peers = trimPeerState(node.doc.state.peers);
+  const peers = trimPeerState(node.persistedState.peers);
   const timestamps = Object.values(peers);
   return timestamps.length > 0 && timestamps.every((value) => value === 0);
 }
@@ -383,7 +384,7 @@ export function rememberPeerAddresses(
 export function markPeerSeenIfStable(
   node: GnutellaServent,
   peer: Peer,
-  nowMs = Date.now(),
+  nowMs = node.now(),
 ): void {
   if (nowMs - peer.connectedAt < node.config().peerSeenThresholdSec * 1000)
     return;
@@ -429,7 +430,7 @@ export async function announceSelfToGWebCaches(
   const port = node.currentAdvertisedPort();
   if (!host || !isRoutableIpv4(host) || !port) return;
 
-  const result = await reportSelfToGWebCaches({
+  const result = await node.reportSelfToGWebCaches({
     client: node.config().vendorCode,
     version: node.config().userAgent,
     ip: normalizePeer(host, port),
@@ -491,7 +492,7 @@ export function markSeen(
 ): void {
   node.seen.set(
     seenKey(payloadType, descriptorIdHex, payload),
-    Date.now(),
+    node.now(),
   );
 }
 
@@ -563,7 +564,7 @@ export function prunePongCache(
 }
 
 export function pruneMaps(node: GnutellaServent): void {
-  const now = Date.now();
+  const now = node.now();
   const seenAge = node.config().seenTtlSec * 1000;
   const routeAge = node.config().routeTtlSec * 1000;
   node.pruneSeenEntries(now, seenAge);
@@ -594,7 +595,7 @@ export function clearResults(node: GnutellaServent): void {
 }
 
 export function getKnownPeers(node: GnutellaServent): string[] {
-  return peerStateTargets(node.doc.state.peers);
+  return peerStateTargets(node.persistedState.peers);
 }
 
 export function getDownloads(node: GnutellaServent): DownloadRecord[] {

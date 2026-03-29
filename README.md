@@ -337,6 +337,21 @@ node.sendQuery("hello world");
 
 For developers who want deeper protocol access, `src/protocol.ts` also exposes the packet encoders, decoders, and request builders used by the CLI and runtime.
 
+## Internal Module Notes
+
+- `src/protocol/node.ts` keeps the public `GnutellaServent` facade thin and binds the focused runtime modules.
+- `src/protocol/node_state.ts` owns runtime config, persisted peer state, timers, share refreshes, and save/load-adjacent bookkeeping.
+- `src/protocol/node_protocol_runtime.ts` owns live peer attachment, descriptor routing, pong/query route caches, and Query Routing Protocol exchange.
+- `src/protocol/node_transfer.ts` owns `/get`, `uri-res`, resumable downloads, push callbacks, and download bookkeeping.
+- `src/protocol/node_handshake.ts` and `src/protocol/node_tls.ts` own handshake negotiation and optional TLS upgrades.
+- `src/gwebcache/bootstrap.ts` handles cache discovery and self-report orchestration, while `src/gwebcache/response.ts` handles cache-response parsing.
+- `src/protocol.ts` and `src/gwebcache_client.ts` should stay facades unless new feature work creates a clearer boundary.
+
+## Developer Checks
+
+- `bun run verify` is read-only. It runs type checking, duplication checks, linting, unused-export checks, unit tests, integration tests, Prettier checks, and the multi-target build.
+- `bun run fix` runs the safe formatter pass.
+
 ## Using It as a Client
 
 This is a good fit if you want:

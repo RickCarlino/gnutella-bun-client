@@ -9,7 +9,11 @@ import {
   defaultDoc,
   type Peer,
 } from "../../../../src/protocol";
-import type { RuntimeConfig, ShareFile } from "../../../../src/types";
+import type {
+  GnutellaServentCollaboratorOverrides,
+  RuntimeConfig,
+  ShareFile,
+} from "../../../../src/types";
 
 export async function withTempDir<T>(
   fn: (dir: string) => Promise<T>,
@@ -110,21 +114,23 @@ export function makeShare(
   };
 }
 
-export function makeNode(configPath: string): GnutellaServent {
+export function makeNode(
+  configPath: string,
+  options: {
+    runtimeConfig?: Partial<RuntimeConfig>;
+    collaborators?: GnutellaServentCollaboratorOverrides;
+  } = {},
+): GnutellaServent {
   const doc = defaultDoc(configPath);
   doc.config.dataDir = path.dirname(configPath);
-  return new GnutellaServent(configPath, doc);
+  return new GnutellaServent(configPath, doc, options);
 }
 
 export function overrideRuntimeConfig(
   node: GnutellaServent,
   patch: Partial<RuntimeConfig>,
 ): void {
-  const original = node.config.bind(node);
-  (node as unknown as { config: () => RuntimeConfig }).config = () => ({
-    ...original(),
-    ...patch,
-  });
+  node.updateRuntimeConfig(patch);
 }
 
 export function peerState(

@@ -24,6 +24,7 @@
     "test:unit": "bun test tests/unit",
     "typecheck": "tsc --noEmit",
     "unused-exports": "ts-unused-exports tsconfig.json --exitWithCount",
+    "fix": "./scripts/fix-all.sh",
     "verify": "./scripts/verify-all.sh"
   }
 }

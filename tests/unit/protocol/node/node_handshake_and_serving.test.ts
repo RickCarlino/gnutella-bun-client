@@ -48,7 +48,10 @@ describe("protocol node", () => {
   test("normalizes query TTL plus hops and drops excessive query TTL values", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
-      node.doc.config.ultrapeer = true;
+      overrideRuntimeConfig(node, {
+        ultrapeer: true,
+        nodeMode: "ultrapeer",
+      });
       const peer = makePeer("source-peer");
       const other = makePeer("other-peer");
       other.role = "ultrapeer";
@@ -59,7 +62,7 @@ describe("protocol node", () => {
         descriptorId: string;
       } | null = null;
       let responded = false;
-      (node as any).sendToPeer = (
+      node.sendToPeer = (
         target: { key: string },
         payloadType: number,
         descriptorId: Buffer,
@@ -74,7 +77,7 @@ describe("protocol node", () => {
           descriptorId: descriptorId.toString("hex"),
         };
       };
-      (node as any).respondQueryHit = () => {
+      node.respondQueryHit = () => {
         responded = true;
       };
 
@@ -125,7 +128,7 @@ describe("protocol node", () => {
         );
         const peer = makePeer();
         const sent: Array<{ payloadType: number; payload: Buffer }> = [];
-        (node as any).sendToPeer = (
+        node.sendToPeer = (
           _peer: unknown,
           payloadType: number,
           _descriptorId: Buffer,
@@ -135,7 +138,7 @@ describe("protocol node", () => {
         ) => {
           sent.push({ payloadType, payload });
         };
-        (node as any).broadcastQuery = () => {};
+        node.broadcastQuery = () => {};
 
         node.handleDescriptor(
           peer as never,
@@ -175,11 +178,12 @@ describe("protocol node", () => {
       node.sharesByIndex = new Map([[share.index, share]]);
       const socket = new MockSocket();
       const heads: string[] = [];
-      (node as any).handleExistingGet = async (
+      node.handleExistingGet = async (
         _socket: net.Socket,
         head: string,
       ) => {
         heads.push(head);
+        return false;
       };
 
       await node.handleIncomingGet(
@@ -241,11 +245,9 @@ describe("protocol node", () => {
       expect(node.getShares()[2]?.keywords).toEqual(
         expect.arrayContaining(["nested", "second", "file", "bin"]),
       );
-      expect((node as any).qrpTable.matchesQuery("cafe lait")).toBe(true);
-      expect((node as any).qrpTable.matchesQuery("cat track")).toBe(true);
-      expect((node as any).qrpTable.matchesQuery("missing-token")).toBe(
-        false,
-      );
+      expect(node.qrpTable.matchesQuery("cafe lait")).toBe(true);
+      expect(node.qrpTable.matchesQuery("cat track")).toBe(true);
+      expect(node.qrpTable.matchesQuery("missing-token")).toBe(false);
       expect(node.totalSharedKBytes()).toBe(1);
     });
   });
@@ -254,8 +256,10 @@ describe("protocol node", () => {
     await withTempDir(async (dir) => {
       await withMockNetworkInterfaces(async () => {
         const node = makeNode(path.join(dir, "protocol.json"));
-        node.doc.config.advertisedHost = "7.7.7.7";
-        node.doc.config.advertisedPort = 7777;
+        overrideRuntimeConfig(node, {
+          advertisedHost: "7.7.7.7",
+          advertisedPort: 7777,
+        });
         node.doc.state.peers = peerState([
           ["7.7.7.7:7777", 0],
           ["1.1.1.1:1234", 0],
@@ -398,40 +402,43 @@ describe("protocol node", () => {
 
   test("updates ultrapeer handshake headers as mesh and leaf slots fill", async () => {
     await withTempDir(async (dir) => {
-      const node = makeNode(path.join(dir, "protocol.json"));
-      node.doc.config.ultrapeer = true;
-      overrideRuntimeConfig(node, {
-        maxConnections: 1,
-        maxLeafConnections: 1,
+      await withMockNetworkInterfaces(async () => {
+        const node = makeNode(path.join(dir, "protocol.json"));
+        overrideRuntimeConfig(node, {
+          ultrapeer: true,
+          nodeMode: "ultrapeer",
+          maxConnections: 1,
+          maxLeafConnections: 1,
+        });
+
+        expect(node.baseHandshakeHeaders()).toMatchObject({
+          "x-ultrapeer": "True",
+          "x-ultrapeer-needed": "True",
+          "x-ultrapeer-query-routing": "0.1",
+        });
+
+        const meshPeer = makePeer("11.11.11.11:1111");
+        meshPeer.role = "ultrapeer";
+        meshPeer.capabilities.isUltrapeer = true;
+        node.peers.set(meshPeer.key, meshPeer);
+
+        expect(node.baseHandshakeHeaders()).toMatchObject({
+          "x-ultrapeer": "True",
+          "x-ultrapeer-needed": "False",
+          "x-ultrapeer-query-routing": "0.1",
+        });
+
+        const leafPeer = makePeer("12.12.12.12:1212");
+        node.peers.set(leafPeer.key, leafPeer);
+
+        expect(node.baseHandshakeHeaders()).toMatchObject({
+          "x-ultrapeer": "True",
+          "x-ultrapeer-query-routing": "0.1",
+        });
+        expect(
+          node.baseHandshakeHeaders()["x-ultrapeer-needed"],
+        ).toBeUndefined();
       });
-
-      expect(node.baseHandshakeHeaders()).toMatchObject({
-        "x-ultrapeer": "True",
-        "x-ultrapeer-needed": "True",
-        "x-ultrapeer-query-routing": "0.1",
-      });
-
-      const meshPeer = makePeer("11.11.11.11:1111");
-      meshPeer.role = "ultrapeer";
-      meshPeer.capabilities.isUltrapeer = true;
-      node.peers.set(meshPeer.key, meshPeer);
-
-      expect(node.baseHandshakeHeaders()).toMatchObject({
-        "x-ultrapeer": "True",
-        "x-ultrapeer-needed": "False",
-        "x-ultrapeer-query-routing": "0.1",
-      });
-
-      const leafPeer = makePeer("12.12.12.12:1212");
-      node.peers.set(leafPeer.key, leafPeer);
-
-      expect(node.baseHandshakeHeaders()).toMatchObject({
-        "x-ultrapeer": "True",
-        "x-ultrapeer-query-routing": "0.1",
-      });
-      expect(
-        node.baseHandshakeHeaders()["x-ultrapeer-needed"],
-      ).toBeUndefined();
     });
   });
 
@@ -439,57 +446,55 @@ describe("protocol node", () => {
     await withTempDir(async (dir) => {
       await withMockNetworkInterfaces(async () => {
         const node = makeNode(path.join(dir, "protocol.json"));
-        delete node.doc.config.advertisedHost;
+        overrideRuntimeConfig(node, { advertisedHost: undefined });
 
-        (node as any).absorbHandshakeHeaders(
+        node.absorbHandshakeHeaders(
           { "remote-ip": "44.55.66.77" },
           "10.0.0.2",
         );
-        expect((node as any).learnedAdvertisedHost).toBeUndefined();
+        expect(node.learnedAdvertisedHost).toBeUndefined();
 
-        (node as any).absorbHandshakeHeaders(
+        node.absorbHandshakeHeaders(
           { "remote-ip": "44.55.66.77" },
           "23.1.2.3",
         );
-        (node as any).absorbHandshakeHeaders(
+        node.absorbHandshakeHeaders(
           { "remote-ip": "44.55.66.77" },
           "23.1.9.9",
         );
-        expect((node as any).learnedAdvertisedHost).toBeUndefined();
+        expect(node.learnedAdvertisedHost).toBeUndefined();
 
-        (node as any).absorbHandshakeHeaders(
+        node.absorbHandshakeHeaders(
           { "remote-ip": "44.55.66.77" },
           "24.2.3.4",
         );
-        expect((node as any).learnedAdvertisedHost).toBeUndefined();
+        expect(node.learnedAdvertisedHost).toBeUndefined();
 
-        (node as any).absorbHandshakeHeaders(
+        node.absorbHandshakeHeaders(
           { "remote-ip": "44.55.66.77" },
           "25.3.4.5",
         );
-        expect((node as any).learnedAdvertisedHost).toBe("44.55.66.77");
+        expect(node.learnedAdvertisedHost).toBe("44.55.66.77");
         expect(node.currentAdvertisedHost()).toBe("44.55.66.77");
 
         node.addKnownPeer("44.55.66.77", node.currentAdvertisedPort());
         expect(node.getKnownPeers()).toEqual([]);
 
         const overrideNode = makeNode(path.join(dir, "override.json"));
-        overrideNode.doc.config.advertisedHost = "7.7.7.7";
-        (overrideNode as any).absorbHandshakeHeaders(
+        overrideRuntimeConfig(overrideNode, { advertisedHost: "7.7.7.7" });
+        overrideNode.absorbHandshakeHeaders(
           { "remote-ip": "88.99.77.66" },
           "26.4.5.6",
         );
-        (overrideNode as any).absorbHandshakeHeaders(
+        overrideNode.absorbHandshakeHeaders(
           { "remote-ip": "88.99.77.66" },
           "27.5.6.7",
         );
-        (overrideNode as any).absorbHandshakeHeaders(
+        overrideNode.absorbHandshakeHeaders(
           { "remote-ip": "88.99.77.66" },
           "28.6.7.8",
         );
-        expect(
-          (overrideNode as any).learnedAdvertisedHost,
-        ).toBeUndefined();
+        expect(overrideNode.learnedAdvertisedHost).toBeUndefined();
         expect(overrideNode.currentAdvertisedHost()).toBe("7.7.7.7");
       });
     });
@@ -498,7 +503,34 @@ describe("protocol node", () => {
   test("rejects unexpected outbound handshake responses while absorbing X-Try peers", async () => {
     await withTempDir(async (dir) => {
       await withMockNetworkInterfaces(async () => {
-        const node = makeNode(path.join(dir, "protocol.json"));
+        const responses = [
+          "GNUTELLA/0.6 503 Busy\r\nX-Try: 9.8.7.6:4321\r\n\r\n",
+          "GNUTELLA OK\n\n",
+        ];
+        const node = makeNode(path.join(dir, "protocol.json"), {
+          collaborators: {
+            netFactory: {
+              createConnection: (options: net.NetConnectOpts) => {
+                const tcpOptions = options as net.NetConnectOpts & {
+                  host?: string;
+                  port?: number;
+                };
+                const socket = new MockSocket(
+                  String(tcpOptions.host || "127.0.0.1"),
+                  Number(tcpOptions.port || 0),
+                );
+                const response = responses.shift();
+                if (!response)
+                  throw new Error("expected mock handshake response");
+                queueMicrotask(() => {
+                  socket.emit("connect");
+                  queueMicrotask(() => socket.emit("data", response));
+                });
+                return socket as unknown as net.Socket;
+              },
+            },
+          },
+        });
         const debugEvents: Array<{ phase: string; message: string }> = [];
         node.subscribe((event) => {
           if (event.type !== "HANDSHAKE_DEBUG") return;
@@ -507,74 +539,37 @@ describe("protocol node", () => {
             message: event.message,
           });
         });
-        const originalCreateConnection = net.createConnection;
-        const responses = [
-          "GNUTELLA/0.6 503 Busy\r\nX-Try: 9.8.7.6:4321\r\n\r\n",
-          "GNUTELLA OK\n\n",
-        ];
+        await expect(
+          node.connectPeer06("127.0.0.1", 6346),
+        ).rejects.toThrow("0.6 handshake rejected by 127.0.0.1:6346");
+        expect(node.getKnownPeers()).toContain("9.8.7.6:4321");
 
-        (
-          net as unknown as {
-            createConnection: typeof net.createConnection;
-          }
-        ).createConnection = ((options: net.NetConnectOpts) => {
-          const tcpOptions = options as net.NetConnectOpts & {
-            host?: string;
-            port?: number;
-          };
-          const socket = new MockSocket(
-            String(tcpOptions.host || "127.0.0.1"),
-            Number(tcpOptions.port || 0),
-          );
-          const response = responses.shift();
-          if (!response)
-            throw new Error("expected mock handshake response");
-          queueMicrotask(() => {
-            socket.emit("connect");
-            queueMicrotask(() => socket.emit("data", response));
-          });
-          return socket as unknown as net.Socket;
-        }) as typeof net.createConnection;
-
-        try {
-          await expect(
-            node.connectPeer06("127.0.0.1", 6346),
-          ).rejects.toThrow("0.6 handshake rejected by 127.0.0.1:6346");
-          expect(node.getKnownPeers()).toContain("9.8.7.6:4321");
-
-          await expect(
-            node.connectPeer06("127.0.0.1", 6347),
-          ).rejects.toThrow(
-            "unsupported 0.4 handshake response from 127.0.0.1:6347: GNUTELLA OK",
-          );
-          expect(debugEvents).toEqual(
-            expect.arrayContaining([
-              expect.objectContaining({
-                phase: "dial-start",
-                message: "timeoutMs=5000",
-              }),
-              expect.objectContaining({
-                phase: "connect-sent",
-              }),
-              expect.objectContaining({
-                phase: "response-recv",
-                message: expect.stringContaining("GNUTELLA/0.6 503 Busy"),
-              }),
-              expect.objectContaining({
-                phase: "failed",
-                message: expect.stringContaining(
-                  "0.6 handshake rejected by 127.0.0.1:6346",
-                ),
-              }),
-            ]),
-          );
-        } finally {
-          (
-            net as unknown as {
-              createConnection: typeof net.createConnection;
-            }
-          ).createConnection = originalCreateConnection;
-        }
+        await expect(
+          node.connectPeer06("127.0.0.1", 6347),
+        ).rejects.toThrow(
+          "unsupported 0.4 handshake response from 127.0.0.1:6347: GNUTELLA OK",
+        );
+        expect(debugEvents).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              phase: "dial-start",
+              message: "timeoutMs=5000",
+            }),
+            expect.objectContaining({
+              phase: "connect-sent",
+            }),
+            expect.objectContaining({
+              phase: "response-recv",
+              message: expect.stringContaining("GNUTELLA/0.6 503 Busy"),
+            }),
+            expect.objectContaining({
+              phase: "failed",
+              message: expect.stringContaining(
+                "0.6 handshake rejected by 127.0.0.1:6346",
+              ),
+            }),
+          ]),
+        );
       });
     });
   });
@@ -590,14 +585,14 @@ describe("protocol node", () => {
           probeMessages.push(event.message);
         }
       });
-      (node as any).startHttpSession = (
+      node.startHttpSession = (
         _socket: net.Socket,
         head: string,
-        rest: Buffer,
+        rest = Buffer.alloc(0),
       ) => {
         httpHeads.push({ head, rest: rest.toString("latin1") });
       };
-      (node as any).handleIncomingGiv = async (
+      node.handleIncomingGiv = async (
         _socket: net.Socket,
         head: string,
       ) => {

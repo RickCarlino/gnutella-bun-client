@@ -45,17 +45,17 @@ describe("protocol node", () => {
         let startServerCalls = 0;
         let pruneCalls = 0;
 
-        (node as any).refreshShares = async () => {
+        node.refreshShares = async () => {
           refreshCalls += 1;
           if (refreshCalls > 1) throw new Error("rescan failed");
         };
-        (node as any).startServer = async () => {
+        node.startServer = async () => {
           startServerCalls += 1;
         };
-        (node as any).schedule = (ms: number, fn: () => void) => {
+        node.schedule = (ms: number, fn: () => void) => {
           scheduled.push({ ms, fn });
         };
-        (node as any).connectKnownPeers = async () => {
+        node.connectKnownPeers = async () => {
           reconnectCalls += 1;
           throw new Error(
             reconnectCalls === 1
@@ -63,13 +63,13 @@ describe("protocol node", () => {
               : "scheduled reconnect failed",
           );
         };
-        (node as any).sendPing = (ttl: number) => {
+        node.sendPing = (ttl: number) => {
           pingTtls.push(ttl);
         };
-        (node as any).pruneMaps = () => {
+        node.pruneMaps = () => {
           pruneCalls += 1;
         };
-        (node as any).save = async () => {
+        node.save = async () => {
           saveCalls += 1;
           throw new Error("save failed");
         };
@@ -303,7 +303,7 @@ describe("protocol node", () => {
 
       const peer = makePeer("peer-qrp");
       const sent: Buffer[] = [];
-      (node as any).sendToPeer = (
+      node.sendToPeer = (
         _peer: unknown,
         payloadType: number,
         _descriptorId: Buffer,
@@ -390,7 +390,7 @@ describe("protocol node", () => {
       meshPeer.capabilities.ultrapeerQueryRoutingVersion = "0.1";
 
       const sent: Buffer[] = [];
-      (node as any).sendToPeer = (
+      node.sendToPeer = (
         _peer: unknown,
         payloadType: number,
         _descriptorId: Buffer,
@@ -457,7 +457,7 @@ describe("protocol node", () => {
       node.sharesByUrn = new Map([[share.sha1Urn.toLowerCase(), share]]);
 
       const socket = new MockSocket();
-      (node as any).startHttpSession(
+      node.startHttpSession(
         socket as never,
         "HEAD /get/1/alpha.txt HTTP/1.1\r\n\r\n",
       );
