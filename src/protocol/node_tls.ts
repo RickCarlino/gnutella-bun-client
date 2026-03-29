@@ -114,6 +114,7 @@ function waitForSecureTlsSocket(
   socket: tls.TLSSocket,
   mode: "client" | "server",
   timeoutMs: number,
+  start?: () => void,
 ): Promise<tls.TLSSocket> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -149,6 +150,11 @@ function waitForSecureTlsSocket(
     }
     socket.once("error", onError);
     socket.once("close", onClose);
+    try {
+      start?.();
+    } catch (error) {
+      fail(error);
+    }
   });
 }
 
@@ -236,8 +242,15 @@ export async function upgradeSocketToTls(
           requestCert: false,
           rejectUnauthorized: false,
         });
-  upgraded.setNoDelay(true);
-  maybeStartTlsSocket(upgraded, mode);
-  upgraded.resume();
-  return await waitForSecureTlsSocket(node, upgraded, mode, timeoutMs);
+  return await waitForSecureTlsSocket(
+    node,
+    upgraded,
+    mode,
+    timeoutMs,
+    () => {
+      upgraded.setNoDelay(true);
+      maybeStartTlsSocket(upgraded, mode);
+      upgraded.resume();
+    },
+  );
 }

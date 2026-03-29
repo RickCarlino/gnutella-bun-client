@@ -196,8 +196,9 @@ function formatHandshakeMonitorEvent(
   event: GnutellaEvent,
 ): MonitorLogEntry | undefined {
   if (event.type !== "HANDSHAKE_DEBUG") return;
+  const prefix = event.phase.includes("failed") ? "[warning] " : "";
   return monitorEntry(
-    `[hs ${event.direction} ${event.phase}] peer=${event.peer} ${event.message}`,
+    `${prefix}[hs ${event.direction} ${event.phase}] peer=${event.peer} ${event.message}`,
     "HANDSHAKE",
     `HANDSHAKE:${event.direction.toUpperCase()}`,
     `HANDSHAKE:${event.phase.toUpperCase()}`,

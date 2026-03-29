@@ -227,4 +227,49 @@ describe("protocol node TLS", () => {
       }
     });
   });
+
+  test("client upgrades reject when resume triggers a synchronous tls error", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const socket = {
+        pause() {
+          return this;
+        },
+        setTimeout(_timeoutMs: number) {
+          return this;
+        },
+        unshift(_chunk: Uint8Array) {
+          return this;
+        },
+      } as unknown as net.Socket;
+      const originalConnect = tls.connect;
+      class SynchronousErrorTlsSocket extends FakeTlsSocket {
+        override resume(): this {
+          this.emit(
+            "error",
+            Object.assign(
+              new Error(
+                "Client network socket disconnected before secure TLS connection was established",
+              ),
+              { code: "ECONNRESET" },
+            ),
+          );
+          return super.resume();
+        }
+      }
+      tls.connect = (() => {
+        return new SynchronousErrorTlsSocket() as unknown as tls.TLSSocket;
+      }) as typeof tls.connect;
+
+      try {
+        await expect(
+          upgradeSocketToTls(node, socket, "client"),
+        ).rejects.toThrow(
+          "Client network socket disconnected before secure TLS connection was established",
+        );
+      } finally {
+        tls.connect = originalConnect;
+      }
+    });
+  });
 });
