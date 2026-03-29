@@ -15,6 +15,9 @@ export type GWebCacheRequestOptions = {
   ip?: string;
   url?: string;
   cluster?: string;
+  leafCount?: number;
+  maxLeaves?: number;
+  uptimeSec?: number;
   getLeaves?: boolean;
   getClusters?: boolean;
   getVendors?: boolean;
@@ -144,6 +147,10 @@ export type ReportSelfOptions = {
   version?: string;
   timeoutMs?: number;
   ip: string;
+  cluster?: string;
+  leafCount?: number;
+  maxLeaves?: number;
+  uptimeSec?: number;
   state?: GWebCacheBootstrapState;
   signal?: AbortSignal;
   fetchImpl?: FetchLike;

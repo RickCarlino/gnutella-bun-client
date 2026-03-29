@@ -26,6 +26,9 @@ describe("gwebcache client", () => {
         ip: "66.132.55.12:6346",
         url: "https://cache.example.net/gcache.php",
         cluster: "up",
+        leafCount: 45,
+        maxLeaves: 50,
+        uptimeSec: 7200,
         getLeaves: true,
         getClusters: true,
         getVendors: true,
@@ -45,6 +48,9 @@ describe("gwebcache client", () => {
       "https://cache.example.net/gcache.php",
     );
     expect(built.searchParams.get("cluster")).toBe("up");
+    expect(built.searchParams.get("x_leaves")).toBe("45");
+    expect(built.searchParams.get("x_max")).toBe("50");
+    expect(built.searchParams.get("uptime")).toBe("7200");
     expect(built.searchParams.get("getleaves")).toBe("1");
     expect(built.searchParams.get("getclusters")).toBe("1");
     expect(built.searchParams.get("getvendors")).toBe("1");
@@ -502,6 +508,9 @@ describe("gwebcache client", () => {
         "http://cache-b.example/gwc.php",
       ],
       ip: "66.132.55.12:6346",
+      leafCount: 4,
+      maxLeaves: 24,
+      uptimeSec: 123,
       state,
       fetchImpl: async (input: string | URL | Request) => {
         calls.push(String(input));
@@ -532,6 +541,9 @@ describe("gwebcache client", () => {
     expect(first.searchParams.get("update")).toBe("1");
     expect(first.searchParams.get("spec")).toBe("2");
     expect(first.searchParams.get("ip")).toBe("66.132.55.12:6346");
+    expect(first.searchParams.get("x_leaves")).toBe("4");
+    expect(first.searchParams.get("x_max")).toBe("24");
+    expect(first.searchParams.get("uptime")).toBe("123");
     expect(first.searchParams.get("url")).toBe(
       "http://cache-c.example/gwc.php",
     );
@@ -540,6 +552,9 @@ describe("gwebcache client", () => {
     expect(second.searchParams.get("update")).toBe("1");
     expect(second.searchParams.get("spec")).toBe("2");
     expect(second.searchParams.get("ip")).toBe("66.132.55.12:6346");
+    expect(second.searchParams.get("x_leaves")).toBe("4");
+    expect(second.searchParams.get("x_max")).toBe("24");
+    expect(second.searchParams.get("uptime")).toBe("123");
     expect(second.searchParams.get("url")).toBe(
       "http://cache-a.example/gwc.php",
     );

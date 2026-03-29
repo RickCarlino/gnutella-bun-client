@@ -434,6 +434,18 @@ export async function announceSelfToGWebCaches(
     client: node.config().vendorCode,
     version: node.config().userAgent,
     ip: normalizePeer(host, port),
+    uptimeSec: Math.max(
+      0,
+      Math.floor((node.now() - node.startedAtMs) / 1000),
+    ),
+    leafCount:
+      node.nodeMode() === "ultrapeer"
+        ? node.connectedLeafCount()
+        : undefined,
+    maxLeaves:
+      node.nodeMode() === "ultrapeer"
+        ? node.config().maxLeafConnections
+        : undefined,
     state: node.gwebCacheBootstrapState,
   });
   if (result.reportedCaches.length > 0) node.gwebCacheReported = true;

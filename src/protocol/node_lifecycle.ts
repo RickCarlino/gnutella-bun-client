@@ -22,6 +22,7 @@ function scheduleRecurringTask(
 }
 
 export async function start(node: GnutellaServent): Promise<void> {
+  node.startedAtMs = node.now();
   const c = node.config();
   await node.refreshShares();
   await node.startServer();

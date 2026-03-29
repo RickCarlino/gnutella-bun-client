@@ -360,13 +360,25 @@ describe("protocol node", () => {
   test("gwebcache self-report only gets one session attempt", async () => {
     await withTempDir(async (dir) => {
       const scheduled: Array<{ ms: number; fn: () => void }> = [];
-      const reportedIps: string[] = [];
+      const reported: Array<{
+        ip: string;
+        uptimeSec?: number;
+        leafCount?: number;
+        maxLeaves?: number;
+      }> = [];
+      let nowMs = 1_700_000_000_000;
       const node = makeNode(path.join(dir, "protocol.json"), {
         runtimeConfig: {
           advertisedHost: "66.132.55.12",
           advertisedPort: 6346,
+          ultrapeer: true,
+          nodeMode: "ultrapeer",
+          maxLeafConnections: 7,
         },
         collaborators: {
+          clock: {
+            now: () => nowMs,
+          },
           scheduler: {
             setTimeout: (fn: () => void, ms: number) => {
               scheduled.push({ ms, fn });
@@ -374,8 +386,18 @@ describe("protocol node", () => {
             },
           },
           bootstrapClient: {
-            reportSelfToGWebCaches: async ({ ip }) => {
-              reportedIps.push(ip);
+            reportSelfToGWebCaches: async ({
+              ip,
+              uptimeSec,
+              leafCount,
+              maxLeaves,
+            }) => {
+              reported.push({
+                ip,
+                uptimeSec,
+                leafCount,
+                maxLeaves,
+              });
               return {
                 attemptedCaches: [],
                 reportedCaches: [],
@@ -386,18 +408,28 @@ describe("protocol node", () => {
         },
       });
 
-      node.peers.set("peer-1", makePeer("6.6.6.6:6346"));
+      const leafPeer = makePeer("6.6.6.6:6346");
+      leafPeer.role = "leaf";
+      node.peers.set("peer-1", leafPeer);
       node.refreshGWebCacheReport();
       expect(scheduled.map((entry) => entry.ms)).toEqual([
         GWEBCACHE_REPORT_DELAY_SEC * 1000,
       ]);
 
+      nowMs += 123_000;
       scheduled[0].fn();
       await Promise.resolve();
       node.refreshGWebCacheReport();
 
       expect(node.gwebCacheReportAttempted).toBe(true);
-      expect(reportedIps).toEqual(["66.132.55.12:6346"]);
+      expect(reported).toEqual([
+        {
+          ip: "66.132.55.12:6346",
+          uptimeSec: 123,
+          leafCount: 1,
+          maxLeaves: 7,
+        },
+      ]);
       expect(scheduled).toHaveLength(1);
     });
   });
@@ -405,11 +437,24 @@ describe("protocol node", () => {
   test("announceSelfToGWebCaches reports once using the configured v2 cache list", async () => {
     await withTempDir(async (dir) => {
       await withMockNetworkInterfaces(async () => {
-        const node = makeNode(path.join(dir, "protocol.json"));
+        let nowMs = 1_700_000_000_000;
+        const node = makeNode(path.join(dir, "protocol.json"), {
+          collaborators: {
+            clock: {
+              now: () => nowMs,
+            },
+          },
+        });
         overrideRuntimeConfig(node, {
           advertisedHost: "66.132.55.12",
           advertisedPort: 6346,
+          ultrapeer: true,
+          nodeMode: "ultrapeer",
+          maxLeafConnections: 7,
         });
+        const leafPeer = makePeer("7.7.7.7:7777");
+        leafPeer.role = "leaf";
+        node.peers.set(leafPeer.key, leafPeer);
 
         const fetchCalls: string[] = [];
         const originalFetch = globalThis.fetch;
@@ -423,6 +468,7 @@ describe("protocol node", () => {
         }) as typeof fetch;
 
         try {
+          nowMs += 123_000;
           await node.announceSelfToGWebCaches();
         } finally {
           globalThis.fetch = originalFetch;
@@ -435,6 +481,9 @@ describe("protocol node", () => {
         expect(first.searchParams.get("update")).toBe("1");
         expect(first.searchParams.get("spec")).toBe("2");
         expect(first.searchParams.get("ip")).toBe("66.132.55.12:6346");
+        expect(first.searchParams.get("x_leaves")).toBe("1");
+        expect(first.searchParams.get("x_max")).toBe("7");
+        expect(first.searchParams.get("uptime")).toBe("123");
         expect(first.searchParams.get("url")).toBe(KNOWN_CACHES[1]);
       });
     });

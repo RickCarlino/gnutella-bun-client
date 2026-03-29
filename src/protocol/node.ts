@@ -194,6 +194,7 @@ export class GnutellaServent {
   activeAutoDownloadPaths = new Set<string>();
   timers: NodeJS.Timeout[] = [];
   timeouts: NodeJS.Timeout[] = [];
+  startedAtMs: number;
   stopped = false;
   listeners = new Set<GnutellaEventListener>();
   qrpTable = new QrpTable();
@@ -373,6 +374,7 @@ export class GnutellaServent {
     );
     this.doc.config = configDocForRuntime(this.runtimeConfig);
     this.collaborators = buildCollaborators(options.collaborators);
+    this.startedAtMs = this.collaborators.clock.now();
     this.serventId = fromHex16(doc.state.serventIdHex);
     if (options.onEvent) this.listeners.add(options.onEvent);
   }

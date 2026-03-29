@@ -118,6 +118,24 @@ function applyCacheUpdate(url: URL, cacheSpec: string | undefined): void {
   url.searchParams.set("update", "1");
 }
 
+function setOptionalCount(
+  url: URL,
+  key: string,
+  value: number | undefined,
+): void {
+  if (!Number.isInteger(value) || (value || 0) < 0) return;
+  url.searchParams.set(key, String(value));
+}
+
+function applyUpdateStats(
+  url: URL,
+  options: GWebCacheRequestOptions,
+): void {
+  setOptionalCount(url, "x_leaves", options.leafCount);
+  setOptionalCount(url, "x_max", options.maxLeaves);
+  setOptionalCount(url, "uptime", options.uptimeSec);
+}
+
 function applyLookupFlags(
   url: URL,
   options: GWebCacheRequestOptions,
@@ -144,6 +162,7 @@ export function buildGWebCacheUrl(
   applyRequestMetadata(url, options);
   applyPeerUpdate(url, options.ip);
   applyCacheUpdate(url, options.url);
+  applyUpdateStats(url, options);
   applyLookupFlags(url, options);
   return url.toString();
 }
