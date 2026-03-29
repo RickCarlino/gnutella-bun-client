@@ -37,6 +37,7 @@ describe("cli_shared", () => {
         {
           key: "1.2.3.4:6346",
           remoteLabel: "1.2.3.4:6346",
+          role: "ultrapeer",
           outbound: true,
           userAgent: "Peer/1.0",
           compression: true,
@@ -45,6 +46,7 @@ describe("cli_shared", () => {
         {
           key: "5.6.7.8:6346",
           remoteLabel: "5.6.7.8:6346",
+          role: "leaf",
           outbound: false,
           compression: false,
           tls: false,
@@ -73,10 +75,10 @@ describe("cli_shared", () => {
       "peers=2 shares=1 results=999 knownPeers=9",
       "no peers",
       [
-        "FL   Peer          Agent",
-        "---  ------------  --------",
-        "OZL  1.2.3.4:6346  Peer/1.0",
-        "I--  5.6.7.8:6346  -",
+        "Flags  Peer          Agent",
+        "-----  ------------  --------",
+        "OZLU   1.2.3.4:6346  Peer/1.0",
+        "I---   5.6.7.8:6346  -",
       ].join("\n"),
       "no shared files",
       '#1 123B "folder/\\"song\\".mp3"',

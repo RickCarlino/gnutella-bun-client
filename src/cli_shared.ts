@@ -48,7 +48,7 @@ function fitTableCell(value: string, width: number): string {
 }
 
 function peerFlags(peer: ReturnType<CliNode["getPeers"]>[number]): string {
-  return `${peer.outbound ? "O" : "I"}${peer.compression ? "Z" : "-"}${peer.tls ? "L" : "-"}`;
+  return `${peer.outbound ? "O" : "I"}${peer.compression ? "Z" : "-"}${peer.tls ? "L" : "-"}${peer.role === "ultrapeer" ? "U" : "-"}`;
 }
 
 function valueOrDash(value: string | number | undefined): string {
@@ -145,7 +145,7 @@ export function printPeers(
   }));
 
   const flags = Math.max(
-    "FL".length,
+    "Flags".length,
     ...rows.map((row) => row.flags.length),
   );
   const desiredRemoteLabel = Math.max(
@@ -187,7 +187,7 @@ export function printPeers(
 
   log(
     [
-      line("FL", "Peer", "Agent"),
+      line("Flags", "Peer", "Agent"),
       line(
         "-".repeat(widths.flags),
         "-".repeat(widths.remoteLabel),

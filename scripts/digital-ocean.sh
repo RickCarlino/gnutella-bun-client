@@ -18,7 +18,7 @@ else
   echo "error: expected scripts/digital-ocean.sh inside the repo or next to gnutella.ts" >&2
   exit 1
 fi
-
+curl -sSL https://repos.insights.digitalocean.com/install.sh | sudo bash
 cd "$REPO_ROOT"
 
 CONFIG_PATH="${CONFIG_PATH:-gnutella.json}"

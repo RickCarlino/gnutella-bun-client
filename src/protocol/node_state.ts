@@ -125,6 +125,7 @@ export function peerInfo(node: GnutellaServent, peer: Peer): PeerInfo {
   const info: PeerInfo = {
     key: peer.key,
     remoteLabel: peer.remoteLabel,
+    role: peer.role,
     outbound: peer.outbound,
     dialTarget: peer.dialTarget,
     compression:

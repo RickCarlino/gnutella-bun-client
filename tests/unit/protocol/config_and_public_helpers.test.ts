@@ -100,7 +100,7 @@ describe("protocol config and public helpers", () => {
       expect(created.config.advertisedPort).toBeUndefined();
       expect(createdRuntime.maxConnections).toBe(12);
       expect(createdRuntime.maxUltrapeerConnections).toBe(4);
-      expect(createdRuntime.maxLeafConnections).toBe(24);
+      expect(createdRuntime.maxLeafConnections).toBe(64);
       await expect(fs.stat(configPath)).resolves.toBeDefined();
       await expect(
         fs.stat(createdRuntime.downloadsDir),
@@ -141,7 +141,7 @@ describe("protocol config and public helpers", () => {
       expect(persisted.config.listen_port).toBe(6346);
       expect(persisted.config.max_connections).toBe(12);
       expect(persisted.config.max_ultrapeer_connections).toBe(4);
-      expect(persisted.config.max_leaf_connections).toBe(24);
+      expect(persisted.config.max_leaf_connections).toBe(64);
       expect(persisted.config.data_dir).toBe(path.join(dir, "nested"));
       expect(persisted.config.log_ignore).toBeUndefined();
       expect("listenHost" in persisted.config).toBe(false);
@@ -180,6 +180,7 @@ describe("protocol config and public helpers", () => {
         {
           key: "1.2.3.4:6346",
           remoteLabel: "1.2.3.4:6346",
+          role: "leaf",
           outbound: false,
           dialTarget: "1.2.3.4:6346",
           compression: false,
@@ -357,7 +358,7 @@ describe("protocol config and public helpers", () => {
       expect(camelLoaded.config.dataDir).toBe(dir);
       expect(camelLoaded.config.maxConnections).toBe(12);
       expect(camelLoaded.config.maxUltrapeerConnections).toBe(4);
-      expect(camelLoaded.config.maxLeafConnections).toBe(24);
+      expect(camelLoaded.config.maxLeafConnections).toBe(64);
       expect(camelLoaded.config.monitorIgnoreEvents).toBeUndefined();
       expect(camelLoaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
       expect(camelLoaded.state.serventIdHex).not.toBe("cd".repeat(16));

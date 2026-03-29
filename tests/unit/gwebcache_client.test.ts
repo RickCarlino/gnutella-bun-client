@@ -509,7 +509,7 @@ describe("gwebcache client", () => {
       ],
       ip: "66.132.55.12:6346",
       leafCount: 4,
-      maxLeaves: 24,
+      maxLeaves: 64,
       uptimeSec: 123,
       state,
       fetchImpl: async (input: string | URL | Request) => {
@@ -542,7 +542,7 @@ describe("gwebcache client", () => {
     expect(first.searchParams.get("spec")).toBe("2");
     expect(first.searchParams.get("ip")).toBe("66.132.55.12:6346");
     expect(first.searchParams.get("x_leaves")).toBe("4");
-    expect(first.searchParams.get("x_max")).toBe("24");
+    expect(first.searchParams.get("x_max")).toBe("64");
     expect(first.searchParams.get("uptime")).toBe("123");
     expect(first.searchParams.get("url")).toBe(
       "http://cache-c.example/gwc.php",
@@ -553,7 +553,7 @@ describe("gwebcache client", () => {
     expect(second.searchParams.get("spec")).toBe("2");
     expect(second.searchParams.get("ip")).toBe("66.132.55.12:6346");
     expect(second.searchParams.get("x_leaves")).toBe("4");
-    expect(second.searchParams.get("x_max")).toBe("24");
+    expect(second.searchParams.get("x_max")).toBe("64");
     expect(second.searchParams.get("uptime")).toBe("123");
     expect(second.searchParams.get("url")).toBe(
       "http://cache-a.example/gwc.php",

@@ -584,6 +584,7 @@ describe("protocol node", () => {
         {
           key: "peer-1",
           remoteLabel: "9.8.7.6:4321",
+          role: "leaf",
           outbound: true,
           dialTarget: "9.8.7.6:4321",
           compression: false,

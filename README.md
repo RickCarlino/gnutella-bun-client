@@ -272,7 +272,7 @@ Persistent runtime state includes `servent_id_hex` and the `peers` map.
 - `false`: run as a leaf
 - omitted: default to leaf mode
 
-When running as an ultrapeer, the node advertises ultrapeer capability in the handshake, accepts both mesh peers and leaves, relays traffic, and uses Query Routing Protocol updates for attached peers. The default connection caps are intentionally conservative for smaller hosts: up to `12` mesh peers plus `24` leaves.
+When running as an ultrapeer, the node advertises ultrapeer capability in the handshake, accepts both mesh peers and leaves, relays traffic, and uses Query Routing Protocol updates for attached peers. The default connection caps are up to `12` mesh peers plus `64` leaves.
 
 When running as a leaf, the node behaves as a shielded client and keeps up to `4` ultrapeer connections by default.
 
