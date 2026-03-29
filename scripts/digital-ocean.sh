@@ -8,17 +8,23 @@ set -euo pipefail
 SCRIPT_DIR="$(
   CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
 )"
-cd "$SCRIPT_DIR"
+if [[ -f "$SCRIPT_DIR/gnutella.ts" ]]; then
+  REPO_ROOT="$SCRIPT_DIR"
+elif [[ -f "$SCRIPT_DIR/../gnutella.ts" ]]; then
+  REPO_ROOT="$(
+    CDPATH= cd -- "$SCRIPT_DIR/.." && pwd
+  )"
+else
+  echo "error: expected scripts/digital-ocean.sh inside the repo or next to gnutella.ts" >&2
+  exit 1
+fi
+
+cd "$REPO_ROOT"
 
 CONFIG_PATH="${CONFIG_PATH:-gnutella.json}"
 LISTEN_PORT="${LISTEN_PORT:-777}"
 BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
 BUN_BIN="$BUN_INSTALL/bin/bun"
-
-if [[ ! -f gnutella.ts ]]; then
-  echo "error: run this script from the repo root or keep it next to gnutella.ts" >&2
-  exit 1
-fi
 
 if command -v sudo >/dev/null 2>&1 && [[ "$(id -u)" -ne 0 ]]; then
   SUDO=(sudo)
@@ -104,6 +110,34 @@ LISTEN_PORT_ENV="$LISTEN_PORT" \
 
     fs.writeFileSync(configPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
   '
+
+DOWNLOADS_DIR="$(
+  CONFIG_PATH_ENV="$CONFIG_PATH" \
+    "$BUN_BIN" -e '
+      import fs from "node:fs";
+      import path from "node:path";
+
+      const configPath = process.env.CONFIG_PATH_ENV;
+      if (!configPath) throw new Error("CONFIG_PATH_ENV is required");
+
+      const doc = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const configDir = path.dirname(path.resolve(configPath));
+      const dataDirValue =
+        typeof doc?.config?.data_dir === "string" ? doc.config.data_dir.trim() : "";
+      const dataDir = dataDirValue
+        ? path.isAbsolute(dataDirValue)
+          ? path.normalize(dataDirValue)
+          : path.resolve(configDir, dataDirValue)
+        : configDir;
+
+      console.log(path.join(dataDir, "downloads"));
+    '
+)"
+
+echo "==> Generating 10 random files in $DOWNLOADS_DIR"
+for ((i = 0; i < 10; i++)); do
+  "$BUN_BIN" run scripts/generate-random-base32-file.ts --dir "$DOWNLOADS_DIR"
+done
 
 echo "==> Starting gnutella"
 echo "note: allow inbound TCP ${LISTEN_PORT} in DigitalOcean and any local firewall"
