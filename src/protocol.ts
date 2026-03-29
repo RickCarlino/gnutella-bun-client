@@ -16,5 +16,6 @@ export {
   parseRouteTableUpdate,
 } from "./protocol/codec";
 export { initialRemoteQrpState, QrpTable } from "./protocol/qrp";
+export { buildMagnetUri, parseMagnetUri } from "./protocol/magnet";
 export { defaultDoc, loadDoc, writeDoc } from "./protocol/peer_state";
 export type { Peer } from "./protocol/node_types";

@@ -195,6 +195,50 @@ describe("protocol node", () => {
     });
   });
 
+  test("answers SHA1-only queries that carry the URN in the search field", async () => {
+    await withTempDir(async (dir) => {
+      await withMockNetworkInterfaces(async () => {
+        const node = makeNode(path.join(dir, "protocol.json"));
+        const share = makeShare(
+          1,
+          path.join(dir, "FW2PQUDZ.txt"),
+          "FW2PQUDZ.txt",
+        );
+        node.shares = [share];
+        node.sharesByIndex = new Map([[share.index, share]]);
+        node.sharesByUrn = new Map([
+          [share.sha1Urn!.toLowerCase(), share],
+        ]);
+        const peer = makePeer();
+        const sent: Array<{ payloadType: number; payload: Buffer }> = [];
+        node.sendToPeer = (
+          _peer: unknown,
+          payloadType: number,
+          _descriptorId: Buffer,
+          _ttl: number,
+          _hops: number,
+          payload: Buffer,
+        ) => {
+          sent.push({ payloadType, payload });
+        };
+        node.broadcastQuery = () => {};
+
+        node.handleDescriptor(
+          peer as never,
+          makeHeader(TYPE.QUERY, 2, 0, 0x24),
+          encodeQuery(share.sha1Urn!),
+        );
+
+        expect(sent).toHaveLength(1);
+        expect(sent[0].payloadType).toBe(TYPE.QUERY_HIT);
+        const results = parseQueryHit(sent[0].payload).results;
+        expect(results).toHaveLength(1);
+        expect(results[0]?.fileName).toBe("FW2PQUDZ.txt");
+        expect(results[0]?.urns).toEqual([share.sha1Urn!]);
+      });
+    });
+  });
+
   test("accepts both /get path spellings on inbound requests", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
@@ -707,9 +751,10 @@ describe("protocol node", () => {
       const shareUrn = share.sha1Urn;
       expect(shareUrn).toBeDefined();
       node.sharesByUrn = new Map([[shareUrn!.toLowerCase(), share]]);
+      const shareBitprint = `urn:bitprint:${shareUrn!.slice("urn:sha1:".length)}.${"A".repeat(39)}`;
 
       const headSocket = new MockSocket();
-      const headRequest = buildUriResRequest(shareUrn!, 2).replace(
+      const headRequest = buildUriResRequest(shareBitprint, 2).replace(
         /^GET/,
         "HEAD",
       );
@@ -725,6 +770,7 @@ describe("protocol node", () => {
       expect(headResponse).toContain(
         `X-Gnutella-Content-URN: ${shareUrn}\r\n`,
       );
+      expect(headResponse).toContain(`X-Content-URN: ${shareUrn}\r\n`);
       expect(headResponse).not.toContain("hello");
 
       const rangedHeadSocket = new MockSocket();

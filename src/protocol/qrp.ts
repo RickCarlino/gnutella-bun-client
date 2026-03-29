@@ -3,7 +3,6 @@ import fs from "node:fs";
 import zlib from "node:zlib";
 
 import {
-  BASE32_ALPHABET,
   DEFAULT_QRP_ENTRY_BITS,
   DEFAULT_QRP_INFINITY,
   DEFAULT_QRP_TABLE_SIZE,
@@ -12,6 +11,7 @@ import {
   QRP_HASH_MULTIPLIER,
 } from "../const";
 import type { QueryDescriptor, RemoteQrpState, ShareFile } from "../types";
+import { base32Encode } from "./content_urn";
 
 export function splitSearchTerms(input: string): string[] {
   const ascii = input
@@ -54,24 +54,8 @@ function qrpHash(str: string, bits: number): number {
   return Number((prod >> BigInt(32 - bits)) & mask) >>> 0;
 }
 
-function sha1ToBase32(sha1: Buffer): string {
-  let result = "";
-  let bits = 0;
-  let value = 0;
-  for (const byte of sha1) {
-    value = (value << 8) | byte;
-    bits += 8;
-    while (bits >= 5) {
-      result += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-  }
-  if (bits > 0) result += BASE32_ALPHABET[(value << (5 - bits)) & 31];
-  return result;
-}
-
 export function sha1ToUrn(sha1: Buffer): string {
-  return `urn:sha1:${sha1ToBase32(sha1)}`;
+  return `urn:sha1:${base32Encode(sha1)}`;
 }
 
 export async function sha1File(abs: string): Promise<Buffer> {

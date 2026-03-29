@@ -13,6 +13,16 @@ import type {
 } from "./node_types";
 import { DEFAULT_VENDOR_CODE } from "../const";
 import { parseHttpHeaders } from "./handshake";
+import { parseGgep, encodeGgep, type GgepItem } from "./ggep";
+import {
+  bitprintUrnFromGgepHash,
+  firstSha1Urn,
+  normalizeUrnList,
+  sha1BufferFromUrn,
+  textUrnFromGgepUrn,
+} from "./content_urn";
+import { splitQuerySearch } from "./query_search";
+import { sha1ToUrn } from "./qrp";
 
 const MODERN_QUERY_FLAG_BITS = [
   ["requesterFirewalled", 14],
@@ -51,21 +61,76 @@ function splitFsBlocks(buf: Buffer): Buffer[] {
   return blocks.filter((x) => x.length > 0);
 }
 
+function splitTextAndGgepExtensions(rawExtensions: Buffer): {
+  textBlocks: Buffer[];
+  ggepItems: GgepItem[];
+} {
+  const ggepStart = rawExtensions.indexOf(0xc3);
+  if (ggepStart === -1) {
+    return {
+      textBlocks: splitFsBlocks(rawExtensions),
+      ggepItems: [],
+    };
+  }
+  let ggepItems: GgepItem[] = [];
+  try {
+    ggepItems = parseGgep(rawExtensions.subarray(ggepStart));
+  } catch {
+    ggepItems = [];
+  }
+  return {
+    textBlocks: splitFsBlocks(rawExtensions.subarray(0, ggepStart)),
+    ggepItems,
+  };
+}
+
+function urnsFromGgepHash(data: Buffer): string[] {
+  const hashType = data[0];
+  if (hashType === 0x01 && data.length >= 21) {
+    return [sha1ToUrn(data.subarray(1, 21))];
+  }
+  if (hashType === 0x02 && data.length >= 21) {
+    const bitprint = bitprintUrnFromGgepHash(data);
+    if (bitprint) return normalizeUrnList([bitprint]);
+    return [sha1ToUrn(data.subarray(1, 21))];
+  }
+  return [];
+}
+
+function urnsFromGgepItems(items: GgepItem[]): string[] {
+  const rawUrns: string[] = [];
+  for (const item of items) {
+    if (item.id === "H") {
+      rawUrns.push(...urnsFromGgepHash(item.data));
+      continue;
+    }
+    if (item.id === "u") {
+      const textUrn = textUrnFromGgepUrn(item.data);
+      if (textUrn) rawUrns.push(textUrn);
+    }
+  }
+  return normalizeUrnList(rawUrns);
+}
+
 function parseQueryExtensions(rawExtensions: Buffer): {
   urns: string[];
   xmlBlocks: string[];
 } {
-  const urns: string[] = [];
+  const rawUrns: string[] = [];
   const xmlBlocks: string[] = [];
-  for (const block of splitFsBlocks(rawExtensions)) {
+  const { textBlocks, ggepItems } =
+    splitTextAndGgepExtensions(rawExtensions);
+  for (const block of textBlocks) {
     if (!block.length) continue;
-    if (block[0] === 0xc3) continue;
     const text = block.toString("utf8");
-    if (text.startsWith("urn:")) urns.push(text);
+    if (text.startsWith("urn:")) rawUrns.push(text);
     else if (text.startsWith("<") || text.startsWith("{"))
       xmlBlocks.push(text);
   }
-  return { urns, xmlBlocks };
+  return {
+    urns: normalizeUrnList([...rawUrns, ...urnsFromGgepItems(ggepItems)]),
+    xmlBlocks,
+  };
 }
 
 function qhdFlagEnabled(
@@ -159,14 +224,64 @@ function parseQueryHitExtension(rawExtension: Buffer): {
   urns: string[];
   metadata: string[];
 } {
-  const urns: string[] = [];
+  const rawUrns: string[] = [];
   const metadata: string[] = [];
-  for (const block of splitFsBlocks(rawExtension)) {
+  const { textBlocks, ggepItems } =
+    splitTextAndGgepExtensions(rawExtension);
+  for (const block of textBlocks) {
     const text = block.toString("utf8");
-    if (text.startsWith("urn:")) urns.push(text);
+    if (text.startsWith("urn:")) rawUrns.push(text);
     else if (text) metadata.push(text);
   }
-  return { urns, metadata };
+  return {
+    urns: normalizeUrnList([...rawUrns, ...urnsFromGgepItems(ggepItems)]),
+    metadata,
+  };
+}
+
+function ggepSha1Item(sha1: Buffer | undefined): GgepItem | undefined {
+  return sha1
+    ? {
+        id: "H",
+        data: Buffer.concat([Buffer.from([0x01]), sha1]),
+      }
+    : undefined;
+}
+
+function ggepHashItemsFromUrns(
+  urns: string[],
+  enabled: boolean,
+): GgepItem[] {
+  if (!enabled) return [];
+  const sha1 = sha1BufferFromUrn(firstSha1Urn(urns) || "");
+  const item = ggepSha1Item(sha1);
+  return item ? [item] : [];
+}
+
+function ggepHashItemsForShare(
+  share: ShareFile,
+  textUrns: string[],
+  enabled: boolean,
+): GgepItem[] {
+  if (!enabled) return [];
+  const sha1 =
+    share.sha1 || sha1BufferFromUrn(firstSha1Urn(textUrns) || "");
+  const item = ggepSha1Item(sha1);
+  return item ? [item] : [];
+}
+
+function buildExtensionPayload(
+  textParts: Buffer[],
+  ggepItems: GgepItem[],
+): Buffer {
+  const ggep = ggepItems.length ? encodeGgep(ggepItems) : Buffer.alloc(0);
+  const blocks = [...textParts, ...(ggep.length ? [ggep] : [])];
+  if (!blocks.length) return Buffer.alloc(0);
+  return Buffer.concat(
+    blocks.flatMap((block, index) =>
+      index === 0 ? [block] : [Buffer.from([0x1c]), block],
+    ),
+  );
 }
 
 function queryHitFieldEnd(
@@ -332,15 +447,14 @@ export function encodeQuery(
   options: QueryEncodeOptions = {},
 ): Buffer {
   const s = Buffer.from(search, "utf8");
-  const extParts: Buffer[] = [];
-  for (const urn of options.urns || [])
-    extParts.push(Buffer.from(urn, "utf8"));
-  for (const xml of options.xmlBlocks || [])
-    extParts.push(Buffer.from(xml, "utf8"));
-  const sep = extParts.length ? Buffer.from([0x1c]) : Buffer.alloc(0);
-  const ext = extParts.length
-    ? Buffer.concat(extParts.flatMap((p, i) => (i ? [sep, p] : [p])))
-    : Buffer.alloc(0);
+  const urns = normalizeUrnList(options.urns || []);
+  const ext = buildExtensionPayload(
+    [
+      ...urns.map((urn) => Buffer.from(urn, "utf8")),
+      ...(options.xmlBlocks || []).map((xml) => Buffer.from(xml, "utf8")),
+    ],
+    ggepHashItemsFromUrns(urns, !!options.ggepHAllowed),
+  );
   const out = Buffer.alloc(2 + s.length + 1 + ext.length);
   out.writeUInt16BE(buildModernQueryFlags(options), 0);
   s.copy(out, 2);
@@ -355,12 +469,17 @@ export function parseQuery(payload: Buffer): QueryDescriptor {
   const flagsRaw = payload.readUInt16BE(0);
   const nul = payload.indexOf(0x00, 2);
   const end = nul === -1 ? payload.length : nul;
-  const search = payload.subarray(2, end).toString("utf8");
+  const rawSearch = payload.subarray(2, end).toString("utf8");
   const rawExtensions =
     nul === -1 ? Buffer.alloc(0) : payload.subarray(end + 1);
-  const { urns, xmlBlocks } = parseQueryExtensions(rawExtensions);
+  const { search, urns: inlineUrns } = splitQuerySearch(rawSearch);
+  const { urns: extensionUrns, xmlBlocks } =
+    parseQueryExtensions(rawExtensions);
+  const urns = normalizeUrnList([...inlineUrns, ...extensionUrns]);
+  const normalizedSearch =
+    urns.length > 0 && search === "\\" ? "" : search;
   return {
-    search,
+    search: normalizedSearch,
     flagsRaw,
     requesterFirewalled: !!(flagsRaw & (1 << 14)),
     wantsXml: !!(flagsRaw & (1 << 13)),
@@ -383,6 +502,7 @@ export function encodeQueryHit(
   options: QueryHitEncodeOptions = {},
 ): Buffer {
   const parts: Buffer[] = [];
+  let ggepUsed = false;
   parts.push(Buffer.from([results.length & 0xff]));
   const head = Buffer.alloc(10);
   head.writeUInt16LE(port & 0xffff, 0);
@@ -394,7 +514,17 @@ export function encodeQueryHit(
     const item = Buffer.alloc(8);
     item.writeUInt32LE(r.index >>> 0, 0);
     item.writeUInt32LE(r.size >>> 0, 4);
-    const ext = Buffer.from(r.sha1Urn || "", "utf8");
+    const textUrns = normalizeUrnList(r.sha1Urn ? [r.sha1Urn] : []);
+    const ggepItems = ggepHashItemsForShare(
+      r,
+      textUrns,
+      !!options.ggepHashes,
+    );
+    if (ggepItems.length) ggepUsed = true;
+    const ext = buildExtensionPayload(
+      textUrns.map((urn) => Buffer.from(urn, "utf8")),
+      ggepItems,
+    );
     parts.push(item, name, Buffer.from([0x00]), ext, Buffer.from([0x00]));
   }
   parts.push(
@@ -404,6 +534,7 @@ export function encodeQueryHit(
       busy: options.busy,
       haveUploaded: options.haveUploaded,
       measuredSpeed: options.measuredSpeed,
+      ggep: ggepUsed,
     }),
   );
   parts.push(serventId);

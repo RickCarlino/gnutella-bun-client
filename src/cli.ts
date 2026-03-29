@@ -14,6 +14,7 @@ import {
   parseCli,
   printPeers,
   printResultInfo,
+  printResultMagnet,
   printResults,
   printShares,
   printStatus,
@@ -422,6 +423,18 @@ async function handleInfoCommand(
   return true;
 }
 
+async function handleMagnetCommand(
+  session: CliSession,
+  args: string[],
+): Promise<boolean> {
+  if (args.length !== 2) throw new Error("usage: magnet <resultNo>");
+  const resultNo = Number(args[1]);
+  if (!Number.isInteger(resultNo) || resultNo < 1)
+    throw new Error("usage: magnet <resultNo>");
+  printResultMagnet(session.node, resultNo, (msg) => log(session, msg));
+  return true;
+}
+
 type CommandHandler = (
   session: CliSession,
   args: string[],
@@ -475,6 +488,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   },
   browse: handleBrowseCommand,
   info: handleInfoCommand,
+  magnet: handleMagnetCommand,
   download: handleDownloadCommand,
   rescan: async (session) => {
     await session.node.refreshShares();

@@ -1,6 +1,7 @@
 import { errMsg } from "./shared";
 import { RESULT_NAME_WIDTH_MAX } from "./const";
 import type { CliNode, ParsedCli } from "./types";
+import { buildMagnetUri } from "./protocol/magnet";
 
 const SIZE_FORMAT = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
@@ -99,6 +100,23 @@ function formatResultInfoLines(result: ResultInfo): string[] {
   lines.push(`needs push: ${boolOrDash(result.needsPush)}`);
   lines.push(`busy: ${boolOrDash(result.busy)}`);
   return lines;
+}
+
+function resultMagnetUri(result: ResultInfo): string {
+  return buildMagnetUri({
+    fileName: result.fileName,
+    fileSize: result.fileSize,
+    urns: result.urns,
+    sha1Urn: result.sha1Urn,
+  });
+}
+
+function findResult(node: CliNode, resultNo: number): ResultInfo {
+  const result = node
+    .getResults()
+    .find((candidate) => candidate.resultNo === resultNo);
+  if (!result) throw new Error(`no such result ${resultNo}`);
+  return result;
 }
 
 export function printStatus(
@@ -279,11 +297,16 @@ export function printResultInfo(
   resultNo: number,
   log: (msg: string) => void,
 ): void {
-  const result = node
-    .getResults()
-    .find((candidate) => candidate.resultNo === resultNo);
-  if (!result) throw new Error(`no such result ${resultNo}`);
+  const result = findResult(node, resultNo);
   log(formatResultInfoLines(result).join("\n"));
+}
+
+export function printResultMagnet(
+  node: CliNode,
+  resultNo: number,
+  log: (msg: string) => void,
+): void {
+  log(resultMagnetUri(findResult(node, resultNo)));
 }
 
 export function parseCli(

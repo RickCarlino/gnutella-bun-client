@@ -526,6 +526,40 @@ describe("protocol node", () => {
         urns: ["urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2"],
       });
 
+      node.sendQuery(
+        "urn:bitprint:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA alpha",
+        2,
+      );
+
+      expect(queries.at(-1)).toEqual({
+        ttl: 2,
+        search:
+          "urn:bitprint:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA alpha",
+        parsedSearch: "alpha",
+        maxHits: node.config().maxResultsPerQuery,
+        urns: [
+          "urn:bitprint:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2",
+        ],
+      });
+
+      node.sendQuery(
+        "magnet:?xt=urn%3Abitprint%3ATXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&dn=alpha%20beta.bin",
+        2,
+      );
+
+      expect(queries.at(-1)).toEqual({
+        ttl: 2,
+        search:
+          "magnet:?xt=urn%3Abitprint%3ATXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&dn=alpha%20beta.bin",
+        parsedSearch: "alpha beta.bin",
+        maxHits: node.config().maxResultsPerQuery,
+        urns: [
+          "urn:bitprint:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2",
+        ],
+      });
+
       node.sendQuery("    ", 1);
 
       expect(queries.at(-1)).toEqual({
@@ -538,6 +572,8 @@ describe("protocol node", () => {
       expect(events).toEqual([
         "QUERY_SKIPPED",
         "PING_SENT",
+        "QUERY_SENT",
+        "QUERY_SENT",
         "QUERY_SENT",
         "QUERY_SENT",
         "QUERY_SENT",

@@ -40,6 +40,7 @@ import {
   sendPublishedQrpToMeshPeers,
 } from "./node_query_routing";
 import type { DescriptorHeader, HttpSession, Peer } from "./node_types";
+import { firstSha1Urn } from "./content_urn";
 import {
   initialRemoteQrpState,
   matchQuery as shareMatchesQuery,
@@ -760,6 +761,7 @@ export function respondQueryHit(
         busy: false,
         haveUploaded: false,
         measuredSpeed: true,
+        ggepHashes: q.ggepHAllowed && !!node.config().enableGgep,
       },
     );
     node.sendToPeer(
@@ -832,9 +834,7 @@ export function onQueryHit(
         fileSize: result.fileSize,
         serventIdHex: qh.serventIdHex,
         viaPeerKey: peer.key,
-        sha1Urn: result.urns.find((urn) =>
-          urn.toLowerCase().startsWith("urn:sha1:"),
-        ),
+        sha1Urn: firstSha1Urn(result.urns),
         urns: result.urns,
         metadata: result.metadata,
         vendorCode: qh.vendorCode,

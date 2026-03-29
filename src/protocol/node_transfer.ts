@@ -20,8 +20,11 @@ import {
   parseHttpHeaders,
   socketCanEnd,
 } from "./handshake";
+import { parseMagnetUri } from "./magnet";
 import type { GnutellaServent } from "./node";
 import type { ExistingGetRequest, HttpDownloadState } from "./node_types";
+import { sha1UrnFromUrn } from "./content_urn";
+import { splitQuerySearch } from "./query_search";
 
 type OutgoingQueryParts = {
   search: string;
@@ -33,30 +36,14 @@ function toError(error: unknown): Error {
 }
 
 function splitOutgoingQuery(search: string): OutgoingQueryParts {
-  if (!search.trim()) {
+  const magnet = parseMagnetUri(search);
+  if (magnet) {
     return {
-      search,
-      urns: [],
+      search: magnet.search || "",
+      urns: magnet.urns,
     };
   }
-  const parts = search.trim().split(/\s+/).filter(Boolean);
-  const textParts: string[] = [];
-  const urns: string[] = [];
-  const seenUrns = new Set<string>();
-  for (const part of parts) {
-    if (!/^urn:[^\s]+$/i.test(part)) {
-      textParts.push(part);
-      continue;
-    }
-    const key = part.toLowerCase();
-    if (seenUrns.has(key)) continue;
-    seenUrns.add(key);
-    urns.push(part);
-  }
-  return {
-    search: textParts.join(" "),
-    urns,
-  };
+  return splitQuerySearch(search);
 }
 
 function recordDownloadSuccess(
@@ -111,7 +98,8 @@ export async function handleIncomingGet(
       first,
     );
   if (match && node.config().serveUriRes) {
-    const urn = decodeURIComponent(match[2]).toLowerCase();
+    const rawUrn = decodeURIComponent(match[2]);
+    const urn = (sha1UrnFromUrn(rawUrn) || rawUrn).toLowerCase();
     const share = node.sharesByUrn.get(urn);
     if (!share) {
       socket.end("HTTP/1.0 404 Not Found\r\n\r\n");
@@ -190,7 +178,10 @@ export function buildExistingGetResponseHeaders(
       ? [`Content-Range: bytes ${range.start}-${range.end}/${size}`]
       : []),
     ...(share?.sha1Urn
-      ? [`X-Gnutella-Content-URN: ${share.sha1Urn}`]
+      ? [
+          `X-Gnutella-Content-URN: ${share.sha1Urn}`,
+          `X-Content-URN: ${share.sha1Urn}`,
+        ]
       : []),
     `Connection: ${request.keepAlive ? "Keep-Alive" : "close"}`,
     "",

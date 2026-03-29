@@ -118,6 +118,7 @@ export const CLI_HELP_LINES = [
   "query <search terms...>",
   "browse",
   "info <resultNo>",
+  "magnet <resultNo>",
   "download <resultNo> [destPath]",
   "rescan",
   "save",

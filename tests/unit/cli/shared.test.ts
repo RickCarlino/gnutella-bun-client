@@ -6,6 +6,7 @@ import {
   parseCli,
   printPeers,
   printResultInfo,
+  printResultMagnet,
   printResults,
   printShares,
   printStatus,
@@ -178,6 +179,7 @@ describe("cli_shared", () => {
     });
 
     printResultInfo(node, 12, (msg) => logs.push(msg));
+    printResultMagnet(node, 12, (msg) => logs.push(msg));
 
     expect(logs).toEqual([
       [
@@ -199,9 +201,13 @@ describe("cli_shared", () => {
         "needs push: false",
         "busy: true",
       ].join("\n"),
+      "magnet:?xt=urn%3Asha1%3ATXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2&xl=1200&dn=zz-top.bin",
     ]);
 
     expect(() => printResultInfo(node, 99, () => void 0)).toThrow(
+      "no such result 99",
+    );
+    expect(() => printResultMagnet(node, 99, () => void 0)).toThrow(
       "no such result 99",
     );
   });

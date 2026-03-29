@@ -78,6 +78,7 @@ export type QueryHitEncodeOptions = {
   busy?: boolean;
   haveUploaded?: boolean;
   measuredSpeed?: boolean;
+  ggepHashes?: boolean;
 };
 
 export type QueryEncodeOptions = {
