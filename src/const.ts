@@ -103,6 +103,7 @@ export const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 export const PROMPT_THROBBER_FRAMES = ["*", "o", ".", " "] as const;
 export const PROMPT_THROBBER_INTERVAL_MS = 120;
+export const CLI_SHUTDOWN_TIMEOUT_MS = 3000;
 
 export const CLI_HELP_LINES = [
   "help",

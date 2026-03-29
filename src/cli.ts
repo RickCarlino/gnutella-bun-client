@@ -3,6 +3,7 @@ import process from "node:process";
 import readline from "node:readline";
 
 import {
+  CLI_SHUTDOWN_TIMEOUT_MS,
   CLI_HELP_LINES,
   PROMPT_THROBBER_FRAMES,
   PROMPT_THROBBER_INTERVAL_MS,
@@ -35,6 +36,7 @@ type CliSession = {
   promptFrame: number;
   promptTimer: ReturnType<typeof setTimeout> | null;
   promptInitial: boolean;
+  shutdown: (() => Promise<void>) | null;
 };
 
 function createCliSession(node: GnutellaServent): CliSession {
@@ -46,6 +48,7 @@ function createCliSession(node: GnutellaServent): CliSession {
     promptFrame: PROMPT_THROBBER_FRAMES.length - 1,
     promptTimer: null,
     promptInitial: true,
+    shutdown: null,
   };
 }
 
@@ -488,6 +491,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
   quit: async (session) => {
+    if (session.shutdown) {
+      await session.shutdown();
+      return false;
+    }
+    session.rl?.close();
     await session.node.stop();
     return false;
   },
@@ -558,17 +566,45 @@ export async function main(argv = process.argv.slice(2)) {
   node.subscribe((event) => handleNodeEvent(session, event));
   setMonitorIgnoreTokens(session, node.config().monitorIgnoreEvents);
 
-  let shuttingDown = false;
-  const shutdown = () => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    void node.stop().then(() => process.exit(0));
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = async (): Promise<void> => {
+    if (shutdownPromise) return await shutdownPromise;
+    shutdownPromise = (async () => {
+      session.rl?.close();
+      let stopFinished = false;
+      let stopFailed = false;
+      const stopPromise = node
+        .stop()
+        .then(() => {
+          stopFinished = true;
+        })
+        .catch((e) => {
+          stopFailed = true;
+          stopFinished = true;
+          process.stderr.write(`shutdown error: ${errMsg(e)}\n`);
+        });
+      await Promise.race([stopPromise, sleep(CLI_SHUTDOWN_TIMEOUT_MS)]);
+      if (!stopFinished) {
+        process.stderr.write(
+          `shutdown timed out after ${CLI_SHUTDOWN_TIMEOUT_MS}ms; forcing exit\n`,
+        );
+      }
+      process.exit(stopFailed ? 1 : 0);
+    })();
+    return await shutdownPromise;
   };
+  session.shutdown = shutdown;
 
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => {
+    void shutdown();
+  });
+  process.on("SIGTERM", () => {
+    void shutdown();
+  });
 
   await node.start();
   const rl = startRepl(session, cli.exec);
-  rl?.on("close", shutdown);
+  rl?.on("close", () => {
+    void shutdown();
+  });
 }
