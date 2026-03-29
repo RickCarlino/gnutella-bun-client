@@ -20,6 +20,10 @@ import {
   parseHttpHeaders,
   socketCanEnd,
 } from "./handshake";
+import {
+  handleBrowseHostGet,
+  isBrowseHostGetRequest,
+} from "./browse_host";
 import { parseMagnetUri } from "./magnet";
 import type { GnutellaServent } from "./node";
 import type { ExistingGetRequest, HttpDownloadState } from "./node_types";
@@ -78,6 +82,9 @@ export async function handleIncomingGet(
   socket: net.Socket,
   head: string,
 ): Promise<boolean> {
+  if (isBrowseHostGetRequest(head)) {
+    return await handleBrowseHostGet(node, socket, head);
+  }
   const first = head.replace(/\r\n/g, "\n").split("\n", 1)[0];
   let match =
     /^(GET|HEAD)\s+\/get\/(\d+)\/(.+?)(?:\/)?\s+HTTP\/(\d+\.\d+)$/i.exec(

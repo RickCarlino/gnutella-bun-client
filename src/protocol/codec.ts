@@ -270,6 +270,10 @@ function ggepHashItemsForShare(
   return item ? [item] : [];
 }
 
+function ggepBrowseHostItem(enabled: boolean): GgepItem[] {
+  return enabled ? [{ id: "BH", data: Buffer.alloc(0) }] : [];
+}
+
 function buildExtensionPayload(
   textParts: Buffer[],
   ggepItems: GgepItem[],
@@ -502,7 +506,8 @@ export function encodeQueryHit(
   options: QueryHitEncodeOptions = {},
 ): Buffer {
   const parts: Buffer[] = [];
-  let ggepUsed = false;
+  const trailerGgepItems = ggepBrowseHostItem(!!options.browseHost);
+  let ggepUsed = trailerGgepItems.length > 0;
   parts.push(Buffer.from([results.length & 0xff]));
   const head = Buffer.alloc(10);
   head.writeUInt16LE(port & 0xffff, 0);
@@ -527,6 +532,9 @@ export function encodeQueryHit(
     );
     parts.push(item, name, Buffer.from([0x00]), ext, Buffer.from([0x00]));
   }
+  const trailerPrivateArea = trailerGgepItems.length
+    ? encodeGgep(trailerGgepItems)
+    : Buffer.alloc(0);
   parts.push(
     buildQhdBlock({
       vendorCode: options.vendorCode,
@@ -535,6 +543,7 @@ export function encodeQueryHit(
       haveUploaded: options.haveUploaded,
       measuredSpeed: options.measuredSpeed,
       ggep: ggepUsed,
+      privateArea: trailerPrivateArea,
     }),
   );
   parts.push(serventId);

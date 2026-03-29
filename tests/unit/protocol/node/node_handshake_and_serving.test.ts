@@ -7,10 +7,12 @@ import {
   buildUriResRequest,
   encodeBye,
   encodeQuery,
+  parseHeader,
   parseBye,
   parseQueryHit,
 } from "../../../../src/protocol";
 import { TYPE } from "../../../../src/const";
+import { parseGgep } from "../../../../src/protocol/ggep";
 import {
   makeHeader,
   makeNode,
@@ -809,6 +811,90 @@ describe("protocol node", () => {
       expect(Buffer.concat(badSocket.writes).toString("latin1")).toBe(
         "HTTP/1.0 400 Bad Request\r\n\r\n",
       );
+    });
+  });
+
+  test("advertises browse-host support in query hits", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const share = makeShare(
+        1,
+        path.join(dir, "FW2PQUDZ.txt"),
+        "FW2PQUDZ.txt",
+      );
+      node.shares = [share];
+      node.sharesByIndex = new Map([[share.index, share]]);
+      node.sharesByUrn = new Map([[share.sha1Urn!.toLowerCase(), share]]);
+      const peer = makePeer();
+      const sent: Array<{ payloadType: number; payload: Buffer }> = [];
+      node.sendToPeer = (
+        _peer: unknown,
+        payloadType: number,
+        _descriptorId: Buffer,
+        _ttl: number,
+        _hops: number,
+        payload: Buffer,
+      ) => {
+        sent.push({ payloadType, payload });
+      };
+      node.broadcastQuery = () => {};
+
+      node.handleDescriptor(
+        peer as never,
+        makeHeader(TYPE.QUERY, 2, 0, 0x25),
+        encodeQuery("FW2PQUDZ"),
+      );
+
+      expect(sent).toHaveLength(1);
+      expect(sent[0].payloadType).toBe(TYPE.QUERY_HIT);
+      const qh = parseQueryHit(sent[0].payload);
+      expect(parseGgep(qh.qhdPrivateArea || Buffer.alloc(0))).toEqual([
+        { id: "BH", data: Buffer.alloc(0) },
+      ]);
+    });
+  });
+
+  test("serves browse-host query hits from GET / requests", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const alpha = makeShare(1, path.join(dir, "alpha.txt"), "alpha.txt");
+      const beta = makeShare(2, path.join(dir, "beta.bin"), "beta.bin");
+      node.shares = [alpha, beta];
+      node.sharesByIndex = new Map(
+        node.shares.map((share) => [share.index, share]),
+      );
+      node.sharesByUrn = new Map(
+        node.shares.map((share) => [share.sha1Urn!.toLowerCase(), share]),
+      );
+
+      const socket = new MockSocket();
+      await node.handleIncomingGet(
+        socket as never,
+        "GET / HTTP/1.1\r\nAccept: application/x-gnutella-packets\r\n\r\n",
+      );
+
+      const raw = Buffer.concat(socket.writes);
+      const headerEnd = raw.indexOf(Buffer.from("\r\n\r\n"));
+      expect(headerEnd).toBeGreaterThanOrEqual(0);
+      const head = raw.subarray(0, headerEnd + 4).toString("latin1");
+      expect(head).toContain("HTTP/1.1 200 OK\r\n");
+      expect(head).toContain(
+        "Content-Type: application/x-gnutella-packets\r\n",
+      );
+      expect(head).toContain("X-Features: browse/1.0\r\n");
+      expect(head).toContain("Connection: close\r\n");
+      expect(socket.ended).toBe(true);
+
+      const packet = raw.subarray(headerEnd + 4);
+      const descriptor = parseHeader(packet.subarray(0, 23));
+      expect(descriptor.payloadType).toBe(TYPE.QUERY_HIT);
+      const qh = parseQueryHit(
+        packet.subarray(23, 23 + descriptor.payloadLength),
+      );
+      expect(qh.results.map((result) => result.fileName)).toEqual([
+        "alpha.txt",
+        "beta.bin",
+      ]);
     });
   });
 });

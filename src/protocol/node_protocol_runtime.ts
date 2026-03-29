@@ -762,6 +762,7 @@ export function respondQueryHit(
         haveUploaded: false,
         measuredSpeed: true,
         ggepHashes: q.ggepHAllowed && !!node.config().enableGgep,
+        browseHost: !!node.config().enableGgep,
       },
     );
     node.sendToPeer(
