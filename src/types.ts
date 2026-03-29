@@ -134,8 +134,9 @@ export type ShareFile = {
   rel: string;
   abs: string;
   size: number;
-  sha1: Buffer;
-  sha1Urn: string;
+  mtimeMs: number;
+  sha1?: Buffer;
+  sha1Urn?: string;
   keywords: string[];
 };
 

@@ -23,6 +23,26 @@ import {
   withTempDir,
 } from "./helpers";
 
+async function waitForShareHashes(node: {
+  getShares(): Array<{ sha1Urn?: string }>;
+  shareHashTask: Promise<void> | null;
+}): Promise<void> {
+  for (let i = 0; i < 200; i++) {
+    if (
+      node.shareHashTask === null &&
+      node
+        .getShares()
+        .every((share) =>
+          /^urn:sha1:[A-Z2-7]{32}$/.test(share.sha1Urn || ""),
+        )
+    ) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("timed out waiting for background share hashing");
+}
+
 describe("protocol node", () => {
   test("accepts non-empty ping payloads and NUL-terminates Bye messages", async () => {
     await withTempDir(async (dir) => {
@@ -122,6 +142,8 @@ describe("protocol node", () => {
           path.join(dir, "beta.bin"),
           "beta.bin",
         );
+        delete shareA.sha1;
+        delete shareA.sha1Urn;
         node.shares = [shareA, shareB];
         node.sharesByIndex = new Map(
           node.shares.map((share) => [share.index, share]),
@@ -154,11 +176,13 @@ describe("protocol node", () => {
         );
         expect(sent).toHaveLength(1);
         expect(sent[0].payloadType).toBe(TYPE.QUERY_HIT);
-        expect(
-          parseQueryHit(sent[0].payload).results.map(
-            (result) => result.fileName,
-          ),
-        ).toEqual(["alpha.txt", "beta.bin"]);
+        const results = parseQueryHit(sent[0].payload).results;
+        expect(results.map((result) => result.fileName)).toEqual([
+          "alpha.txt",
+          "beta.bin",
+        ]);
+        expect(results[0]?.urns).toEqual([]);
+        expect(results[1]?.urns).toEqual([shareB.sha1Urn!]);
 
         sent.length = 0;
         node.handleDescriptor(
@@ -202,9 +226,10 @@ describe("protocol node", () => {
     });
   });
 
-  test("refreshes shares with SHA-1 URNs, keywords, and a searchable QRP table", async () => {
+  test("refreshes shares immediately and reuses cached SHA-1 URNs on the next scan", async () => {
     await withTempDir(async (dir) => {
-      const node = makeNode(path.join(dir, "protocol.json"));
+      const configPath = path.join(dir, "protocol.json");
+      const node = makeNode(configPath);
       await fs.mkdir(path.join(node.config().downloadsDir, "nested"), {
         recursive: true,
       });
@@ -231,11 +256,6 @@ describe("protocol node", () => {
         "nested/cats-track.txt",
         "nested/second-file.bin",
       ]);
-      expect(
-        node
-          .getShares()
-          .every((share) => /^urn:sha1:[A-Z2-7]{32}$/.test(share.sha1Urn)),
-      ).toBe(true);
       expect(node.getShares()[0]?.keywords).toEqual(
         expect.arrayContaining(["cafe", "au", "lait", "txt"]),
       );
@@ -249,6 +269,25 @@ describe("protocol node", () => {
       expect(node.qrpTable.matchesQuery("cat track")).toBe(true);
       expect(node.qrpTable.matchesQuery("missing-token")).toBe(false);
       expect(node.totalSharedKBytes()).toBe(1);
+
+      await waitForShareHashes(node);
+      expect(
+        node
+          .getShares()
+          .every((share) =>
+            /^urn:sha1:[A-Z2-7]{32}$/.test(share.sha1Urn || ""),
+          ),
+      ).toBe(true);
+
+      const cachedNode = makeNode(configPath);
+      await cachedNode.refreshShares();
+      expect(
+        cachedNode
+          .getShares()
+          .every((share) =>
+            /^urn:sha1:[A-Z2-7]{32}$/.test(share.sha1Urn || ""),
+          ),
+      ).toBe(true);
     });
   });
 
@@ -665,10 +704,12 @@ describe("protocol node", () => {
       await fs.writeFile(share.abs, "hello", "utf8");
       node.shares = [share];
       node.sharesByIndex = new Map([[share.index, share]]);
-      node.sharesByUrn = new Map([[share.sha1Urn.toLowerCase(), share]]);
+      const shareUrn = share.sha1Urn;
+      expect(shareUrn).toBeDefined();
+      node.sharesByUrn = new Map([[shareUrn!.toLowerCase(), share]]);
 
       const headSocket = new MockSocket();
-      const headRequest = buildUriResRequest(share.sha1Urn, 2).replace(
+      const headRequest = buildUriResRequest(shareUrn!, 2).replace(
         /^GET/,
         "HEAD",
       );
@@ -682,7 +723,7 @@ describe("protocol node", () => {
       expect(headResponse).toContain("Content-Length: 3\r\n");
       expect(headResponse).toContain("Connection: Keep-Alive\r\n");
       expect(headResponse).toContain(
-        `X-Gnutella-Content-URN: ${share.sha1Urn}\r\n`,
+        `X-Gnutella-Content-URN: ${shareUrn}\r\n`,
       );
       expect(headResponse).not.toContain("hello");
 

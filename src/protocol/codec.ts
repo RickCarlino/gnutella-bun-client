@@ -394,7 +394,7 @@ export function encodeQueryHit(
     const item = Buffer.alloc(8);
     item.writeUInt32LE(r.index >>> 0, 0);
     item.writeUInt32LE(r.size >>> 0, 4);
-    const ext = Buffer.from(r.sha1Urn, "utf8");
+    const ext = Buffer.from(r.sha1Urn || "", "utf8");
     parts.push(item, name, Buffer.from([0x00]), ext, Buffer.from([0x00]));
   }
   parts.push(

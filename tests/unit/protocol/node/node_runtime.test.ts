@@ -454,7 +454,9 @@ describe("protocol node", () => {
       await fs.writeFile(share.abs, "hello", "utf8");
       node.shares = [share];
       node.sharesByIndex = new Map([[share.index, share]]);
-      node.sharesByUrn = new Map([[share.sha1Urn.toLowerCase(), share]]);
+      const shareUrn = share.sha1Urn;
+      expect(shareUrn).toBeDefined();
+      node.sharesByUrn = new Map([[shareUrn!.toLowerCase(), share]]);
 
       const socket = new MockSocket();
       node.startHttpSession(
@@ -466,7 +468,7 @@ describe("protocol node", () => {
       socket.emit(
         "data",
         Buffer.from(
-          `HEAD /uri-res/N2R?${share.sha1Urn} HTTP/1.1\r\nConnection: close\r\n\r\n`,
+          `HEAD /uri-res/N2R?${shareUrn} HTTP/1.1\r\nConnection: close\r\n\r\n`,
           "latin1",
         ),
       );

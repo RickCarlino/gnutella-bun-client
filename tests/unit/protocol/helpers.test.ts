@@ -15,6 +15,7 @@ describe("protocol helper coverage", () => {
       rel: "alpha-track.txt",
       abs: "/tmp/alpha-track.txt",
       size: 5,
+      mtimeMs: 1,
       sha1: Buffer.alloc(20, 1),
       sha1Urn: "urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       keywords: ["alpha", "track"],

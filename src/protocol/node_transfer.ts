@@ -189,7 +189,9 @@ export function buildExistingGetResponseHeaders(
     ...(range.partial
       ? [`Content-Range: bytes ${range.start}-${range.end}/${size}`]
       : []),
-    ...(share ? [`X-Gnutella-Content-URN: ${share.sha1Urn}`] : []),
+    ...(share?.sha1Urn
+      ? [`X-Gnutella-Content-URN: ${share.sha1Urn}`]
+      : []),
     `Connection: ${request.keepAlive ? "Keep-Alive" : "close"}`,
     "",
     "",

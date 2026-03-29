@@ -108,19 +108,23 @@ export async function ensureDir(p: string): Promise<void> {
   }
 }
 
-export async function walkFiles(root: string): Promise<string[]> {
-  const out: string[] = [];
-  async function rec(dir: string) {
-    const ents = await fsp.readdir(dir, { withFileTypes: true });
-    ents.sort((a, b) => a.name.localeCompare(b.name));
-    for (const ent of ents) {
-      const abs = path.join(dir, ent.name);
-      if (ent.isDirectory()) await rec(abs);
-      else if (ent.isFile()) out.push(abs);
-    }
+async function* walkFilesRecursive(
+  dir: string,
+): AsyncGenerator<string, void, void> {
+  const ents = await fsp.readdir(dir, { withFileTypes: true });
+  ents.sort((a, b) => a.name.localeCompare(b.name));
+  for (const ent of ents) {
+    const abs = path.join(dir, ent.name);
+    if (ent.isDirectory()) yield* walkFilesRecursive(abs);
+    else if (ent.isFile()) yield abs;
   }
-  if (await fileExists(root)) await rec(root);
-  return out;
+}
+
+export async function* walkFilesIter(
+  root: string,
+): AsyncGenerator<string, void, void> {
+  if (!(await fileExists(root))) return;
+  yield* walkFilesRecursive(root);
 }
 
 export function ipToBytesBE(ip: string): Buffer {

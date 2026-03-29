@@ -34,6 +34,7 @@ import * as state from "./node_state";
 import * as tlsSupport from "./node_tls";
 import * as topology from "./node_topology";
 import * as transfer from "./node_transfer";
+import type { ShareIndexEntry } from "./share_index";
 import type { Peer } from "./node_types";
 import { QrpTable } from "./qrp";
 
@@ -183,6 +184,10 @@ export class GnutellaServent {
   shares: ShareFile[] = [];
   sharesByIndex = new Map<number, ShareFile>();
   sharesByUrn = new Map<string, ShareFile>();
+  shareIndexEntries = new Map<string, ShareIndexEntry>();
+  shareIndexLoaded = false;
+  shareRefreshGeneration = 0;
+  shareHashTask: Promise<void> | null = null;
   seen = new Map<string, number>();
   pingRoutes = new Map<string, Route | typeof LOCAL_ROUTE>();
   queryRoutes = new Map<string, Route | typeof LOCAL_ROUTE>();

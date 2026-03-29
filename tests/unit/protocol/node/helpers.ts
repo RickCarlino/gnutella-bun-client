@@ -108,6 +108,7 @@ export function makeShare(
     rel: name,
     abs: absPath,
     size: 5,
+    mtimeMs: index,
     sha1: Buffer.alloc(20, index),
     sha1Urn: `urn:sha1:${suffix}`,
     keywords: stem,

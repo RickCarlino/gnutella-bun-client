@@ -311,6 +311,7 @@ export function matchQuery(
   share: Pick<ShareFile, "name" | "sha1Urn" | "keywords">,
 ): boolean {
   if (q.urns.length) {
+    if (!share.sha1Urn) return false;
     const urnSet = new Set(q.urns.map((x) => x.toLowerCase()));
     if (!urnSet.has(share.sha1Urn.toLowerCase())) return false;
   }
