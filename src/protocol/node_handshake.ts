@@ -317,7 +317,7 @@ export function handleUndecidedProbe(
     node.rejectLegacyInboundProbe(raw);
     return;
   }
-  if (raw.startsWith("GET ") || raw.startsWith("HEAD ")) {
+  if (/^(GET|HEAD|POST)\s+/i.test(raw)) {
     node.startHttpProbeSession(ctx, raw);
     return;
   }

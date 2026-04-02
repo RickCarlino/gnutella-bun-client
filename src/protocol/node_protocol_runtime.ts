@@ -31,7 +31,11 @@ import {
   parseQueryHit,
   parseRouteTableUpdate,
 } from "./codec";
-import { findHeaderEnd, socketCanEnd } from "./handshake";
+import {
+  findHeaderEnd,
+  parseHttpHeaders,
+  socketCanEnd,
+} from "./handshake";
 import type { GnutellaServent } from "./node";
 import {
   broadcastPingToPeers,
@@ -39,7 +43,12 @@ import {
   routeQueryToPeers,
   sendPublishedQrpToMeshPeers,
 } from "./node_query_routing";
-import type { DescriptorHeader, HttpSession, Peer } from "./node_types";
+import type {
+  DescriptorHeader,
+  HttpSession,
+  HttpSessionRequest,
+  Peer,
+} from "./node_types";
 import { firstSha1Urn } from "./content_urn";
 import {
   initialRemoteQrpState,
@@ -47,6 +56,7 @@ import {
   QrpTable,
   splitSearchTerms,
 } from "./qrp";
+import { applyRtcCapabilityToHit, queryHitRtcGgepItems } from "./node_rtc";
 
 function descriptorTypeName(payloadType: number): string {
   return TYPE_NAME[payloadType] || `0x${payloadType.toString(16)}`;
@@ -56,6 +66,8 @@ type RoutedDescriptor = Pick<
   DescriptorHeader,
   "descriptorId" | "descriptorIdHex" | "payloadType" | "ttl" | "hops"
 >;
+
+const MAX_HTTP_REQUEST_BODY_BYTES = 256 * 1024;
 
 export function attachPeer(
   node: GnutellaServent,
@@ -230,18 +242,61 @@ export function shiftHttpSessionHead(
   return head;
 }
 
+function httpRequestContentLength(head: string): number {
+  const raw = parseHttpHeaders(head)["content-length"];
+  if (!raw) return 0;
+  const length = Number(raw);
+  if (!Number.isInteger(length) || length < 0) {
+    throw new Error("invalid http content-length");
+  }
+  if (length > MAX_HTTP_REQUEST_BODY_BYTES) {
+    throw new Error("http request body too large");
+  }
+  return length;
+}
+
+export function shiftHttpSessionRequest(
+  node: GnutellaServent,
+  session: HttpSession,
+): HttpSessionRequest | undefined {
+  const cut = node.pendingHttpSessionHeadEnd(session);
+  if (cut === -1) return undefined;
+  const raw = session.buf.toString("latin1");
+  const head = raw.slice(0, cut);
+  const contentLength = httpRequestContentLength(head);
+  if (session.buf.length < cut + contentLength) return undefined;
+  const body = Buffer.from(session.buf.subarray(cut, cut + contentLength));
+  session.buf = session.buf.subarray(cut + contentLength);
+  return { head, body };
+}
+
 export async function processHttpSessionRequests(
   node: GnutellaServent,
   session: HttpSession,
   closeSession: () => void,
   nextHead?: string,
 ): Promise<void> {
-  let head = nextHead;
+  let pendingHead = nextHead;
+  let queued: HttpSessionRequest | undefined;
   while (!session.closed) {
-    head ||= node.shiftHttpSessionHead(session);
-    if (!head) return;
-    const keepAlive = await node.handleIncomingGet(session.socket, head);
-    head = undefined;
+    if (!queued && pendingHead) {
+      const contentLength = httpRequestContentLength(pendingHead);
+      if (session.buf.length < contentLength) return;
+      queued = {
+        head: pendingHead,
+        body: Buffer.from(session.buf.subarray(0, contentLength)),
+      };
+      session.buf = session.buf.subarray(contentLength);
+      pendingHead = undefined;
+    }
+    queued ||= node.shiftHttpSessionRequest(session);
+    if (!queued) return;
+    const keepAlive = await node.handleIncomingGet(
+      session.socket,
+      queued.head,
+      queued.body,
+    );
+    queued = undefined;
     if (keepAlive) continue;
     closeSession();
     if (socketCanEnd(session.socket)) session.socket.end();
@@ -763,6 +818,7 @@ export function respondQueryHit(
         measuredSpeed: true,
         ggepHashes: q.ggepHAllowed && !!node.config().enableGgep,
         browseHost: !!node.config().enableGgep,
+        privateGgepItems: queryHitRtcGgepItems(node, q, hdr.descriptorId),
       },
     );
     node.sendToPeer(
@@ -842,6 +898,7 @@ export function onQueryHit(
         needsPush: qh.flagPush,
         busy: qh.flagBusy,
       };
+      applyRtcCapabilityToHit(qh, hit);
       node.lastResults.push(hit);
       node.emitEvent({ type: "QUERY_RESULT", at: ts(), hit });
     }

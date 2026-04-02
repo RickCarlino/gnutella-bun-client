@@ -8,7 +8,8 @@ import {
   CONNECT_TIMEOUT_MS,
   DATA_DOWNLOADS_DIRNAME,
   DEFAULT_LISTEN_HOST,
-  DEFAULT_LISTEN_PORT,
+  DEFAULT_LISTEN_PORT_MAX,
+  DEFAULT_LISTEN_PORT_MIN,
   DEFAULT_PING_TTL,
   DEFAULT_QUERY_ROUTING_VERSION,
   DEFAULT_QUERY_TTL,
@@ -47,12 +48,16 @@ import {
   unique,
 } from "../shared";
 import type { ConfigDoc, PeerState, RuntimeConfig } from "../types";
+import { normalizeRtcRendezvousUrl } from "./rtc_rendezvous";
 
 type PersistedConfig = {
   listen_host?: unknown;
   listen_port?: unknown;
   advertised_host?: unknown;
   advertised_port?: unknown;
+  rtc?: unknown;
+  rtc_rendezvous_urls?: unknown;
+  rtc_stun_servers?: unknown;
   ultrapeer?: unknown;
   max_connections?: unknown;
   max_ultrapeer_connections?: unknown;
@@ -256,6 +261,29 @@ function normalizedPositivePort(value: unknown): number | undefined {
     : undefined;
 }
 
+function defaultListenPortForServentId(serventIdHex: string): number {
+  const span = DEFAULT_LISTEN_PORT_MAX - DEFAULT_LISTEN_PORT_MIN + 1;
+  if (!/^[0-9a-f]{32}$/i.test(serventIdHex)) {
+    return DEFAULT_LISTEN_PORT_MIN;
+  }
+  const seed = Number.parseInt(serventIdHex.slice(0, 8), 16);
+  return DEFAULT_LISTEN_PORT_MIN + (seed % span);
+}
+
+function normalizedAdvertisedHost(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : undefined;
+}
+
+function runtimeRtcRendezvousUrls(value: unknown): string[] {
+  return normalizedRtcRendezvousUrls(value) || [];
+}
+
+function runtimeRtcStunServers(value: unknown): string[] {
+  return normalizedRtcStunServers(value) || [];
+}
+
 export function runtimeConfigFor(
   configPath: string,
   doc: Pick<ConfigDoc, "config" | "state">,
@@ -263,18 +291,22 @@ export function runtimeConfigFor(
   const dataDir = resolveDataDir(configPath, {
     data_dir: doc.config.dataDir,
   });
+  const defaultListenPort = defaultListenPortForServentId(
+    doc.state.serventIdHex,
+  );
   const monitorIgnoreEvents =
     normalizedMonitorIgnoreEvents(doc.config.monitorIgnoreEvents) || [];
   return {
     listenHost: normalizedListenHost(doc.config.listenHost),
     listenPort:
-      normalizedPositivePort(doc.config.listenPort) || DEFAULT_LISTEN_PORT,
-    advertisedHost:
-      typeof doc.config.advertisedHost === "string" &&
-      doc.config.advertisedHost.trim()
-        ? doc.config.advertisedHost.trim()
-        : undefined,
+      normalizedPositivePort(doc.config.listenPort) || defaultListenPort,
+    advertisedHost: normalizedAdvertisedHost(doc.config.advertisedHost),
     advertisedPort: normalizedPositivePort(doc.config.advertisedPort),
+    rtc: doc.config.rtc === true,
+    rtcRendezvousUrls: runtimeRtcRendezvousUrls(
+      doc.config.rtcRendezvousUrls,
+    ),
+    rtcStunServers: runtimeRtcStunServers(doc.config.rtcStunServers),
     ultrapeer: doc.config.ultrapeer === true,
     monitorIgnoreEvents,
     nodeMode: doc.config.ultrapeer === true ? "ultrapeer" : "leaf",
@@ -340,6 +372,13 @@ export function configDocForRuntime(
     listenPort: config.listenPort,
     advertisedHost: config.advertisedHost,
     advertisedPort: config.advertisedPort,
+    rtc: config.rtc,
+    rtcRendezvousUrls: config.rtcRendezvousUrls.length
+      ? [...config.rtcRendezvousUrls]
+      : undefined,
+    rtcStunServers: config.rtcStunServers.length
+      ? [...config.rtcStunServers]
+      : undefined,
     ultrapeer: config.ultrapeer,
     maxConnections: config.maxConnections,
     maxUltrapeerConnections: config.maxUltrapeerConnections,
@@ -370,17 +409,42 @@ function positiveIntegerOrUndefined(value: unknown): number | undefined {
     : undefined;
 }
 
-function normalizedMonitorIgnoreEvents(
+function normalizedStringArray(
   value: unknown,
+  normalize: (value: string) => string | undefined,
 ): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const normalized = unique(
     value
       .filter((entry): entry is string => typeof entry === "string")
-      .map((entry) => entry.trim().toUpperCase())
-      .filter((entry) => entry.length > 0),
+      .map((entry) => normalize(entry))
+      .filter((entry): entry is string => !!entry),
   );
   return normalized.length ? normalized : undefined;
+}
+
+function normalizedMonitorIgnoreEvents(
+  value: unknown,
+): string[] | undefined {
+  return normalizedStringArray(value, (entry) => {
+    const normalized = entry.trim().toUpperCase();
+    return normalized || undefined;
+  });
+}
+
+function normalizedRtcRendezvousUrls(
+  value: unknown,
+): string[] | undefined {
+  return normalizedStringArray(value, (entry) =>
+    normalizeRtcRendezvousUrl(entry),
+  );
+}
+
+function normalizedRtcStunServers(value: unknown): string[] | undefined {
+  return normalizedStringArray(value, (entry) => {
+    const normalized = entry.trim();
+    return /^stun:/i.test(normalized) ? normalized : undefined;
+  });
 }
 
 function normalizedServentIdHex(value: unknown): string | undefined {
@@ -391,10 +455,14 @@ function normalizedServentIdHex(value: unknown): string | undefined {
 
 export function defaultDoc(configPath: string): ConfigDoc {
   const base = path.dirname(path.resolve(configPath));
+  const serventIdHex = randomDocServentId();
   return {
     config: {
       listenHost: DEFAULT_LISTEN_HOST,
-      listenPort: DEFAULT_LISTEN_PORT,
+      listenPort: defaultListenPortForServentId(serventIdHex),
+      rtc: false,
+      rtcRendezvousUrls: [],
+      rtcStunServers: [],
       ultrapeer: false,
       maxConnections: MAX_CONNECTIONS,
       maxUltrapeerConnections: MAX_ULTRAPEER_CONNECTIONS,
@@ -402,7 +470,7 @@ export function defaultDoc(configPath: string): ConfigDoc {
       dataDir: base,
     },
     state: {
-      serventIdHex: randomDocServentId(),
+      serventIdHex,
       peers: {},
     },
   };
@@ -428,6 +496,13 @@ function applyOptionalLoadedConfig(
     config.advertised_port,
   );
   if (advertisedPort) doc.config.advertisedPort = advertisedPort;
+  doc.config.rtc = config.rtc === true;
+  const rtcRendezvousUrls = normalizedRtcRendezvousUrls(
+    config.rtc_rendezvous_urls,
+  );
+  if (rtcRendezvousUrls) doc.config.rtcRendezvousUrls = rtcRendezvousUrls;
+  const rtcStunServers = normalizedRtcStunServers(config.rtc_stun_servers);
+  if (rtcStunServers) doc.config.rtcStunServers = rtcStunServers;
   doc.config.ultrapeer = config.ultrapeer === true;
   const maxConnections = positiveIntegerOrUndefined(
     config.max_connections,
@@ -457,6 +532,9 @@ function buildLoadedDoc(
   const defaults = defaultDoc(configPath);
   const config = parsed.config || {};
   const state = parsed.state || {};
+  const serventIdHex =
+    normalizedServentIdHex(state.servent_id_hex) ||
+    defaults.state.serventIdHex;
   const doc: ConfigDoc = {
     config: {
       listenHost:
@@ -464,7 +542,10 @@ function buildLoadedDoc(
         defaults.config.listenHost,
       listenPort:
         positiveIntegerOrUndefined(config.listen_port) ||
-        defaults.config.listenPort,
+        defaultListenPortForServentId(serventIdHex),
+      rtc: config.rtc === true,
+      rtcRendezvousUrls: [],
+      rtcStunServers: [],
       ultrapeer: config.ultrapeer === true,
       maxConnections: defaults.config.maxConnections,
       maxUltrapeerConnections: defaults.config.maxUltrapeerConnections,
@@ -472,9 +553,7 @@ function buildLoadedDoc(
       dataDir: resolveDataDir(configPath, config),
     },
     state: {
-      serventIdHex:
-        normalizedServentIdHex(state.servent_id_hex) ||
-        defaults.state.serventIdHex,
+      serventIdHex,
       peers: normalizePeerState(state.peers),
     },
   };
@@ -510,6 +589,13 @@ export async function writeDoc(
   const cleanConfig: PersistedConfig = {
     listen_host: runtime.listenHost,
     listen_port: runtime.listenPort,
+    rtc: runtime.rtc,
+    rtc_rendezvous_urls: runtime.rtcRendezvousUrls.length
+      ? [...runtime.rtcRendezvousUrls]
+      : undefined,
+    rtc_stun_servers: runtime.rtcStunServers.length
+      ? [...runtime.rtcStunServers]
+      : undefined,
     ultrapeer: runtime.ultrapeer,
     max_connections: runtime.maxConnections,
     max_ultrapeer_connections: runtime.maxUltrapeerConnections,

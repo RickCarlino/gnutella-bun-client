@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import net from "node:net";
 import path from "node:path";
 
@@ -37,6 +38,7 @@ import * as transfer from "./node_transfer";
 import type { ShareIndexEntry } from "./share_index";
 import type { Peer } from "./node_types";
 import { QrpTable } from "./qrp";
+import { createRtcRendezvousState } from "./rtc_rendezvous";
 
 type BoundMethods<T extends Record<string, unknown>> = {
   [K in keyof T as T[K] extends (...args: infer AllArgs) => unknown
@@ -208,6 +210,9 @@ export class GnutellaServent {
   gwebCacheReportTimer?: NodeJS.Timeout;
   gwebCacheReportAttempted = false;
   gwebCacheReported = false;
+  rtcCookieSecret = randomBytes(32);
+  rtcRendezvousState = createRtcRendezvousState();
+  rtcRendezvousPollInflight = new Set<string>();
   learnedAdvertisedHost?: string;
   pendingAdvertisedHost?: string;
   pendingAdvertisedSubnets = new Set<string>();
@@ -314,6 +319,7 @@ export class GnutellaServent {
   declare startHttpSession: ProtocolRuntimeMethods["startHttpSession"];
   declare pendingHttpSessionHeadEnd: ProtocolRuntimeMethods["pendingHttpSessionHeadEnd"];
   declare shiftHttpSessionHead: ProtocolRuntimeMethods["shiftHttpSessionHead"];
+  declare shiftHttpSessionRequest: ProtocolRuntimeMethods["shiftHttpSessionRequest"];
   declare processHttpSessionRequests: ProtocolRuntimeMethods["processHttpSessionRequests"];
   declare drainHttpSession: ProtocolRuntimeMethods["drainHttpSession"];
   declare consumePeerBuffer: ProtocolRuntimeMethods["consumePeerBuffer"];
@@ -364,6 +370,7 @@ export class GnutellaServent {
   declare downloadResult: TransferMethods["downloadResult"];
   declare sendPing: TransferMethods["sendPing"];
   declare sendQuery: TransferMethods["sendQuery"];
+  declare pollRtcRendezvousOffers: TransferMethods["pollRtcRendezvousOffers"];
 
   constructor(
     configPath: string,

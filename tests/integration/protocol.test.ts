@@ -11,6 +11,7 @@ import {
   writeDoc,
 } from "../../src/protocol";
 import { withFakeNet } from "../helpers/fake_net";
+import { hostedRtcRendezvousUrl } from "../../src/protocol/rtc_rendezvous";
 import { sleep } from "../../src/shared";
 import type { GnutellaEvent, RuntimeConfig } from "../../src/types";
 
@@ -102,6 +103,11 @@ type MeshNode = {
 type Mesh = {
   nodes: Record<MeshNodeName, MeshNode>;
   badPort: number;
+};
+
+type RtcPair = {
+  A: MeshNode;
+  B: MeshNode;
 };
 
 async function writeShare(
@@ -294,6 +300,105 @@ async function withFakeMesh<T>(
   return await withFakeNet(async () => await withMesh(fn));
 }
 
+async function createRtcPair(root: string): Promise<RtcPair> {
+  const [aPort, bPort] = await Promise.all([getFreePort(), getFreePort()]);
+  const rendezvousUrl = hostedRtcRendezvousUrl("127.0.0.1", aPort);
+  const A = await createMeshNode(root, "A", {
+    listenPort: aPort,
+    advertisedPort: aPort,
+    advertisedSpeedKBps: 256,
+    peers: [],
+    shares: {},
+  });
+  const B = await createMeshNode(root, "B", {
+    listenPort: bPort,
+    advertisedPort: bPort,
+    advertisedSpeedKBps: 128,
+    peers: [],
+    shares: {
+      "resume-b.bin": "resume-from-b",
+    },
+  });
+  overrideRuntimeConfig(A.node, {
+    rtc: true,
+    downloadTimeoutMs: 3_000,
+    pushWaitMs: 3_000,
+  });
+  overrideRuntimeConfig(B.node, {
+    rtc: true,
+    rtcRendezvousUrls: [rendezvousUrl],
+    downloadTimeoutMs: 3_000,
+    pushWaitMs: 3_000,
+  });
+  return { A, B };
+}
+
+async function withRtcPair<T>(
+  fn: (pair: RtcPair) => Promise<T>,
+): Promise<T> {
+  return await withTempDir(async (root) => {
+    const { A, B } = await createRtcPair(root);
+    const noBootstrap = async () => ({
+      attemptedPeers: [],
+      fetchedFromCaches: false,
+      addedPeers: [],
+      queriedCaches: [],
+      errors: [],
+    });
+    A.node.collaborators.bootstrapClient.connectBootstrapPeers =
+      noBootstrap;
+    B.node.collaborators.bootstrapClient.connectBootstrapPeers =
+      noBootstrap;
+    A.node.tlsEnabled = () => false;
+    B.node.tlsEnabled = () => false;
+    try {
+      await B.node.start();
+      await A.node.start();
+      await A.node.connectToPeer(`127.0.0.1:${B.listenPort}`);
+      await waitFor(
+        () => A.node.peerCount() === 1 && B.node.peerCount() === 1,
+        "A-B rtc test peers to come online",
+        5_000,
+        () =>
+          JSON.stringify({
+            aPeers: A.node.getPeers(),
+            bPeers: B.node.getPeers(),
+            aEvents: A.events.slice(-8),
+            bEvents: B.events.slice(-8),
+          }),
+      );
+      return await fn({ A, B });
+    } finally {
+      await Promise.allSettled([A.node.stop(), B.node.stop()]);
+    }
+  });
+}
+
+async function queryRtcHit(
+  node: MeshNode,
+  search: string,
+): Promise<NonNullable<ReturnType<typeof newResults>[number]>> {
+  const resultsBefore = node.node.getResults().length;
+  node.node.sendQuery(search, 2);
+  await waitFor(
+    () =>
+      newResults(node, resultsBefore).some(
+        (hit) => hit.fileName === "resume-b.bin" && !!hit.rtc,
+      ),
+    "A to receive an rtc-capable query hit from B",
+    5_000,
+    () =>
+      JSON.stringify({
+        results: newResults(node, resultsBefore),
+      }),
+  );
+  const rtcHit = newResults(node, resultsBefore).find(
+    (hit) => hit.fileName === "resume-b.bin" && !!hit.rtc,
+  );
+  if (!rtcHit) throw new Error("missing rtc-capable query hit");
+  return rtcHit;
+}
+
 describe("Integration suite (0.6)", () => {
   test("connects peers added while already running", async () => {
     await withFakeNet(async () => {
@@ -469,6 +574,147 @@ describe("Integration suite (0.6)", () => {
       );
     });
   });
+
+  test("uses rendezvous-signaled rtc downloads when enabled on both peers", async () => {
+    await withRtcPair(async ({ A, B }) => {
+      const rtcHit = await queryRtcHit(A, "resume-b");
+      const queryResultCountBefore = eventsOfType(
+        A,
+        "QUERY_RESULT",
+      ).length;
+      expect(rtcHit.rtc).toEqual(
+        expect.objectContaining({
+          cookieHex: expect.stringMatching(/^[0-9a-f]{40}$/),
+          rendezvousEndpoints: [
+            {
+              host: "127.0.0.1",
+              port: A.listenPort,
+            },
+          ],
+        }),
+      );
+
+      const rtcDest = path.join(A.downloadsDir, "resume-b-rtc.bin");
+      await A.node.downloadResult(rtcHit.resultNo, rtcDest);
+      await expect(fs.readFile(rtcDest, "utf8")).resolves.toBe(
+        "resume-from-b",
+      );
+      expect(eventsOfType(A, "QUERY_RESULT")).toHaveLength(
+        queryResultCountBefore,
+      );
+
+      const rtcDownloads = eventsOfType(A, "DOWNLOAD_SUCCEEDED").filter(
+        (event) => event.mode === "rtc",
+      );
+      expect(rtcDownloads).toContainEqual(
+        expect.objectContaining({
+          fileName: "resume-b.bin",
+          destPath: rtcDest,
+          remoteHost: "127.0.0.1",
+          remotePort: B.listenPort,
+        }),
+      );
+    });
+  });
+
+  test("serves rtc rendezvous on the main listen port", async () => {
+    await withRtcPair(async ({ B }) => {
+      const response = await readSocketResponse(
+        B.listenPort,
+        [
+          `GET /rtc/offer?target=${B.node.getServentIdHex()} HTTP/1.1`,
+          "Host: 127.0.0.1",
+          "Connection: close",
+          "",
+          "",
+        ].join("\r\n"),
+      );
+      expect(response).toContain("204 No Content");
+    });
+  });
+
+  test("repeats rtc downloads over rendezvous signaling", async () => {
+    await withRtcPair(async ({ A, B }) => {
+      const rtcHit = await queryRtcHit(A, "resume-b");
+      const queryResultCountBefore = eventsOfType(
+        A,
+        "QUERY_RESULT",
+      ).length;
+      const downloadCountBefore = eventsOfType(
+        A,
+        "DOWNLOAD_SUCCEEDED",
+      ).length;
+      const attempts = 3;
+
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const destPath = path.join(
+          A.downloadsDir,
+          `resume-b-rtc-localhost-${attempt}.bin`,
+        );
+        await A.node.downloadResult(rtcHit.resultNo, destPath);
+        await expect(fs.readFile(destPath, "utf8")).resolves.toBe(
+          "resume-from-b",
+        );
+      }
+      expect(eventsOfType(A, "QUERY_RESULT")).toHaveLength(
+        queryResultCountBefore,
+      );
+
+      const recentDownloads = eventsOfType(A, "DOWNLOAD_SUCCEEDED").slice(
+        downloadCountBefore,
+      );
+      expect(recentDownloads).toHaveLength(attempts);
+      expect(recentDownloads).toEqual(
+        Array.from({ length: attempts }, (_, attempt) =>
+          expect.objectContaining({
+            mode: "rtc",
+            fileName: "resume-b.bin",
+            destPath: path.join(
+              A.downloadsDir,
+              `resume-b-rtc-localhost-${attempt}.bin`,
+            ),
+            remoteHost: "127.0.0.1",
+            remotePort: B.listenPort,
+          }),
+        ),
+      );
+    });
+  }, 15_000);
+
+  test("falls back to direct when rtc offer validation fails", async () => {
+    await withRtcPair(async ({ A, B }) => {
+      const rtcHit = await queryRtcHit(A, "resume-b");
+      if (!rtcHit.rtc) throw new Error("missing rtc capability");
+      rtcHit.rtc.cookieHex = "00".repeat(20);
+
+      const downloadCountBefore = eventsOfType(
+        A,
+        "DOWNLOAD_SUCCEEDED",
+      ).length;
+      const destPath = path.join(
+        A.downloadsDir,
+        "resume-b-rtc-invalid-cookie.bin",
+      );
+
+      await A.node.downloadResult(rtcHit.resultNo, destPath);
+      await expect(fs.readFile(destPath, "utf8")).resolves.toBe(
+        "resume-from-b",
+      );
+
+      const recentDownloads = eventsOfType(A, "DOWNLOAD_SUCCEEDED").slice(
+        downloadCountBefore,
+      );
+      expect(recentDownloads).toEqual([
+        expect.objectContaining({
+          mode: "direct",
+          fileName: "resume-b.bin",
+          destPath,
+          remoteHost: "127.0.0.1",
+          remotePort: B.listenPort,
+        }),
+      ]);
+    });
+  }, 12_000);
 
   test("covers range downloads, direct resume, push fallback, and persisted state", async () => {
     await withFakeMesh(async ({ nodes, badPort }) => {

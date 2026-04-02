@@ -85,6 +85,11 @@ function makePeer(label = "1.2.3.4:6346"): Peer {
   };
 }
 
+function expectReasonableRandomListenPort(port: number): void {
+  expect(port).toBeGreaterThanOrEqual(20000);
+  expect(port).toBeLessThanOrEqual(29999);
+}
+
 describe("protocol config and public helpers", () => {
   test("creates, persists, and normalizes config documents", async () => {
     await withTempDir(async (dir) => {
@@ -98,8 +103,15 @@ describe("protocol config and public helpers", () => {
       expect(created.config.dataDir).toBe(path.join(dir, "nested"));
       expect(created.config.advertisedHost).toBeUndefined();
       expect(created.config.advertisedPort).toBeUndefined();
-      expect(createdRuntime.maxConnections).toBe(12);
-      expect(createdRuntime.maxUltrapeerConnections).toBe(4);
+      expect(created.config.rtc).toBe(false);
+      expect(created.config.rtcRendezvousUrls).toBeUndefined();
+      expect(created.config.rtcStunServers).toBeUndefined();
+      expect(createdRuntime.rtc).toBe(false);
+      expect(createdRuntime.rtcRendezvousUrls).toEqual([]);
+      expect(createdRuntime.rtcStunServers).toEqual([]);
+      expectReasonableRandomListenPort(createdRuntime.listenPort);
+      expect(createdRuntime.maxConnections).toBe(64);
+      expect(createdRuntime.maxUltrapeerConnections).toBe(64);
       expect(createdRuntime.maxLeafConnections).toBe(64);
       await expect(fs.stat(configPath)).resolves.toBeDefined();
       await expect(
@@ -138,9 +150,12 @@ describe("protocol config and public helpers", () => {
       expect(loaded.config.advertisedHost).toBeUndefined();
       expect(loaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
       expect(persisted.config.listen_host).toBe("0.0.0.0");
-      expect(persisted.config.listen_port).toBe(6346);
-      expect(persisted.config.max_connections).toBe(12);
-      expect(persisted.config.max_ultrapeer_connections).toBe(4);
+      expect(persisted.config.listen_port).toBe(createdRuntime.listenPort);
+      expect(persisted.config.rtc).toBe(false);
+      expect(persisted.config.rtc_rendezvous_urls).toBeUndefined();
+      expect(persisted.config.rtc_stun_servers).toBeUndefined();
+      expect(persisted.config.max_connections).toBe(64);
+      expect(persisted.config.max_ultrapeer_connections).toBe(64);
       expect(persisted.config.max_leaf_connections).toBe(64);
       expect(persisted.config.data_dir).toBe(path.join(dir, "nested"));
       expect(persisted.config.log_ignore).toBeUndefined();
@@ -151,6 +166,92 @@ describe("protocol config and public helpers", () => {
       await expect(
         fs.stat(loadedRuntime.downloadsDir),
       ).resolves.toBeDefined();
+    });
+  });
+
+  test("persists the experimental rtc toggle explicitly", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      doc.config.rtc = true;
+
+      await writeDoc(configPath, doc);
+      const loaded = await loadDoc(configPath);
+      const runtime = new GnutellaServent(configPath, loaded).config();
+      const persisted = JSON.parse(
+        await fs.readFile(configPath, "utf8"),
+      ) as {
+        config: Record<string, unknown>;
+      };
+
+      expect(loaded.config.rtc).toBe(true);
+      expect(runtime.rtc).toBe(true);
+      expect(persisted.config.rtc).toBe(true);
+    });
+  });
+
+  test("loads and persists rtc stun server config", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      doc.config.rtc = true;
+      doc.config.rtcStunServers = [
+        "stun:stun-a.example.net:3478",
+        " turn:ignored.example.net:3478 ",
+        "stun:stun-b.example.net:3478",
+      ];
+
+      await writeDoc(configPath, doc);
+      const loaded = await loadDoc(configPath);
+      const runtime = new GnutellaServent(configPath, loaded).config();
+      const persisted = JSON.parse(
+        await fs.readFile(configPath, "utf8"),
+      ) as {
+        config: Record<string, unknown>;
+      };
+
+      expect(loaded.config.rtcStunServers).toEqual([
+        "stun:stun-a.example.net:3478",
+        "stun:stun-b.example.net:3478",
+      ]);
+      expect(runtime.rtcStunServers).toEqual([
+        "stun:stun-a.example.net:3478",
+        "stun:stun-b.example.net:3478",
+      ]);
+      expect(persisted.config.rtc_stun_servers).toEqual([
+        "stun:stun-a.example.net:3478",
+        "stun:stun-b.example.net:3478",
+      ]);
+    });
+  });
+
+  test("loads and persists rtc rendezvous server config", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      doc.config.rtc = true;
+      doc.config.rtcRendezvousUrls = [
+        " http://127.0.0.1:9999/ ",
+        "ftp://ignored.example.net",
+        "https://signal.example.net/room",
+      ];
+
+      await writeDoc(configPath, doc);
+      const loaded = await loadDoc(configPath);
+      const runtime = new GnutellaServent(configPath, loaded).config();
+      const persisted = JSON.parse(
+        await fs.readFile(configPath, "utf8"),
+      ) as {
+        config: Record<string, unknown>;
+      };
+
+      expect(loaded.config.rtcRendezvousUrls).toEqual([
+        "http://127.0.0.1:9999",
+      ]);
+      expect(runtime.rtcRendezvousUrls).toEqual(["http://127.0.0.1:9999"]);
+      expect(persisted.config.rtc_rendezvous_urls).toEqual([
+        "http://127.0.0.1:9999",
+      ]);
     });
   });
 
@@ -352,12 +453,12 @@ describe("protocol config and public helpers", () => {
 
       const camelLoaded = await loadDoc(configPath);
       expect(camelLoaded.config.listenHost).toBe("0.0.0.0");
-      expect(camelLoaded.config.listenPort).toBe(6346);
+      expectReasonableRandomListenPort(camelLoaded.config.listenPort);
       expect(camelLoaded.config.advertisedHost).toBeUndefined();
       expect(camelLoaded.config.advertisedPort).toBeUndefined();
       expect(camelLoaded.config.dataDir).toBe(dir);
-      expect(camelLoaded.config.maxConnections).toBe(12);
-      expect(camelLoaded.config.maxUltrapeerConnections).toBe(4);
+      expect(camelLoaded.config.maxConnections).toBe(64);
+      expect(camelLoaded.config.maxUltrapeerConnections).toBe(64);
       expect(camelLoaded.config.maxLeafConnections).toBe(64);
       expect(camelLoaded.config.monitorIgnoreEvents).toBeUndefined();
       expect(camelLoaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);

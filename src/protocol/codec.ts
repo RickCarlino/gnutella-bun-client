@@ -457,7 +457,10 @@ export function encodeQuery(
       ...urns.map((urn) => Buffer.from(urn, "utf8")),
       ...(options.xmlBlocks || []).map((xml) => Buffer.from(xml, "utf8")),
     ],
-    ggepHashItemsFromUrns(urns, !!options.ggepHAllowed),
+    [
+      ...ggepHashItemsFromUrns(urns, !!options.ggepHAllowed),
+      ...(options.ggepItems || []),
+    ],
   );
   const out = Buffer.alloc(2 + s.length + 1 + ext.length);
   out.writeUInt16BE(buildModernQueryFlags(options), 0);
@@ -506,7 +509,10 @@ export function encodeQueryHit(
   options: QueryHitEncodeOptions = {},
 ): Buffer {
   const parts: Buffer[] = [];
-  const trailerGgepItems = ggepBrowseHostItem(!!options.browseHost);
+  const trailerGgepItems = [
+    ...ggepBrowseHostItem(!!options.browseHost),
+    ...(options.privateGgepItems || []),
+  ];
   let ggepUsed = trailerGgepItems.length > 0;
   parts.push(Buffer.from([results.length & 0xff]));
   const head = Buffer.alloc(10);

@@ -3,6 +3,7 @@ import net from "node:net";
 import zlib from "node:zlib";
 
 import type { PeerCapabilities, PeerRole, RemoteQrpState } from "../types";
+import type { GgepItem } from "./ggep";
 
 export type ProbeCtx = {
   socket: net.Socket;
@@ -19,6 +20,11 @@ export type HttpSession = {
   buf: Buffer;
   busy: boolean;
   closed: boolean;
+};
+
+export type HttpSessionRequest = {
+  head: string;
+  body: Buffer;
 };
 
 export type ExistingGetRequest = {
@@ -80,6 +86,7 @@ export type QueryHitEncodeOptions = {
   measuredSpeed?: boolean;
   ggepHashes?: boolean;
   browseHost?: boolean;
+  privateGgepItems?: GgepItem[];
 };
 
 export type QueryEncodeOptions = {
@@ -91,4 +98,5 @@ export type QueryEncodeOptions = {
   maxHits?: number;
   urns?: string[];
   xmlBlocks?: string[];
+  ggepItems?: GgepItem[];
 };

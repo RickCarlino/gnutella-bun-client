@@ -11,6 +11,11 @@
     "types": ["node", "bun-types"],
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["gnutella.ts", "src/**/*.ts", "tests/**/*.ts"],
+  "include": [
+    "bin/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "tests/**/*.ts"
+  ],
   "exclude": ["dist", "node_modules"]
 }
