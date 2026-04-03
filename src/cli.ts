@@ -376,7 +376,54 @@ function logConnectResult(
         `peer ${result.peer} saved for retry; connect failed: ${result.message}`,
       );
       return;
+    case "blocked":
+      log(session, `peer ${result.peer} is blocked`);
+      return;
   }
+}
+
+function pluralize(value: number, noun: string): string {
+  return `${value} ${noun}${value === 1 ? "" : "s"}`;
+}
+
+function logBlockedIps(session: CliSession): void {
+  const blockedIps = session.node.getBlockedIps();
+  if (!blockedIps.length) {
+    log(session, "no blocked IPs");
+    return;
+  }
+  log(session, blockedIps.join("\n"));
+}
+
+function logBlockResult(
+  session: CliSession,
+  result: ReturnType<GnutellaServent["blockIp"]>,
+): void {
+  if (result.status === "already-blocked") {
+    log(session, `ip ${result.ip} already blocked`);
+    return;
+  }
+  const details: string[] = [];
+  if (result.droppedPeers > 0)
+    details.push(pluralize(result.droppedPeers, "peer"));
+  if (result.removedKnownPeers > 0)
+    details.push(pluralize(result.removedKnownPeers, "known peer"));
+  if (!details.length) {
+    log(session, `ip ${result.ip} blocked`);
+    return;
+  }
+  log(session, `ip ${result.ip} blocked; removed ${details.join(", ")}`);
+}
+
+function logUnblockResult(
+  session: CliSession,
+  result: ReturnType<GnutellaServent["unblockIp"]>,
+): void {
+  if (result.status === "not-blocked") {
+    log(session, `ip ${result.ip} is not blocked`);
+    return;
+  }
+  log(session, `ip ${result.ip} unblocked`);
 }
 
 async function handleConnectCommand(
@@ -463,6 +510,21 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   },
   peers: async (session) => {
     printPeers(session.node, (msg) => log(session, msg));
+    return true;
+  },
+  blocked: async (session, args) => {
+    if (args.length !== 1) throw new Error("usage: blocked");
+    logBlockedIps(session);
+    return true;
+  },
+  block: async (session, args) => {
+    if (args.length !== 2) throw new Error("usage: block <ipv4>");
+    logBlockResult(session, session.node.blockIp(args[1]));
+    return true;
+  },
+  unblock: async (session, args) => {
+    if (args.length !== 2) throw new Error("usage: unblock <ipv4>");
+    logUnblockResult(session, session.node.unblockIp(args[1]));
     return true;
   },
   connect: handleConnectCommand,

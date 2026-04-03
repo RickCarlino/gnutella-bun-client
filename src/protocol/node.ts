@@ -234,6 +234,8 @@ export class GnutellaServent {
   declare peerInfo: StateMethods["peerInfo"];
   declare peerCount: StateMethods["peerCount"];
   declare config: StateMethods["config"];
+  declare getBlockedIps: StateMethods["getBlockedIps"];
+  declare isBlockedHost: StateMethods["isBlockedHost"];
   declare configuredAdvertisedHost: StateMethods["configuredAdvertisedHost"];
   declare currentAdvertisedPort: StateMethods["currentAdvertisedPort"];
   declare currentAdvertisedHost: StateMethods["currentAdvertisedHost"];
@@ -248,10 +250,13 @@ export class GnutellaServent {
   declare addKnownPeer: StateMethods["addKnownPeer"];
   declare updateKnownPeerLastSeen: StateMethods["updateKnownPeerLastSeen"];
   declare peerSeenTimestamp: StateMethods["peerSeenTimestamp"];
+  declare pruneBlockedKnownPeers: StateMethods["pruneBlockedKnownPeers"];
   declare pruneExpiredKnownPeers: StateMethods["pruneExpiredKnownPeers"];
   declare shouldBootstrapFreshPeers: StateMethods["shouldBootstrapFreshPeers"];
   declare rememberPeerAddresses: StateMethods["rememberPeerAddresses"];
   declare markPeerSeenIfStable: StateMethods["markPeerSeenIfStable"];
+  declare blockIp: StateMethods["blockIp"];
+  declare unblockIp: StateMethods["unblockIp"];
   declare scheduleGWebCacheReport: StateMethods["scheduleGWebCacheReport"];
   declare refreshGWebCacheReport: StateMethods["refreshGWebCacheReport"];
   declare announceSelfToGWebCaches: StateMethods["announceSelfToGWebCaches"];

@@ -196,6 +196,7 @@ export type ConfigDoc = {
     listenPort: number;
     advertisedHost?: string;
     advertisedPort?: number;
+    blockedIps?: string[];
     rtc: boolean;
     rtcRendezvousUrls?: string[];
     rtcStunServers?: string[];
@@ -217,6 +218,7 @@ export type RuntimeConfig = {
   listenPort: number;
   advertisedHost?: string;
   advertisedPort?: number;
+  blockedIps: string[];
   rtc: boolean;
   rtcRendezvousUrls: string[];
   rtcStunServers: string[];
@@ -436,6 +438,23 @@ export type GnutellaServentOptions = {
 
 export type ConnectPeerResult = {
   peer: string;
-  status: "connected" | "already-connected" | "dialing" | "saved";
+  status:
+    | "connected"
+    | "already-connected"
+    | "dialing"
+    | "saved"
+    | "blocked";
   message?: string;
+};
+
+export type BlockIpResult = {
+  ip: string;
+  status: "blocked" | "already-blocked";
+  droppedPeers: number;
+  removedKnownPeers: number;
+};
+
+export type UnblockIpResult = {
+  ip: string;
+  status: "unblocked" | "not-blocked";
 };

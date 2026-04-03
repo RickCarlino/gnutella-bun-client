@@ -30,6 +30,10 @@ function clearProbeListeners(ctx: ProbeCtx): void {
   if (ctx.onError) ctx.socket.off("error", ctx.onError);
 }
 
+function blockedProbeMessage(ip: string): string {
+  return `blocked IP ${ip}`;
+}
+
 function handshakePeerLabel(socket: net.Socket): string {
   return `${socket.remoteAddress || "?"}:${socket.remotePort || "?"}`;
 }
@@ -200,6 +204,7 @@ export function selectTryPeers(
     const addr = parsePeer(peerSpec);
     if (!addr) return;
     const peer = normalizePeer(addr.host, addr.port);
+    if (node.isBlockedHost(addr.host)) return;
     if (node.isSelfPeer(addr.host, addr.port) || seen.has(peer)) return;
     seen.add(peer);
     out.push(peer);
@@ -272,6 +277,24 @@ export function handleProbe(
   node: GnutellaServent,
   socket: net.Socket,
 ): void {
+  const blockedIp = normalizeIpv4(socket.remoteAddress);
+  if (blockedIp && node.isBlockedHost(blockedIp)) {
+    const message = blockedProbeMessage(blockedIp);
+    emitHandshakeDebug(
+      node,
+      "inbound",
+      "blocked",
+      handshakePeerLabel(socket),
+      message,
+    );
+    node.emitEvent({
+      type: "PROBE_REJECTED",
+      at: ts(),
+      message,
+    });
+    socket.destroy();
+    return;
+  }
   const ctx: ProbeCtx = {
     socket,
     buf: Buffer.alloc(0),
@@ -651,6 +674,8 @@ export async function connectPeer06(
 ): Promise<void> {
   const c = node.config();
   const target = normalizePeer(host, port);
+  if (node.isBlockedHost(host))
+    throw new Error(`peer ${target} is blocked`);
   emitHandshakeDebug(
     node,
     "outbound",
@@ -688,6 +713,12 @@ export async function connectPeer06(
     socket.setTimeout(timeoutMs, () => fail(new Error("connect timeout")));
 
     const onConnect = () => {
+      if (node.isBlockedHost(socket.remoteAddress)) {
+        fail(
+          new Error(`blocked IP ${normalizeIpv4(socket.remoteAddress)}`),
+        );
+        return;
+      }
       const headers = node.baseHandshakeHeaders(socket.remoteAddress);
       if (node.tlsEnabled() && node.canUpgradeSocketToTls(socket))
         headers.upgrade = node.tlsUpgradeToken();

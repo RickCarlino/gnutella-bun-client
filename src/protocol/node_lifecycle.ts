@@ -193,6 +193,8 @@ export async function connectPeer(
 ): Promise<void> {
   const connectTimeoutMs = timeoutMs ?? node.config().connectTimeoutMs;
   const target = normalizePeer(host, port);
+  if (node.isBlockedHost(host))
+    throw new Error(`peer ${target} is blocked`);
   if (node.dialing.has(target)) return;
   for (const peer of node.peers.values()) {
     if (peer.dialTarget === target) return;

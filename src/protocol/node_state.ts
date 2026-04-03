@@ -21,6 +21,7 @@ import {
   walkFilesIter,
 } from "../shared";
 import type {
+  BlockIpResult,
   ConnectPeerResult,
   DownloadRecord,
   GnutellaEvent,
@@ -32,12 +33,14 @@ import type {
   RuntimeConfig,
   SearchHit,
   ShareFile,
+  UnblockIpResult,
 } from "../types";
 import { observedAdvertisedHostCandidate } from "./handshake";
 import {
   appendPathSuffix,
   configDocForRuntime,
   detectLocalAdvertisedIpv4,
+  filterBlockedPeerState,
   peerStateEquals,
   peerStateTargets,
   rememberPeerInState,
@@ -144,6 +147,101 @@ export function peerCount(node: GnutellaServent): number {
 
 export function config(node: GnutellaServent): RuntimeConfig {
   return node.runtimeConfig;
+}
+
+export function getBlockedIps(node: GnutellaServent): string[] {
+  return [...node.config().blockedIps];
+}
+
+export function isBlockedHost(
+  node: GnutellaServent,
+  host: string | undefined,
+): boolean {
+  const normalized = normalizeIpv4(host);
+  return !!normalized && node.config().blockedIps.includes(normalized);
+}
+
+function peerHosts(peer: Peer): Set<string> {
+  const out = new Set<string>();
+  const push = (host: string | undefined) => {
+    const normalized = normalizeIpv4(host);
+    if (normalized) out.add(normalized);
+  };
+  push(peer.socket.remoteAddress);
+  const remote = parsePeer(peer.remoteLabel);
+  if (remote) push(remote.host);
+  const dialTarget = parsePeer(peer.dialTarget || "");
+  if (dialTarget) push(dialTarget.host);
+  if (peer.capabilities.listenIp) push(peer.capabilities.listenIp.host);
+  return out;
+}
+
+function dropPeersMatchingIp(node: GnutellaServent, ip: string): number {
+  let droppedPeers = 0;
+  for (const peer of [...node.peers.values()]) {
+    if (!peerHosts(peer).has(ip)) continue;
+    droppedPeers++;
+    peer.socket.destroy(new Error(`blocked IP ${ip}`));
+  }
+  return droppedPeers;
+}
+
+export function pruneBlockedKnownPeers(node: GnutellaServent): number {
+  const current = trimPeerState(node.persistedState.peers);
+  const filtered = filterBlockedPeerState(
+    current,
+    node.config().blockedIps,
+  );
+  const removedKnownPeers =
+    peerStateTargets(current).length - peerStateTargets(filtered).length;
+  if (peerStateEquals(current, filtered)) return 0;
+  node.persistedState.peers = filtered;
+  node.gwebCacheBootstrapState.lastExhaustedPeerSet = undefined;
+  return removedKnownPeers;
+}
+
+export function blockIp(
+  node: GnutellaServent,
+  host: string,
+): BlockIpResult {
+  const ip = normalizeIpv4(host);
+  if (!ip) throw new Error("expected IPv4 address");
+  if (node.config().blockedIps.includes(ip)) {
+    return {
+      ip,
+      status: "already-blocked",
+      droppedPeers: 0,
+      removedKnownPeers: 0,
+    };
+  }
+  node.updateRuntimeConfig({
+    blockedIps: unique([...node.config().blockedIps, ip]),
+  });
+  const removedKnownPeers = node.pruneBlockedKnownPeers();
+  const droppedPeers = dropPeersMatchingIp(node, ip);
+  return {
+    ip,
+    status: "blocked",
+    droppedPeers,
+    removedKnownPeers,
+  };
+}
+
+export function unblockIp(
+  node: GnutellaServent,
+  host: string,
+): UnblockIpResult {
+  const ip = normalizeIpv4(host);
+  if (!ip) throw new Error("expected IPv4 address");
+  if (!node.config().blockedIps.includes(ip)) {
+    return { ip, status: "not-blocked" };
+  }
+  node.updateRuntimeConfig({
+    blockedIps: node
+      .config()
+      .blockedIps.filter((candidate) => candidate !== ip),
+  });
+  return { ip, status: "unblocked" };
 }
 
 export function configuredAdvertisedHost(
@@ -399,6 +497,7 @@ export async function save(node: GnutellaServent): Promise<void> {
   const c = node.config();
   for (const peer of node.peers.values()) node.markPeerSeenIfStable(peer);
   node.pruneExpiredKnownPeers();
+  node.pruneBlockedKnownPeers();
   node.persistedState.peers = trimPeerState(node.persistedState.peers);
   node.persistedState.serventIdHex = node.serventId.toString("hex");
   node.doc.config = configDocForRuntime(node.runtimeConfig);
@@ -488,6 +587,7 @@ function rememberKnownPeer(
   timestamp: number,
 ): void {
   if (!host || !port || node.isSelfPeer(host, port)) return;
+  if (node.isBlockedHost(host)) return;
   node.persistedState.peers = rememberPeerInState(
     node.persistedState.peers,
     normalizePeer(host, port),
@@ -531,7 +631,9 @@ export function pruneExpiredKnownPeers(
   const timestamp = nowSec ?? node.peerSeenTimestamp();
   const current = trimPeerState(node.persistedState.peers);
   const filtered = Object.fromEntries(
-    sortPeerStateEntries(current).filter(
+    sortPeerStateEntries(
+      filterBlockedPeerState(current, node.config().blockedIps),
+    ).filter(
       ([, lastSeen]) =>
         lastSeen === 0 || timestamp - lastSeen <= MAX_PEER_AGE_SEC,
     ),
@@ -543,7 +645,10 @@ export function pruneExpiredKnownPeers(
 }
 
 export function shouldBootstrapFreshPeers(node: GnutellaServent): boolean {
-  const peers = trimPeerState(node.persistedState.peers);
+  const peers = filterBlockedPeerState(
+    trimPeerState(node.persistedState.peers),
+    node.config().blockedIps,
+  );
   const timestamps = Object.values(peers);
   return timestamps.length > 0 && timestamps.every((value) => value === 0);
 }
@@ -671,6 +776,8 @@ export async function connectToPeer(
   const peer = normalizePeer(addr.host, addr.port);
   if (node.isSelfPeer(addr.host, addr.port))
     throw new Error("cannot add self as peer");
+  if (node.isBlockedHost(addr.host))
+    return { peer, status: "blocked", message: `blocked IP ${addr.host}` };
 
   node.addKnownPeer(addr.host, addr.port);
 
@@ -797,7 +904,12 @@ export function clearResults(node: GnutellaServent): void {
 }
 
 export function getKnownPeers(node: GnutellaServent): string[] {
-  return peerStateTargets(node.persistedState.peers);
+  return peerStateTargets(
+    filterBlockedPeerState(
+      node.persistedState.peers,
+      node.config().blockedIps,
+    ),
+  );
 }
 
 export function getDownloads(node: GnutellaServent): DownloadRecord[] {

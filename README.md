@@ -68,6 +68,7 @@ These settings are the ones most people will care about first:
 | `config.data_dir`                                                                           | Root directory for runtime data; shared and downloaded files both live under `<data_dir>/downloads` |
 | `config.listen_port`                                                                        | Local TCP port to listen on                                                                         |
 | `config.advertised_host` / `config.advertised_port`                                         | Only set these if other peers should reach you at a different external address or port              |
+| `config.blocked_ips`                                                                        | IPv4 addresses to refuse, forget, and stop dialing                                                  |
 | `config.ultrapeer`                                                                          | `false` for a lighter client, `true` for a larger relay-style node                                  |
 | `config.max_connections`, `config.max_ultrapeer_connections`, `config.max_leaf_connections` | Peer connection caps                                                                                |
 | `config.log_ignore`                                                                         | Categories to suppress when `monitor` is enabled                                                    |
@@ -92,6 +93,9 @@ The prompt shows:
 | -------------------------------- | ------------------------------------------------ |
 | `help`                           | Show the available commands                      |
 | `status`                         | Show peer, share, result, and known-peer counts  |
+| `blocked`                        | List blocked IPv4 addresses                      |
+| `block <ipv4>`                   | Block an IPv4 address and drop matching peers    |
+| `unblock <ipv4>`                 | Remove an IPv4 address from the block list       |
 | `connect <host:port>`            | Connect to a peer and remember it for later runs |
 | `peers`                          | List connected peers                             |
 | `shares`                         | List shared files                                |

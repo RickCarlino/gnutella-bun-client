@@ -55,6 +55,7 @@ type PersistedConfig = {
   listen_port?: unknown;
   advertised_host?: unknown;
   advertised_port?: unknown;
+  blocked_ips?: unknown;
   rtc?: unknown;
   rtc_rendezvous_urls?: unknown;
   rtc_stun_servers?: unknown;
@@ -168,6 +169,25 @@ export function trimPeerState(
 ): PeerState {
   if (limit <= 0) return {};
   return Object.fromEntries(sortPeerStateEntries(peers).slice(0, limit));
+}
+
+export function filterBlockedPeerState(
+  peers: PeerState,
+  blockedIps: readonly string[],
+): PeerState {
+  const blocked = new Set(
+    blockedIps
+      .map((entry) => normalizeIpv4(entry))
+      .filter((entry): entry is string => !!entry),
+  );
+  if (!blocked.size) return trimPeerState(peers);
+  return Object.fromEntries(
+    sortPeerStateEntries(peers).filter(([peer]) => {
+      const addr = parsePeer(peer);
+      const host = normalizeIpv4(addr?.host);
+      return !host || !blocked.has(host);
+    }),
+  );
 }
 
 export function rememberPeerInState(
@@ -302,6 +322,7 @@ export function runtimeConfigFor(
       normalizedPositivePort(doc.config.listenPort) || defaultListenPort,
     advertisedHost: normalizedAdvertisedHost(doc.config.advertisedHost),
     advertisedPort: normalizedPositivePort(doc.config.advertisedPort),
+    blockedIps: normalizedBlockedIps(doc.config.blockedIps) || [],
     rtc: doc.config.rtc === true,
     rtcRendezvousUrls: runtimeRtcRendezvousUrls(
       doc.config.rtcRendezvousUrls,
@@ -372,6 +393,9 @@ export function configDocForRuntime(
     listenPort: config.listenPort,
     advertisedHost: config.advertisedHost,
     advertisedPort: config.advertisedPort,
+    blockedIps: config.blockedIps.length
+      ? [...config.blockedIps]
+      : undefined,
     rtc: config.rtc,
     rtcRendezvousUrls: config.rtcRendezvousUrls.length
       ? [...config.rtcRendezvousUrls]
@@ -432,6 +456,10 @@ function normalizedMonitorIgnoreEvents(
   });
 }
 
+function normalizedBlockedIps(value: unknown): string[] | undefined {
+  return normalizedStringArray(value, (entry) => normalizeIpv4(entry));
+}
+
 function normalizedRtcRendezvousUrls(
   value: unknown,
 ): string[] | undefined {
@@ -460,6 +488,7 @@ export function defaultDoc(configPath: string): ConfigDoc {
     config: {
       listenHost: DEFAULT_LISTEN_HOST,
       listenPort: defaultListenPortForServentId(serventIdHex),
+      blockedIps: [],
       rtc: false,
       rtcRendezvousUrls: [],
       rtcStunServers: [],
@@ -486,16 +515,10 @@ async function ensureDocRuntimeDirs(
   await ensureDir(runtime.downloadsDir);
 }
 
-function applyOptionalLoadedConfig(
+function applyLoadedRtcConfig(
   doc: ConfigDoc,
   config: PersistedConfig,
 ): void {
-  const advertisedHost = optionalNonEmptyString(config.advertised_host);
-  if (advertisedHost) doc.config.advertisedHost = advertisedHost;
-  const advertisedPort = positiveIntegerOrUndefined(
-    config.advertised_port,
-  );
-  if (advertisedPort) doc.config.advertisedPort = advertisedPort;
   doc.config.rtc = config.rtc === true;
   const rtcRendezvousUrls = normalizedRtcRendezvousUrls(
     config.rtc_rendezvous_urls,
@@ -503,7 +526,12 @@ function applyOptionalLoadedConfig(
   if (rtcRendezvousUrls) doc.config.rtcRendezvousUrls = rtcRendezvousUrls;
   const rtcStunServers = normalizedRtcStunServers(config.rtc_stun_servers);
   if (rtcStunServers) doc.config.rtcStunServers = rtcStunServers;
-  doc.config.ultrapeer = config.ultrapeer === true;
+}
+
+function applyLoadedPeerLimits(
+  doc: ConfigDoc,
+  config: PersistedConfig,
+): void {
   const maxConnections = positiveIntegerOrUndefined(
     config.max_connections,
   );
@@ -518,11 +546,35 @@ function applyOptionalLoadedConfig(
   );
   if (maxLeafConnections)
     doc.config.maxLeafConnections = maxLeafConnections;
+}
+
+function applyLoadedMonitorConfig(
+  doc: ConfigDoc,
+  config: PersistedConfig,
+): void {
   const monitorIgnoreEvents = normalizedMonitorIgnoreEvents(
     config.log_ignore,
   );
   if (monitorIgnoreEvents)
     doc.config.monitorIgnoreEvents = monitorIgnoreEvents;
+}
+
+function applyOptionalLoadedConfig(
+  doc: ConfigDoc,
+  config: PersistedConfig,
+): void {
+  const advertisedHost = optionalNonEmptyString(config.advertised_host);
+  if (advertisedHost) doc.config.advertisedHost = advertisedHost;
+  const advertisedPort = positiveIntegerOrUndefined(
+    config.advertised_port,
+  );
+  if (advertisedPort) doc.config.advertisedPort = advertisedPort;
+  const blockedIps = normalizedBlockedIps(config.blocked_ips);
+  if (blockedIps) doc.config.blockedIps = blockedIps;
+  applyLoadedRtcConfig(doc, config);
+  doc.config.ultrapeer = config.ultrapeer === true;
+  applyLoadedPeerLimits(doc, config);
+  applyLoadedMonitorConfig(doc, config);
 }
 
 function buildLoadedDoc(
@@ -543,6 +595,7 @@ function buildLoadedDoc(
       listenPort:
         positiveIntegerOrUndefined(config.listen_port) ||
         defaultListenPortForServentId(serventIdHex),
+      blockedIps: [],
       rtc: config.rtc === true,
       rtcRendezvousUrls: [],
       rtcStunServers: [],
@@ -558,6 +611,10 @@ function buildLoadedDoc(
     },
   };
   applyOptionalLoadedConfig(doc, config);
+  doc.state.peers = filterBlockedPeerState(
+    doc.state.peers,
+    doc.config.blockedIps || [],
+  );
   return doc;
 }
 
@@ -579,13 +636,9 @@ export async function loadDoc(configPath: string): Promise<ConfigDoc> {
   return doc;
 }
 
-export async function writeDoc(
-  configPath: string,
-  doc: ConfigDoc,
-): Promise<void> {
-  const full = path.resolve(configPath);
-  const tmp = `${full}.tmp`;
-  const runtime = runtimeConfigFor(full, doc);
+function persistedConfigForRuntime(
+  runtime: RuntimeConfig,
+): PersistedConfig {
   const cleanConfig: PersistedConfig = {
     listen_host: runtime.listenHost,
     listen_port: runtime.listenPort,
@@ -602,14 +655,6 @@ export async function writeDoc(
     max_leaf_connections: runtime.maxLeafConnections,
     data_dir: runtime.dataDir,
   };
-  const cleanState: PersistedState = {
-    servent_id_hex:
-      typeof doc.state.serventIdHex === "string" &&
-      /^[0-9a-f]{32}$/i.test(doc.state.serventIdHex)
-        ? doc.state.serventIdHex.toLowerCase()
-        : randomDocServentId(),
-    peers: trimPeerState(doc.state.peers),
-  };
   if (runtime.advertisedHost)
     cleanConfig.advertised_host = runtime.advertisedHost;
   if (
@@ -618,11 +663,34 @@ export async function writeDoc(
   ) {
     cleanConfig.advertised_port = runtime.advertisedPort;
   }
+  if (runtime.blockedIps.length)
+    cleanConfig.blocked_ips = runtime.blockedIps;
   if (runtime.monitorIgnoreEvents.length)
     cleanConfig.log_ignore = runtime.monitorIgnoreEvents;
+  return cleanConfig;
+}
+
+function persistedStateForDoc(doc: ConfigDoc): PersistedState {
+  return {
+    servent_id_hex:
+      typeof doc.state.serventIdHex === "string" &&
+      /^[0-9a-f]{32}$/i.test(doc.state.serventIdHex)
+        ? doc.state.serventIdHex.toLowerCase()
+        : randomDocServentId(),
+    peers: trimPeerState(doc.state.peers),
+  };
+}
+
+export async function writeDoc(
+  configPath: string,
+  doc: ConfigDoc,
+): Promise<void> {
+  const full = path.resolve(configPath);
+  const tmp = `${full}.tmp`;
+  const runtime = runtimeConfigFor(full, doc);
   const clean: PersistedDoc = {
-    config: cleanConfig,
-    state: cleanState,
+    config: persistedConfigForRuntime(runtime),
+    state: persistedStateForDoc(doc),
   };
   await fsp.writeFile(tmp, `${JSON.stringify(clean, null, 2)}\n`, "utf8");
   await fsp.rename(tmp, full);
