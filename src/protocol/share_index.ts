@@ -5,6 +5,7 @@ import { ensureDir, fileExists } from "../shared";
 
 const SHARE_INDEX_FILENAME = "share-index.json";
 const SHARE_INDEX_VERSION = 1;
+const shareIndexWriteQueues = new Map<string, Promise<void>>();
 
 export type ShareIndexEntry = {
   rel: string;
@@ -21,6 +22,26 @@ type ShareIndexManifest = {
 
 function shareIndexPath(dataDir: string): string {
   return path.join(dataDir, SHARE_INDEX_FILENAME);
+}
+
+function shareIndexTmpPath(file: string): string {
+  return `${file}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+}
+
+async function queueShareIndexWrite(
+  file: string,
+  task: () => Promise<void>,
+): Promise<void> {
+  const previous = shareIndexWriteQueues.get(file) || Promise.resolve();
+  const current = previous.catch(() => void 0).then(task);
+  shareIndexWriteQueues.set(file, current);
+  try {
+    await current;
+  } finally {
+    if (shareIndexWriteQueues.get(file) === current) {
+      shareIndexWriteQueues.delete(file);
+    }
+  }
 }
 
 function objectRecord(
@@ -92,13 +113,19 @@ export async function writeShareIndex(
 ): Promise<void> {
   await ensureDir(dataDir);
   const file = shareIndexPath(dataDir);
-  const tmp = `${file}.tmp`;
   const manifest = {
     version: SHARE_INDEX_VERSION,
     files: [...entries.values()].sort((a, b) =>
       a.rel.localeCompare(b.rel),
     ),
   };
-  await fsp.writeFile(tmp, JSON.stringify(manifest, null, 2));
-  await fsp.rename(tmp, file);
+  await queueShareIndexWrite(file, async () => {
+    const tmp = shareIndexTmpPath(file);
+    try {
+      await fsp.writeFile(tmp, JSON.stringify(manifest, null, 2));
+      await fsp.rename(tmp, file);
+    } finally {
+      await fsp.unlink(tmp).catch(() => void 0);
+    }
+  });
 }

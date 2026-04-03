@@ -139,11 +139,13 @@ export function printPeers(
     return;
   }
   const rows = peers.map((peer) => ({
+    key: sanitizeTableCell(peer.key, "?"),
     flags: peerFlags(peer),
     remoteLabel: sanitizeTableCell(peer.remoteLabel, "?"),
     userAgent: sanitizeTableCell(peer.userAgent, "-"),
   }));
 
+  const key = Math.max("Id".length, ...rows.map((row) => row.key.length));
   const flags = Math.max(
     "Flags".length,
     ...rows.map((row) => row.flags.length),
@@ -158,7 +160,7 @@ export function printPeers(
   );
   const available = Math.max(
     "Peer".length + "Agent".length,
-    PEER_TABLE_WIDTH_MAX - flags - 4,
+    PEER_TABLE_WIDTH_MAX - key - flags - 6,
   );
 
   let remoteLabel = Math.min(
@@ -177,24 +179,31 @@ export function printPeers(
   }
 
   const widths = {
+    key,
     flags,
     remoteLabel,
     userAgent,
   };
 
-  const line = (flags: string, remoteLabel: string, userAgent: string) =>
-    `${flags.padEnd(widths.flags, " ")}  ${fitTableCell(remoteLabel, widths.remoteLabel)}  ${fitTableCell(userAgent, widths.userAgent)}`.trimEnd();
+  const line = (
+    key: string,
+    flags: string,
+    remoteLabel: string,
+    userAgent: string,
+  ) =>
+    `${key.padEnd(widths.key, " ")}  ${flags.padEnd(widths.flags, " ")}  ${fitTableCell(remoteLabel, widths.remoteLabel)}  ${fitTableCell(userAgent, widths.userAgent)}`.trimEnd();
 
   log(
     [
-      line("Flags", "Peer", "Agent"),
+      line("Id", "Flags", "Peer", "Agent"),
       line(
+        "-".repeat(widths.key),
         "-".repeat(widths.flags),
         "-".repeat(widths.remoteLabel),
         "-".repeat(widths.userAgent),
       ),
       ...rows.map((row) =>
-        line(row.flags, row.remoteLabel, row.userAgent),
+        line(row.key, row.flags, row.remoteLabel, row.userAgent),
       ),
     ].join("\n"),
   );
@@ -228,7 +237,8 @@ export function printResults(
         a.resultNo - b.resultNo ||
         a.fileName.localeCompare(b.fileName) ||
         a.fileSize - b.fileSize ||
-        a.remoteHost.localeCompare(b.remoteHost),
+        a.remoteHost.localeCompare(b.remoteHost) ||
+        a.remotePort - b.remotePort,
     )
     .map((result) => ({
       resultNo: String(result.resultNo),
@@ -236,7 +246,9 @@ export function printResults(
         result.rtc ? `${result.fileName} (RTC)` : result.fileName,
       ),
       fileSize: formatSize(result.fileSize),
-      remoteHost: result.remoteHost,
+      remote: sanitizeTableCell(
+        `${result.remoteHost}:${result.remotePort}`,
+      ),
     }));
 
   const widths = {
@@ -249,9 +261,9 @@ export function printResults(
       "Size".length,
       ...rows.map((row) => row.fileSize.length),
     ),
-    remoteHost: Math.max(
-      "IP".length,
-      ...rows.map((row) => row.remoteHost.length),
+    remote: Math.max(
+      "Host".length,
+      ...rows.map((row) => row.remote.length),
     ),
   };
 
@@ -259,9 +271,9 @@ export function printResults(
     resultNo: string,
     fileName: string,
     fileSize: string,
-    remoteHost: string,
+    remote: string,
   ) =>
-    `${resultNo.padStart(widths.resultNo, " ")}  ${fileName}  ${fileSize.padStart(widths.fileSize, " ")}  ${remoteHost}`.trimEnd();
+    `${resultNo.padStart(widths.resultNo, " ")}  ${fileName}  ${fileSize.padStart(widths.fileSize, " ")}  ${remote}`.trimEnd();
 
   const fitName = (fileName: string): string => {
     if (fileName.length <= widths.fileName - 2)
@@ -275,19 +287,19 @@ export function printResults(
 
   log(
     [
-      line("No", "File".padEnd(widths.fileName, " "), "Size", "IP"),
+      line("No", "File".padEnd(widths.fileName, " "), "Size", "Host"),
       line(
         "-".repeat(widths.resultNo),
         "-".repeat(widths.fileName),
         "-".repeat(widths.fileSize),
-        "-".repeat(widths.remoteHost),
+        "-".repeat(widths.remote),
       ),
       ...rows.map((row) =>
         line(
           row.resultNo,
           fitName(row.fileName),
           row.fileSize,
-          row.remoteHost,
+          row.remote,
         ),
       ),
     ].join("\n"),

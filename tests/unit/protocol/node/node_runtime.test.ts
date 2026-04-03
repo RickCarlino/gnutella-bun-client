@@ -223,17 +223,17 @@ describe("protocol node", () => {
       node.seen.set("stale-seen", now - 2_000);
       node.seen.set("fresh-seen", now);
       node.pingRoutes.set("stale-ping", {
-        peerKey: "peer-1",
+        peerKey: "p1",
         ts: now - 2_000,
       } as never);
       node.pingRoutes.set("local-ping", "__local__" as never);
       node.queryRoutes.set("stale-query", {
-        peerKey: "peer-1",
+        peerKey: "p1",
         ts: now - 2_000,
       } as never);
       node.queryRoutes.set("local-query", "__local__" as never);
       node.pushRoutes.set("stale-push", {
-        peerKey: "peer-1",
+        peerKey: "p1",
         ts: now - 2_000,
       } as never);
       node.pendingPushes.set("servent-1", [

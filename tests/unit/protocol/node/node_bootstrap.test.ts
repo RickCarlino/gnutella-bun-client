@@ -236,7 +236,12 @@ describe("protocol node", () => {
       await withMockNetworkInterfaces(async () => {
         const node = makeNode(path.join(dir, "protocol.json"));
         node.doc.state.peers = peerState([["1.1.1.1:1111", 0]]);
+        const localCaches = [
+          "http://127.0.0.1:6346/gwc.php",
+          "http://127.0.0.1:6347/gwc.php",
+        ];
         overrideRuntimeConfig(node, {
+          gwebCacheUrls: localCaches,
           maxConnections: 2,
           connectTimeoutMs: 5000,
         });
@@ -248,7 +253,7 @@ describe("protocol node", () => {
         globalThis.fetch = (async (input: string | URL | Request) => {
           const url = new URL(String(input));
           fetchCalls.push(url.toString());
-          if (url.origin + url.pathname === KNOWN_CACHES[0]) {
+          if (url.origin + url.pathname === localCaches[0]) {
             return new Response(
               "I|pong|ModernCache 2.0|gnutella\nH|66.132.55.12:6346|5\nH|72.14.201.10:6346|5\n",
             );
@@ -271,7 +276,7 @@ describe("protocol node", () => {
           globalThis.fetch = originalFetch;
         }
 
-        expect(fetchCalls).toHaveLength(KNOWN_CACHES.length);
+        expect(fetchCalls).toHaveLength(localCaches.length);
         expect(dialed).toEqual([
           "66.132.55.12:6346:2500",
           "72.14.201.10:6346:2500",
@@ -342,7 +347,7 @@ describe("protocol node", () => {
         },
       });
 
-      node.peers.set("peer-1", makePeer("6.6.6.6:6346"));
+      node.peers.set("p1", makePeer("6.6.6.6:6346"));
       node.refreshGWebCacheReport();
       node.refreshGWebCacheReport();
 
@@ -410,7 +415,7 @@ describe("protocol node", () => {
 
       const leafPeer = makePeer("6.6.6.6:6346");
       leafPeer.role = "leaf";
-      node.peers.set("peer-1", leafPeer);
+      node.peers.set("p1", leafPeer);
       node.refreshGWebCacheReport();
       expect(scheduled.map((entry) => entry.ms)).toEqual([
         GWEBCACHE_REPORT_DELAY_SEC * 1000,
@@ -438,6 +443,10 @@ describe("protocol node", () => {
     await withTempDir(async (dir) => {
       await withMockNetworkInterfaces(async () => {
         let nowMs = 1_700_000_000_000;
+        const localCaches = [
+          "http://127.0.0.1:6346/gwc.php",
+          "http://127.0.0.1:6347/gwc.php",
+        ];
         const node = makeNode(path.join(dir, "protocol.json"), {
           collaborators: {
             clock: {
@@ -448,6 +457,7 @@ describe("protocol node", () => {
         overrideRuntimeConfig(node, {
           advertisedHost: "66.132.55.12",
           advertisedPort: 6346,
+          gwebCacheUrls: localCaches,
           ultrapeer: true,
           nodeMode: "ultrapeer",
           maxLeafConnections: 7,
@@ -475,7 +485,7 @@ describe("protocol node", () => {
         }
 
         expect(node.gwebCacheReported).toBe(true);
-        expect(fetchCalls).toHaveLength(KNOWN_CACHES.length);
+        expect(fetchCalls).toHaveLength(localCaches.length);
 
         const first = new URL(fetchCalls[0]);
         expect(first.searchParams.get("update")).toBe("1");
@@ -484,7 +494,7 @@ describe("protocol node", () => {
         expect(first.searchParams.get("x_leaves")).toBe("1");
         expect(first.searchParams.get("x_max")).toBe("7");
         expect(first.searchParams.get("uptime")).toBe("123");
-        expect(first.searchParams.get("url")).toBe(KNOWN_CACHES[1]);
+        expect(first.searchParams.get("url")).toBe(localCaches[1]);
       });
     });
   });

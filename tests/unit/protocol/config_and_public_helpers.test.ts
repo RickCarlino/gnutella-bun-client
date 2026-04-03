@@ -103,9 +103,11 @@ describe("protocol config and public helpers", () => {
       expect(created.config.dataDir).toBe(path.join(dir, "nested"));
       expect(created.config.advertisedHost).toBeUndefined();
       expect(created.config.advertisedPort).toBeUndefined();
+      expect(created.config.gwebCacheUrls).toBeUndefined();
       expect(created.config.rtc).toBe(false);
       expect(created.config.rtcRendezvousUrls).toBeUndefined();
       expect(created.config.rtcStunServers).toBeUndefined();
+      expect(createdRuntime.gwebCacheUrls).toEqual([]);
       expect(createdRuntime.rtc).toBe(false);
       expect(createdRuntime.rtcRendezvousUrls).toEqual([]);
       expect(createdRuntime.rtcStunServers).toEqual([]);
@@ -148,9 +150,11 @@ describe("protocol config and public helpers", () => {
       });
       expect(loaded.config.dataDir).toBe(path.join(dir, "nested"));
       expect(loaded.config.advertisedHost).toBeUndefined();
+      expect(loaded.config.gwebCacheUrls).toBeUndefined();
       expect(loaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
       expect(persisted.config.listen_host).toBe("0.0.0.0");
       expect(persisted.config.listen_port).toBe(createdRuntime.listenPort);
+      expect(persisted.config.gwebcache_urls).toBeUndefined();
       expect(persisted.config.rtc).toBe(false);
       expect(persisted.config.rtc_rendezvous_urls).toBeUndefined();
       expect(persisted.config.rtc_stun_servers).toBeUndefined();
@@ -187,6 +191,41 @@ describe("protocol config and public helpers", () => {
       expect(loaded.config.rtc).toBe(true);
       expect(runtime.rtc).toBe(true);
       expect(persisted.config.rtc).toBe(true);
+    });
+  });
+
+  test("loads and persists gwebcache override urls", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const doc = defaultDoc(configPath);
+      doc.config.gwebCacheUrls = [
+        " http://127.0.0.1:6346/gwc.php ",
+        "ftp://ignored.example.net/cache",
+        "https://cache.example.net/g2/gwc.php#frag",
+        "http://127.0.0.1:6346/gwc.php",
+      ];
+
+      await writeDoc(configPath, doc);
+      const loaded = await loadDoc(configPath);
+      const runtime = new GnutellaServent(configPath, loaded).config();
+      const persisted = JSON.parse(
+        await fs.readFile(configPath, "utf8"),
+      ) as {
+        config: Record<string, unknown>;
+      };
+
+      expect(loaded.config.gwebCacheUrls).toEqual([
+        "http://127.0.0.1:6346/gwc.php",
+        "https://cache.example.net/g2/gwc.php",
+      ]);
+      expect(runtime.gwebCacheUrls).toEqual([
+        "http://127.0.0.1:6346/gwc.php",
+        "https://cache.example.net/g2/gwc.php",
+      ]);
+      expect(persisted.config.gwebcache_urls).toEqual([
+        "http://127.0.0.1:6346/gwc.php",
+        "https://cache.example.net/g2/gwc.php",
+      ]);
     });
   });
 
@@ -765,7 +804,7 @@ describe("protocol config and public helpers", () => {
       expect(node.peerDialState("1.2.3.4", 6346)).toBe("dialing");
       node.dialing.clear();
 
-      node.peers.set("peer-1", makePeer() as never);
+      node.peers.set("p1", makePeer() as never);
       expect(node.peerDialState("1.2.3.4", 6346)).toBe("connected");
       expect(node.peerDialState("5.6.7.8", 6347)).toBe("connected");
       expect(node.peerDialState("8.8.8.8", 6346)).toBe("none");

@@ -35,7 +35,7 @@ describe("cli_shared", () => {
     const node = makeNode({
       getPeers: () => [
         {
-          key: "1.2.3.4:6346",
+          key: "p1",
           remoteLabel: "1.2.3.4:6346",
           role: "ultrapeer",
           outbound: true,
@@ -44,7 +44,7 @@ describe("cli_shared", () => {
           tls: true,
         },
         {
-          key: "5.6.7.8:6346",
+          key: "p2",
           remoteLabel: "5.6.7.8:6346",
           role: "leaf",
           outbound: false,
@@ -75,10 +75,10 @@ describe("cli_shared", () => {
       "peers=2 shares=1 results=999 knownPeers=9",
       "no peers",
       [
-        "Flags  Peer          Agent",
-        "-----  ------------  --------",
-        "OZLU   1.2.3.4:6346  Peer/1.0",
-        "I---   5.6.7.8:6346  -",
+        "Id  Flags  Peer          Agent",
+        "--  -----  ------------  --------",
+        "p1  OZLU   1.2.3.4:6346  Peer/1.0",
+        "p2  I---   5.6.7.8:6346  -",
       ].join("\n"),
       "no shared files",
       '#1 123B "folder/\\"song\\".mp3"',
@@ -86,7 +86,7 @@ describe("cli_shared", () => {
     ]);
   });
 
-  test("prints results as one aligned table without servent IDs", () => {
+  test("prints results as one aligned table with remote host ports", () => {
     const logs: string[] = [];
     const node = makeNode({
       getResults: () => [
@@ -147,13 +147,13 @@ describe("cli_shared", () => {
 
     expect(logs).toEqual([
       [
-        "No  File                                               Size  IP",
-        "--  ------------------------------------------------  -----  --------",
-        " 2  alpha.txt                                           99B  9.8.7.6",
-        " 7  beta file.bin (RTC)                                 2KB  1.2.3.4",
-        " 8  12345678901234567890123..abcdefghijklmnopqrstuvw  7.6KB  8.8.8.8",
-        "12  zz-top.bin                                        1.2KB  10.0.0.2",
-        "21  giant.iso                                         3.5GB  7.7.7.7",
+        "No  File                                               Size  Host",
+        "--  ------------------------------------------------  -----  -------------",
+        " 2  alpha.txt                                           99B  9.8.7.6:1234",
+        " 7  beta file.bin (RTC)                                 2KB  1.2.3.4:80",
+        " 8  12345678901234567890123..abcdefghijklmnopqrstuvw  7.6KB  8.8.8.8:6346",
+        "12  zz-top.bin                                        1.2KB  10.0.0.2:6346",
+        "21  giant.iso                                         3.5GB  7.7.7.7:6346",
       ].join("\n"),
     ]);
   });
@@ -173,7 +173,7 @@ describe("cli_shared", () => {
           fileSize: 1200,
           fileName: "zz-top.bin",
           serventIdHex: "bb".repeat(16),
-          viaPeerKey: "peer-7",
+          viaPeerKey: "p7",
           sha1Urn: "urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2",
           urns: ["urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2"],
           metadata: ["128 kbps"],
@@ -198,7 +198,7 @@ describe("cli_shared", () => {
         `servent id: ${"bb".repeat(16)}`,
         `query id: ${"aa".repeat(16)}`,
         "query hops: 2",
-        "via peer: peer-7",
+        "via peer: p7",
         "sha1 urn: urn:sha1:TXZM6VTBVPDC7YVN7RPM3FLDXUAH6HA2",
         "other urns: -",
         "metadata:",

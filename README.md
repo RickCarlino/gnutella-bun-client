@@ -68,9 +68,11 @@ These settings are the ones most people will care about first:
 | `config.data_dir`                                                                           | Root directory for runtime data; shared and downloaded files both live under `<data_dir>/downloads` |
 | `config.listen_port`                                                                        | Local TCP port to listen on                                                                         |
 | `config.advertised_host` / `config.advertised_port`                                         | Only set these if other peers should reach you at a different external address or port              |
+| `config.blocked_ips`                                                                        | IPv4 addresses to refuse, forget, and stop dialing                                                  |
 | `config.ultrapeer`                                                                          | `false` for a lighter client, `true` for a larger relay-style node                                  |
 | `config.max_connections`, `config.max_ultrapeer_connections`, `config.max_leaf_connections` | Peer connection caps                                                                                |
 | `config.log_ignore`                                                                         | Categories to suppress when `monitor` is enabled                                                    |
+| `config.gwebcache_urls`                                                                     | Optional override for the built-in Gnutella Web Cache list; mainly useful for local development     |
 | `config.rtc`, `config.rtc_rendezvous_urls`, `config.rtc_stun_servers`                       | Only needed if you want to try the experimental RTC download path                                   |
 
 ### Start the Client
@@ -92,11 +94,14 @@ The prompt shows:
 | -------------------------------- | ------------------------------------------------ |
 | `help`                           | Show the available commands                      |
 | `status`                         | Show peer, share, result, and known-peer counts  |
+| `blocked`                        | List blocked IPv4 addresses                      |
+| `block <ipv4>`                   | Block an IPv4 address and drop matching peers    |
+| `unblock <ipv4>`                 | Remove an IPv4 address from the block list       |
 | `connect <host:port>`            | Connect to a peer and remember it for later runs |
-| `peers`                          | List connected peers                             |
+| `peers`                          | List connected peers and their keys              |
 | `shares`                         | List shared files                                |
 | `query <terms...>`               | Search the network                               |
-| `browse`                         | Ask connected peers for browse-style results     |
+| `browse <peerKey\|host:port>`    | Browse a connected peer or direct host library   |
 | `results`                        | Show the current result list                     |
 | `info <resultNo>`                | Show detailed information for one result         |
 | `download <resultNo> [destPath]` | Download one result                              |
@@ -196,7 +201,7 @@ If you want to host the experimental RTC relay without running a full node, use:
 bun run bin/rtc_relay.ts --host 0.0.0.0 --port 6346
 ```
 
-That process only provides the relay service for RTC setup. It does not act as a normal search or download node on its own.
+That process serves both the RTC rendezvous endpoints and a spec-2 GWebCache on the same base URL. It still does not act as a normal search or download node on its own.
 
 ## Build a Binary
 

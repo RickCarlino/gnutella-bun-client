@@ -8,10 +8,14 @@ import type { GgepItem } from "./ggep";
 export type ProbeCtx = {
   socket: net.Socket;
   buf: Buffer;
+  receivedBytes: number;
+  startedAtMs: number;
   mode: "undecided" | "await-final-0.6" | "done";
   requestHeaders?: Record<string, string>;
   serverHeaders?: Record<string, string>;
   onData?: (chunk: string | Buffer) => void;
+  onEnd?: () => void;
+  onClose?: (hadError: boolean) => void;
   onError?: (error: unknown) => void;
 };
 
