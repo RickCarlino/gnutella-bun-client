@@ -11,14 +11,15 @@
     "jscpd": "^4.0.8",
     "prettier": "^3.5.3",
     "ts-unused-exports": "^11.0.1",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "werift": "^0.22.9"
   },
   "scripts": {
     "build:all": "./scripts/build-all-targets.sh",
     "dupcheck": "jscpd",
-    "format:check": "prettier --check AGENTS.md README.md gnutella.ts package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
-    "format:write": "prettier --write AGENTS.md README.md gnutella.ts package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
-    "lint": "eslint gnutella.ts src tests --ext .ts",
+    "format:check": "prettier --check AGENTS.md README.md bin package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
+    "format:write": "prettier --write AGENTS.md README.md bin package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
+    "lint": "eslint bin src tests --ext .ts",
     "test": "bun test",
     "test:integration": "bun test tests/integration/protocol.test.ts",
     "test:unit": "bun test tests/unit",

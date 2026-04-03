@@ -1,10 +1,13 @@
 {
   "config": {
     "listen_host": "0.0.0.0",
-    "listen_port": 6346,
+    "listen_port": 22867,
+    "rtc": false,
+    "rtc_rendezvous_urls": [],
+    "rtc_stun_servers": [],
     "ultrapeer": false,
-    "max_connections": 12,
-    "max_ultrapeer_connections": 4,
+    "max_connections": 64,
+    "max_ultrapeer_connections": 64,
     "max_leaf_connections": 64,
     "log_ignore": [],
     "data_dir": "."
@@ -12,7 +15,7 @@
   "state": {
     "servent_id_hex": "00112233445566778899aabbccddeeff",
     "peers": {
-      "127.0.0.1:6346": 0
+      "127.0.0.1:22867": 0
     }
   }
 }

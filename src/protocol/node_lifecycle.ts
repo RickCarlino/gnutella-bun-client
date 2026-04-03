@@ -42,6 +42,14 @@ export async function start(node: GnutellaServent): Promise<void> {
   node.schedule(c.pingIntervalSec * 1000, () =>
     node.sendPing(c.defaultPingTtl),
   );
+  if (c.rtc) {
+    scheduleRecurringTask(
+      node,
+      500,
+      () => node.pollRtcRendezvousOffers(),
+      "RTC_RENDEZVOUS_POLL",
+    );
+  }
   scheduleRecurringTask(node, 15000, () => node.save(), "SAVE");
   node.emitEvent({
     type: "STARTED",

@@ -232,7 +232,9 @@ export function printResults(
     )
     .map((result) => ({
       resultNo: String(result.resultNo),
-      fileName: sanitizeTableCell(result.fileName),
+      fileName: sanitizeTableCell(
+        result.rtc ? `${result.fileName} (RTC)` : result.fileName,
+      ),
       fileSize: formatSize(result.fileSize),
       remoteHost: result.remoteHost,
     }));

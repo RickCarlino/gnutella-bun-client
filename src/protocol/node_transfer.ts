@@ -20,6 +20,7 @@ import {
   parseHttpHeaders,
   socketCanEnd,
 } from "./handshake";
+import { readHttpDownloadSource } from "./http_download_reader";
 import {
   handleBrowseHostGet,
   isBrowseHostGetRequest,
@@ -29,6 +30,12 @@ import type { GnutellaServent } from "./node";
 import type { ExistingGetRequest, HttpDownloadState } from "./node_types";
 import { sha1UrnFromUrn } from "./content_urn";
 import { splitQuerySearch } from "./query_search";
+import {
+  downloadViaRtc,
+  handleRtcRendezvousHttp,
+  pollRtcRendezvousOffers as pollRtcRendezvousOffersImpl,
+  queryRtcGgepItems,
+} from "./node_rtc";
 
 type OutgoingQueryParts = {
   search: string;
@@ -54,7 +61,7 @@ function recordDownloadSuccess(
   node: GnutellaServent,
   hit: SearchHit,
   destPath: string,
-  mode: "direct" | "push",
+  mode: "direct" | "push" | "rtc",
 ): void {
   node.emitEvent({
     type: "DOWNLOAD_SUCCEEDED",
@@ -77,43 +84,74 @@ function recordDownloadSuccess(
   });
 }
 
+export async function pollRtcRendezvousOffers(
+  node: GnutellaServent,
+): Promise<void> {
+  await pollRtcRendezvousOffersImpl(node);
+}
+
+async function handleGetByFileIndex(
+  node: GnutellaServent,
+  socket: net.Socket,
+  head: string,
+  first: string,
+): Promise<boolean | undefined> {
+  const match =
+    /^(GET|HEAD)\s+\/get\/(\d+)\/(.+?)(?:\/)?\s+HTTP\/(\d+\.\d+)$/i.exec(
+      first,
+    );
+  if (!match) return undefined;
+  const fileIndex = Number(match[2]);
+  const share = node.sharesByIndex.get(fileIndex);
+  if (!share) {
+    socket.end("HTTP/1.0 404 Not Found\r\n\r\n");
+    return false;
+  }
+  return await node.handleExistingGet(socket, head, share.abs, share);
+}
+
+async function handleUriResGet(
+  node: GnutellaServent,
+  socket: net.Socket,
+  head: string,
+  first: string,
+): Promise<boolean | undefined> {
+  const match =
+    /^(GET|HEAD)\s+\/uri-res\/N2R\?([^\s]+)\s+HTTP\/(\d+\.\d+)$/i.exec(
+      first,
+    );
+  if (!match || !node.config().serveUriRes) return undefined;
+  const rawUrn = decodeURIComponent(match[2]);
+  const urn = (sha1UrnFromUrn(rawUrn) || rawUrn).toLowerCase();
+  const share = node.sharesByUrn.get(urn);
+  if (!share) {
+    socket.end("HTTP/1.0 404 Not Found\r\n\r\n");
+    return false;
+  }
+  return await node.handleExistingGet(socket, head, share.abs, share);
+}
+
 export async function handleIncomingGet(
   node: GnutellaServent,
   socket: net.Socket,
   head: string,
+  body: Buffer = Buffer.alloc(0),
 ): Promise<boolean> {
+  const rtcResponse = await handleRtcRendezvousHttp(
+    node,
+    socket,
+    head,
+    body,
+  );
+  if (rtcResponse != null) return rtcResponse;
   if (isBrowseHostGetRequest(head)) {
     return await handleBrowseHostGet(node, socket, head);
   }
   const first = head.replace(/\r\n/g, "\n").split("\n", 1)[0];
-  let match =
-    /^(GET|HEAD)\s+\/get\/(\d+)\/(.+?)(?:\/)?\s+HTTP\/(\d+\.\d+)$/i.exec(
-      first,
-    );
-  if (match) {
-    const fileIndex = Number(match[2]);
-    const share = node.sharesByIndex.get(fileIndex);
-    if (!share) {
-      socket.end("HTTP/1.0 404 Not Found\r\n\r\n");
-      return false;
-    }
-    return await node.handleExistingGet(socket, head, share.abs, share);
-  }
-
-  match =
-    /^(GET|HEAD)\s+\/uri-res\/N2R\?([^\s]+)\s+HTTP\/(\d+\.\d+)$/i.exec(
-      first,
-    );
-  if (match && node.config().serveUriRes) {
-    const rawUrn = decodeURIComponent(match[2]);
-    const urn = (sha1UrnFromUrn(rawUrn) || rawUrn).toLowerCase();
-    const share = node.sharesByUrn.get(urn);
-    if (!share) {
-      socket.end("HTTP/1.0 404 Not Found\r\n\r\n");
-      return false;
-    }
-    return await node.handleExistingGet(socket, head, share.abs, share);
-  }
+  const byIndex = await handleGetByFileIndex(node, socket, head, first);
+  if (byIndex != null) return byIndex;
+  const byUrn = await handleUriResGet(node, socket, head, first);
+  if (byUrn != null) return byUrn;
 
   socket.end("HTTP/1.0 400 Bad Request\r\n\r\n");
   return false;
@@ -492,75 +530,32 @@ export async function readHttpDownload(
   label: string,
   requestedStart: number,
 ): Promise<unknown> {
-  return await new Promise((resolve, reject) => {
-    const state: HttpDownloadState = {
-      buf: Buffer.alloc(0),
-      headerDone: false,
-      remaining: 0,
-      ws: null,
-      finalStart: requestedStart,
-      bodyBytes: 0,
-    };
-    let done = false;
-    const cleanup = () => {
-      socket.off("error", onError);
-      socket.off("data", onData);
-      socket.off("end", onEnd);
-      state.ws?.off("error", onWriteError);
-    };
-    const fail = (error: unknown) => {
-      if (done) return;
-      done = true;
-      cleanup();
-      try {
-        state.ws?.destroy();
-      } catch {
-        // ignore
-      }
-      socket.destroy();
-      reject(toError(error));
-    };
-    const finish = () => {
-      if (done) return;
-      done = true;
-      cleanup();
-      const meta = {
-        destPath,
-        bytes: state.finalStart + state.bodyBytes,
-        label,
+  return await readHttpDownloadSource({
+    attach: ({ onChunk, onEnd, onError }) => {
+      const onData = (chunk: string | Buffer) =>
+        onChunk(Buffer.from(chunk));
+      socket.on("error", onError);
+      socket.on("data", onData);
+      socket.on("end", onEnd);
+      return () => {
+        socket.off("error", onError);
+        socket.off("data", onData);
+        socket.off("end", onEnd);
       };
-      if (!state.ws) {
-        resolve(meta);
-        return;
-      }
-      state.ws.end(() => resolve(meta));
-    };
-    const onWriteError = (error: Error) => fail(error);
-    const onError = (error: unknown) => fail(error);
-    const onData = (chunk: string | Buffer) => {
-      if (done) return;
-      try {
-        node.consumeHttpDownloadChunk(
-          state,
-          destPath,
-          requestedStart,
-          onWriteError,
-          Buffer.from(chunk),
-        );
-      } catch (error) {
-        fail(error);
-        return;
-      }
-      if (state.headerDone && state.remaining === 0) finish();
-    };
-    const onEnd = () => {
-      if (!done && state.headerDone && state.remaining === 0) finish();
-      else if (!done)
-        fail(new Error("connection closed before full body received"));
-    };
-    socket.on("error", onError);
-    socket.on("data", onData);
-    socket.on("end", onEnd);
+    },
+    consumeChunk: (state, targetPath, start, onWriteError, chunk) =>
+      node.consumeHttpDownloadChunk(
+        state,
+        targetPath,
+        start,
+        onWriteError,
+        chunk,
+      ),
+    destPath,
+    destroyOnFailure: () => socket.destroy(),
+    incompleteMessage: "connection closed before full body received",
+    label,
+    requestedStart,
   });
 }
 
@@ -617,6 +612,16 @@ export async function downloadResult(
     : await node.reserveAutoDownloadPath(hit.fileName);
 
   try {
+    if (node.config().rtc && hit.rtc) {
+      try {
+        await downloadViaRtc(node, hit, destPath);
+        recordDownloadSuccess(node, hit, destPath, "rtc");
+        return;
+      } catch {
+        // fall through to ordinary transports
+      }
+    }
+
     try {
       await node.directDownload(hit, destPath);
       recordDownloadSuccess(node, hit, destPath, "direct");
@@ -688,6 +693,7 @@ export function sendQuery(
   const query = splitOutgoingQuery(search);
   const payload = encodeQuery(query.search, {
     ggepHAllowed: !!node.config().enableGgep,
+    ggepItems: queryRtcGgepItems(node),
     maxHits: Math.min(0x1ff, node.config().maxResultsPerQuery),
     urns: query.urns,
   });

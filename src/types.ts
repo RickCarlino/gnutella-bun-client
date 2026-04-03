@@ -38,6 +38,7 @@ export type CliNode = {
     vendorCode?: string;
     needsPush?: boolean;
     busy?: boolean;
+    rtc?: RtcSearchHitCapability;
   }>;
   getShares(): Array<{ index: number; size: number; rel: string }>;
   getStatus(): {
@@ -159,6 +160,15 @@ export type SearchHit = {
   vendorCode?: string;
   needsPush?: boolean;
   busy?: boolean;
+  rtc?: RtcSearchHitCapability;
+};
+
+type RtcSearchHitCapability = {
+  cookieHex: string;
+  rendezvousEndpoints: Array<{
+    host: string;
+    port: number;
+  }>;
 };
 
 export type PendingPush = {
@@ -186,6 +196,9 @@ export type ConfigDoc = {
     listenPort: number;
     advertisedHost?: string;
     advertisedPort?: number;
+    rtc: boolean;
+    rtcRendezvousUrls?: string[];
+    rtcStunServers?: string[];
     ultrapeer: boolean;
     maxConnections?: number;
     maxUltrapeerConnections?: number;
@@ -204,6 +217,9 @@ export type RuntimeConfig = {
   listenPort: number;
   advertisedHost?: string;
   advertisedPort?: number;
+  rtc: boolean;
+  rtcRendezvousUrls: string[];
+  rtcStunServers: string[];
   ultrapeer: boolean;
   monitorIgnoreEvents: string[];
   nodeMode: NodeMode;
@@ -275,7 +291,8 @@ export type GnutellaEvent =
         | "SHARE_RESCAN"
         | "RECONNECT"
         | "SAVE"
-        | "GWEBCACHE_UPDATE";
+        | "GWEBCACHE_UPDATE"
+        | "RTC_RENDEZVOUS_POLL";
       message: string;
     })
   | (EventBase<"PROBE_REJECTED"> & {
@@ -342,7 +359,7 @@ export type GnutellaEvent =
       message: string;
     })
   | (EventBase<"DOWNLOAD_SUCCEEDED"> & {
-      mode: "direct" | "push";
+      mode: "direct" | "push" | "rtc";
       resultNo: number;
       fileName: string;
       destPath: string;
