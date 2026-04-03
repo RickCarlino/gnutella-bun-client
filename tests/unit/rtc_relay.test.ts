@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { startRtcRelayServer } from "../../bin/rtc_relay";
+import {
+  fetchBootstrapData,
+  reportSelfToGWebCaches,
+  requestGWebCache,
+} from "../../src/gwebcache_client";
 
 const OFFER_HEADERS = {
   "content-type": "application/sdp",
@@ -165,5 +170,56 @@ describe("rtc relay", () => {
 
     const badTarget = await fetch(`${url}/rtc/offer?target=not-hex`);
     expect(badTarget.status).toBe(400);
+  });
+
+  test("serves an in-memory gwebcache on the relay base url", async () => {
+    const { url } = await startRelay();
+    const normalizedUrl = new URL(url).toString();
+
+    const emptyBootstrap = await requestGWebCache(url, {
+      timeoutMs: 1000,
+    });
+    expect(emptyBootstrap.status).toBe(200);
+    expect(emptyBootstrap.spec).toBe(2);
+    expect(emptyBootstrap.peers).toEqual([]);
+    expect(emptyBootstrap.caches).toEqual([]);
+
+    const reported = await reportSelfToGWebCaches({
+      caches: [url],
+      ip: "66.132.55.12:6346",
+      leafCount: 4,
+      state: {},
+      timeoutMs: 1000,
+      uptimeSec: 123,
+    });
+    expect(reported.referenceCache).toBe(normalizedUrl);
+    expect(reported.attemptedCaches).toEqual([normalizedUrl]);
+    expect(reported.reportedCaches).toEqual([normalizedUrl]);
+    expect(reported.errors).toEqual([]);
+
+    const bootstrap = await fetchBootstrapData({
+      caches: [url],
+      maxCaches: 4,
+      maxPeers: 4,
+      timeoutMs: 1000,
+    });
+    expect(bootstrap.peers).toEqual(["66.132.55.12:6346"]);
+    expect(bootstrap.caches).toEqual([normalizedUrl]);
+    expect(bootstrap.errors).toEqual([]);
+
+    const detailed = await requestGWebCache(url, {
+      getLeaves: true,
+      getUptime: true,
+      getVendors: true,
+      timeoutMs: 1000,
+    });
+    expect(detailed.hostEntries).toMatchObject([
+      {
+        leafCount: 4,
+        peer: "66.132.55.12:6346",
+        uptimeSec: 123,
+        vendor: "GBUN/GnutellaBun/0.6",
+      },
+    ]);
   });
 });

@@ -2,6 +2,10 @@ import http from "node:http";
 import process from "node:process";
 
 import {
+  createGWebCacheServerState,
+  handleGWebCacheRequest,
+} from "../src/gwebcache/server";
+import {
   cleanupRtcRendezvousState,
   createRtcRendezvousState,
   parseRtcAnswerQuery,
@@ -21,6 +25,7 @@ type RelayOptions = {
   port?: number;
 };
 
+type GWebCacheState = ReturnType<typeof createGWebCacheServerState>;
 type RtcRelayState = ReturnType<typeof createRtcRendezvousState>;
 
 function relayUrl(host: string, port: number): string {
@@ -31,7 +36,7 @@ function relayUrl(host: string, port: number): string {
 function response(
   res: http.ServerResponse,
   statusCode: number,
-  body = Buffer.alloc(0),
+  body: Uint8Array = Buffer.alloc(0),
   headers: Record<string, string> = {},
 ): void {
   res.statusCode = statusCode;
@@ -153,8 +158,9 @@ function printHelp(): void {
     [
       "Usage: bun run bin/rtc_relay.ts [--host HOST] [--port PORT]",
       "",
-      "Runs the standalone RTC rendezvous relay.",
-      "It serves only /rtc/offer and /rtc/answer and does not join the Gnutella network.",
+      "Runs the standalone RTC rendezvous relay and GWebCache.",
+      "It serves /rtc/offer, /rtc/answer, and spec-2 GWebCache queries on the same base URL.",
+      "It does not join the Gnutella network as a normal search or download node.",
       "",
       `Defaults: --host ${DEFAULT_HOST} --port ${DEFAULT_PORT}`,
       "",
@@ -267,16 +273,54 @@ function handleAnswerGet(
 }
 
 async function handleRtcRelayRequest(
-  state: RtcRelayState,
+  rtcState: RtcRelayState,
+  webCacheState: GWebCacheState,
   req: http.IncomingMessage,
   res: http.ServerResponse,
 ): Promise<void> {
   const target = requestTarget(req);
-  if (!target || !target.pathname.startsWith("/rtc/")) {
+  if (!target) {
     response(res, 404);
     return;
   }
 
+  if (!target.pathname.startsWith("/rtc/")) {
+    handleWebCacheRelayRequest(webCacheState, req, res, target);
+    return;
+  }
+
+  await handleRtcPathRequest(rtcState, req, res, target);
+}
+
+function handleWebCacheRelayRequest(
+  state: GWebCacheState,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  target: URL,
+): void {
+  const webCacheReply = handleGWebCacheRequest(
+    state,
+    (req.method || "GET").toUpperCase(),
+    target,
+  );
+  if (!webCacheReply) {
+    response(res, 404);
+    return;
+  }
+  response(
+    res,
+    webCacheReply.statusCode,
+    webCacheReply.body,
+    webCacheReply.headers,
+  );
+}
+
+async function handleRtcPathRequest(
+  state: RtcRelayState,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  target: URL,
+): Promise<void> {
   cleanupRtcRendezvousState(state);
 
   switch (`${(req.method || "GET").toUpperCase()} ${target.pathname}`) {
@@ -298,14 +342,15 @@ async function handleRtcRelayRequest(
 }
 
 export async function startRtcRelayServer(options: RelayOptions = {}) {
-  const state = createRtcRendezvousState();
+  const rtcState = createRtcRendezvousState();
+  const webCacheState = createGWebCacheServerState();
   const host = options.host || DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const onError = options.onError || logError;
   const server = http.createServer((req, res) => {
     void (async () => {
       try {
-        await handleRtcRelayRequest(state, req, res);
+        await handleRtcRelayRequest(rtcState, webCacheState, req, res);
       } catch (error) {
         try {
           onError(error);
@@ -358,7 +403,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
 
   const relay = await startRtcRelayServer(options);
   process.stdout.write(
-    `RTC relay listening on ${relay.host}:${relay.port}; advertise ${relay.url} or your public IPv4 equivalent\n`,
+    `RTC relay and GWebCache listening on ${relay.host}:${relay.port}; advertise ${relay.url} or your public IPv4 equivalent\n`,
   );
 
   let shuttingDown = false;

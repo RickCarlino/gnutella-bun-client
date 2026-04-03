@@ -200,7 +200,7 @@ If you want to host the experimental RTC relay without running a full node, use:
 bun run bin/rtc_relay.ts --host 0.0.0.0 --port 6346
 ```
 
-That process only provides the relay service for RTC setup. It does not act as a normal search or download node on its own.
+That process serves both the RTC rendezvous endpoints and a spec-2 GWebCache on the same base URL. It still does not act as a normal search or download node on its own.
 
 ## Build a Binary
 
