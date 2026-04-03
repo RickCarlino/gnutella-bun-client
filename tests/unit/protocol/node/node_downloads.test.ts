@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
+import zlib from "node:zlib";
 
 import {
+  buildHeader,
   GnutellaServent,
   defaultDoc,
   parseQuery,
 } from "../../../../src/protocol";
+import { encodeQueryHit } from "../../../../src/protocol/codec";
 import { TYPE } from "../../../../src/const";
 import {
   makeNode,
@@ -17,7 +20,207 @@ import {
   withTempDir,
 } from "./helpers";
 
+class ScriptedSocket extends MockSocket {
+  onWrite?: (data: string) => void;
+
+  write(chunk: string | Uint8Array<ArrayBufferLike>): boolean {
+    const ok = super.write(chunk);
+    this.onWrite?.(Buffer.from(chunk).toString("latin1"));
+    return ok;
+  }
+}
+
 describe("protocol node", () => {
+  test("browses one peer with chunked deflate query-hit output", async () => {
+    await withTempDir(async (dir) => {
+      const alpha = makeShare(1, path.join(dir, "alpha.txt"), "alpha.txt");
+      const beta = makeShare(2, path.join(dir, "beta.bin"), "beta.bin");
+      const payload = encodeQueryHit(
+        6346,
+        "9.8.7.6",
+        256,
+        [alpha, beta],
+        Buffer.alloc(16, 0x11),
+        {
+          vendorCode: "GTKG",
+          measuredSpeed: true,
+          browseHost: true,
+          ggepHashes: true,
+        },
+      );
+      const packet = buildHeader(
+        Buffer.alloc(16, 0),
+        TYPE.QUERY_HIT,
+        0,
+        0,
+        payload,
+      );
+      const deflated = zlib.deflateSync(packet);
+      const chunked = Buffer.concat([
+        Buffer.from(`${deflated.length.toString(16)}\r\n`, "latin1"),
+        deflated,
+        Buffer.from("\r\n0\r\n\r\n", "latin1"),
+      ]);
+      const response = Buffer.concat([
+        Buffer.from(
+          [
+            "HTTP/1.1 200 OK",
+            "Content-Type: application/x-gnutella-packets",
+            "Transfer-Encoding: chunked",
+            "Content-Encoding: deflate",
+            "Connection: close",
+            "",
+            "",
+          ].join("\r\n"),
+          "latin1",
+        ),
+        chunked,
+      ]);
+
+      const requests: string[] = [];
+      const socket = new ScriptedSocket("9.8.7.6", 6346);
+      let replied = false;
+      socket.onWrite = (data) => {
+        requests.push(data);
+        if (replied) return;
+        replied = true;
+        queueMicrotask(() => {
+          socket.emit("data", response);
+          socket.emit("end");
+          socket.emit("close", false);
+        });
+      };
+
+      const node = makeNode(path.join(dir, "protocol.json"), {
+        collaborators: {
+          netFactory: {
+            createConnection: () => {
+              queueMicrotask(() => socket.emit("connect"));
+              return socket as unknown as net.Socket;
+            },
+          },
+        },
+      });
+      const peer = makePeer("198.51.100.10:55000");
+      peer.key = "p1";
+      peer.outbound = true;
+      peer.remoteLabel = "9.8.7.6:6346";
+      peer.dialTarget = "9.8.7.6:6346";
+      peer.capabilities.listenIp = { host: "9.8.7.6", port: 6346 };
+      node.peers.set(peer.key, peer);
+
+      const added = await node.browsePeer("p1");
+
+      expect(added).toBe(2);
+      expect(requests[0]).toContain("GET / HTTP/1.1\r\n");
+      expect(requests[0]).toContain(
+        "Accept: application/x-gnutella-packets\r\n",
+      );
+      expect(requests[0]).toContain("Accept-Encoding: deflate\r\n");
+      expect(node.lastResults).toEqual([
+        expect.objectContaining({
+          resultNo: 1,
+          remoteHost: "9.8.7.6",
+          remotePort: 6346,
+          fileIndex: 1,
+          fileName: "alpha.txt",
+          viaPeerKey: "p1",
+          vendorCode: "GTKG",
+        }),
+        expect.objectContaining({
+          resultNo: 2,
+          remoteHost: "9.8.7.6",
+          remotePort: 6346,
+          fileIndex: 2,
+          fileName: "beta.bin",
+          viaPeerKey: "p1",
+          vendorCode: "GTKG",
+        }),
+      ]);
+    });
+  });
+
+  test("browses a direct host:port without a connected peer", async () => {
+    await withTempDir(async (dir) => {
+      const alpha = makeShare(1, path.join(dir, "alpha.txt"), "alpha.txt");
+      const payload = encodeQueryHit(
+        6346,
+        "9.8.7.6",
+        256,
+        [alpha],
+        Buffer.alloc(16, 0x22),
+        {
+          vendorCode: "GTKG",
+          measuredSpeed: true,
+          browseHost: true,
+          ggepHashes: true,
+        },
+      );
+      const packet = buildHeader(
+        Buffer.alloc(16, 0),
+        TYPE.QUERY_HIT,
+        0,
+        0,
+        payload,
+      );
+      const response = Buffer.concat([
+        Buffer.from(
+          [
+            "HTTP/1.1 200 OK",
+            "Content-Type: application/x-gnutella-packets",
+            `Content-Length: ${packet.length}`,
+            "Connection: close",
+            "",
+            "",
+          ].join("\r\n"),
+          "latin1",
+        ),
+        packet,
+      ]);
+
+      const requests: string[] = [];
+      const socket = new ScriptedSocket("9.8.7.6", 6346);
+      let replied = false;
+      socket.onWrite = (data) => {
+        requests.push(data);
+        if (replied) return;
+        replied = true;
+        queueMicrotask(() => {
+          socket.emit("data", response);
+          socket.emit("end");
+          socket.emit("close", false);
+        });
+      };
+
+      const node = makeNode(path.join(dir, "protocol.json"), {
+        collaborators: {
+          netFactory: {
+            createConnection: () => {
+              queueMicrotask(() => socket.emit("connect"));
+              return socket as unknown as net.Socket;
+            },
+          },
+        },
+      });
+
+      const added = await node.browsePeer("9.8.7.6:6346");
+
+      expect(added).toBe(1);
+      expect(requests[0]).toContain("Host: 9.8.7.6:6346\r\n");
+      expect(node.lastResults).toEqual([
+        expect.objectContaining({
+          resultNo: 1,
+          remoteHost: "9.8.7.6",
+          remotePort: 6346,
+          fileIndex: 1,
+          fileName: "alpha.txt",
+          viaPeerKey: "9.8.7.6:6346",
+          vendorCode: "GTKG",
+        }),
+      ]);
+    });
+  });
+
   test("ignores GIV file metadata and downloads the originally requested result", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
@@ -33,7 +236,7 @@ describe("protocol node", () => {
         fileName: "wanted.bin",
         fileSize: 99,
         serventIdHex: "11".repeat(16),
-        viaPeerKey: "peer-1",
+        viaPeerKey: "p1",
       };
       const destPath = path.join(dir, "downloads", "wanted.bin");
       let captured: {
@@ -266,7 +469,7 @@ describe("protocol node", () => {
         fileName: "alpha.txt",
         fileSize: 99,
         serventIdHex: "11".repeat(16),
-        viaPeerKey: "peer-1",
+        viaPeerKey: "p1",
         sha1Urn: "urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       };
 
@@ -317,7 +520,7 @@ describe("protocol node", () => {
         fileName: "alpha.txt",
         fileSize: 99,
         serventIdHex: "11".repeat(16),
-        viaPeerKey: "peer-1",
+        viaPeerKey: "p1",
       };
       const fallbackPath = path.join(dir, "custom", "push.bin");
 
@@ -377,7 +580,7 @@ describe("protocol node", () => {
         fileName: "alpha.txt",
         fileSize: 99,
         serventIdHex: "11".repeat(16),
-        viaPeerKey: "peer-1",
+        viaPeerKey: "p1",
       };
       const occupiedPath = path.join(
         node.config().downloadsDir,
@@ -464,7 +667,7 @@ describe("protocol node", () => {
       node.sendQuery("alpha");
       expect(events).toEqual(["QUERY_SKIPPED"]);
 
-      const peer = makePeer("peer-1");
+      const peer = makePeer("p1");
       peer.remoteLabel = "9.8.7.6:4321";
       peer.outbound = true;
       peer.dialTarget = "9.8.7.6:4321";
@@ -582,7 +785,7 @@ describe("protocol node", () => {
       ]);
       expect(node.getPeers()).toEqual([
         {
-          key: "peer-1",
+          key: "p1",
           remoteLabel: "9.8.7.6:4321",
           role: "leaf",
           outbound: true,

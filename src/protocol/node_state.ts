@@ -726,6 +726,7 @@ export async function announceSelfToGWebCaches(
   if (!host || !isRoutableIpv4(host) || !port) return;
 
   const result = await node.reportSelfToGWebCaches({
+    caches: node.config().gwebCacheUrls,
     client: node.config().vendorCode,
     version: node.config().userAgent,
     ip: normalizePeer(host, port),

@@ -48,6 +48,7 @@ import {
   unique,
 } from "../shared";
 import type { ConfigDoc, PeerState, RuntimeConfig } from "../types";
+import { normalizeCacheUrl } from "../gwebcache/shared";
 import { normalizeRtcRendezvousUrl } from "./rtc_rendezvous";
 
 type PersistedConfig = {
@@ -56,6 +57,7 @@ type PersistedConfig = {
   advertised_host?: unknown;
   advertised_port?: unknown;
   blocked_ips?: unknown;
+  gwebcache_urls?: unknown;
   rtc?: unknown;
   rtc_rendezvous_urls?: unknown;
   rtc_stun_servers?: unknown;
@@ -304,6 +306,10 @@ function runtimeRtcStunServers(value: unknown): string[] {
   return normalizedRtcStunServers(value) || [];
 }
 
+function runtimeGWebCacheUrls(value: unknown): string[] {
+  return normalizedGWebCacheUrls(value) || [];
+}
+
 export function runtimeConfigFor(
   configPath: string,
   doc: Pick<ConfigDoc, "config" | "state">,
@@ -323,6 +329,7 @@ export function runtimeConfigFor(
     advertisedHost: normalizedAdvertisedHost(doc.config.advertisedHost),
     advertisedPort: normalizedPositivePort(doc.config.advertisedPort),
     blockedIps: normalizedBlockedIps(doc.config.blockedIps) || [],
+    gwebCacheUrls: runtimeGWebCacheUrls(doc.config.gwebCacheUrls),
     rtc: doc.config.rtc === true,
     rtcRendezvousUrls: runtimeRtcRendezvousUrls(
       doc.config.rtcRendezvousUrls,
@@ -396,6 +403,9 @@ export function configDocForRuntime(
     blockedIps: config.blockedIps.length
       ? [...config.blockedIps]
       : undefined,
+    gwebCacheUrls: config.gwebCacheUrls.length
+      ? [...config.gwebCacheUrls]
+      : undefined,
     rtc: config.rtc,
     rtcRendezvousUrls: config.rtcRendezvousUrls.length
       ? [...config.rtcRendezvousUrls]
@@ -458,6 +468,10 @@ function normalizedMonitorIgnoreEvents(
 
 function normalizedBlockedIps(value: unknown): string[] | undefined {
   return normalizedStringArray(value, (entry) => normalizeIpv4(entry));
+}
+
+function normalizedGWebCacheUrls(value: unknown): string[] | undefined {
+  return normalizedStringArray(value, (entry) => normalizeCacheUrl(entry));
 }
 
 function normalizedRtcRendezvousUrls(
@@ -571,6 +585,8 @@ function applyOptionalLoadedConfig(
   if (advertisedPort) doc.config.advertisedPort = advertisedPort;
   const blockedIps = normalizedBlockedIps(config.blocked_ips);
   if (blockedIps) doc.config.blockedIps = blockedIps;
+  const gwebCacheUrls = normalizedGWebCacheUrls(config.gwebcache_urls);
+  if (gwebCacheUrls) doc.config.gwebCacheUrls = gwebCacheUrls;
   applyLoadedRtcConfig(doc, config);
   doc.config.ultrapeer = config.ultrapeer === true;
   applyLoadedPeerLimits(doc, config);
@@ -642,6 +658,9 @@ function persistedConfigForRuntime(
   const cleanConfig: PersistedConfig = {
     listen_host: runtime.listenHost,
     listen_port: runtime.listenPort,
+    gwebcache_urls: runtime.gwebCacheUrls.length
+      ? [...runtime.gwebCacheUrls]
+      : undefined,
     rtc: runtime.rtc,
     rtc_rendezvous_urls: runtime.rtcRendezvousUrls.length
       ? [...runtime.rtcRendezvousUrls]

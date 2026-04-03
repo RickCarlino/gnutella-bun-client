@@ -11,6 +11,10 @@ import {
 } from "../shared";
 import type { PeerCapabilities, PeerRole } from "../types";
 import {
+  blockedClientMessage,
+  blockedClientSignature,
+} from "./client_blocking";
+import {
   buildHandshakeBlock,
   describeHandshakeResponse,
   findHeaderEnd,
@@ -27,11 +31,74 @@ import type { ProbeCtx } from "./node_types";
 
 function clearProbeListeners(ctx: ProbeCtx): void {
   if (ctx.onData) ctx.socket.off("data", ctx.onData);
+  if (ctx.onEnd) ctx.socket.off("end", ctx.onEnd);
+  if (ctx.onClose) ctx.socket.off("close", ctx.onClose);
   if (ctx.onError) ctx.socket.off("error", ctx.onError);
 }
 
 function blockedProbeMessage(ip: string): string {
   return `blocked IP ${ip}`;
+}
+
+function maybeBlockClientHost(
+  node: GnutellaServent,
+  remoteHost: string | undefined,
+): string | undefined {
+  const ip = normalizeIpv4(remoteHost);
+  if (!ip) return undefined;
+  node.blockIp(ip);
+  return ip;
+}
+
+function probePreview(buf: Buffer): string | undefined {
+  const preview = buf
+    .toString("latin1")
+    .replace(/\r\n/g, "\\r\\n")
+    .replace(/\n/g, "\\n")
+    .trim();
+  if (!preview) return undefined;
+  return preview.length > 96 ? `${preview.slice(0, 96)}...` : preview;
+}
+
+function describeProbeState(
+  ctx: ProbeCtx,
+  reason: string,
+  ageMs: number,
+  detail?: string,
+): string {
+  const parts = [
+    `reason=${reason}`,
+    `mode=${ctx.mode}`,
+    `bytes=${ctx.receivedBytes}`,
+    `ageMs=${ageMs}`,
+  ];
+  if (detail) parts.push(detail);
+  const preview = probePreview(ctx.buf);
+  if (preview) parts.push(`preview=${JSON.stringify(preview)}`);
+  return parts.join(" ");
+}
+
+function finishProbe(ctx: ProbeCtx): void {
+  ctx.mode = "done";
+  clearProbeListeners(ctx);
+}
+
+function terminateProbeEarly(
+  node: GnutellaServent,
+  ctx: ProbeCtx,
+  reason: string,
+  detail?: string,
+): void {
+  if (ctx.mode === "done") return;
+  const ageMs = Math.max(0, node.now() - ctx.startedAtMs);
+  emitHandshakeDebug(
+    node,
+    "inbound",
+    "terminated-early",
+    handshakePeerLabel(ctx.socket),
+    describeProbeState(ctx, reason, ageMs, detail),
+  );
+  finishProbe(ctx);
 }
 
 function handshakePeerLabel(socket: net.Socket): string {
@@ -298,32 +365,58 @@ export function handleProbe(
   const ctx: ProbeCtx = {
     socket,
     buf: Buffer.alloc(0),
+    receivedBytes: 0,
+    startedAtMs: node.now(),
     mode: "undecided",
   };
+  emitHandshakeDebug(
+    node,
+    "inbound",
+    "probe-open",
+    handshakePeerLabel(socket),
+    "awaiting inbound protocol bytes",
+  );
   socket.setNoDelay(true);
   ctx.onData = (chunk) => {
     if (ctx.mode === "done") return;
-    ctx.buf = Buffer.concat([ctx.buf, toBuffer(chunk)]);
+    const data = toBuffer(chunk);
+    ctx.receivedBytes += data.length;
+    ctx.buf = Buffer.concat([ctx.buf, data]);
     try {
       node.tryDecideProbe(ctx);
     } catch (error) {
+      const message = errMsg(error);
       emitHandshakeDebug(
         node,
         "inbound",
         "failed",
         handshakePeerLabel(socket),
-        errMsg(error),
+        message,
       );
       node.emitEvent({
         type: "PROBE_REJECTED",
         at: ts(),
-        message: errMsg(error),
+        message,
       });
+      finishProbe(ctx);
       socket.destroy();
     }
   };
-  ctx.onError = () => void 0;
+  ctx.onEnd = () => terminateProbeEarly(node, ctx, "end");
+  ctx.onClose = (hadError) =>
+    terminateProbeEarly(
+      node,
+      ctx,
+      "close",
+      hadError ? "hadError=true" : undefined,
+    );
+  ctx.onError = (error) => {
+    terminateProbeEarly(node, ctx, "error", errMsg(error));
+    socket.destroy();
+  };
   socket.on("data", ctx.onData);
+  socket.on("end", ctx.onEnd);
+  socket.on("close", ctx.onClose);
   socket.on("error", ctx.onError);
 }
 
@@ -369,6 +462,29 @@ export function handleInbound06Probe(
   );
   if (!/^GNUTELLA CONNECT\/0\.[0-9]+/i.test(startLine)) {
     throw new Error(`unexpected 0.6 start line: ${startLine}`);
+  }
+  const blockedSignature = blockedClientSignature(headers);
+  if (blockedSignature) {
+    const message = blockedClientMessage(
+      blockedSignature,
+      ctx.socket.remoteAddress,
+    );
+    maybeBlockClientHost(node, ctx.socket.remoteAddress);
+    emitHandshakeDebug(
+      node,
+      "inbound",
+      "blocked-client",
+      handshakePeerLabel(ctx.socket),
+      message,
+    );
+    node.emitEvent({
+      type: "PROBE_REJECTED",
+      at: ts(),
+      message,
+    });
+    node.reject06(ctx.socket, 503, "Blocked client");
+    finishProbe(ctx);
+    return;
   }
   node.absorbHandshakeHeaders(headers, ctx.socket.remoteAddress);
   const requestedCaps = node.buildCapabilities(
@@ -548,7 +664,6 @@ function parseOutboundHandshakeResult(
   if (cut === -1) return undefined;
 
   const { startLine, headers } = parseHandshakeBlock(raw.slice(0, cut));
-  node.absorbHandshakeHeaders(headers, socket.remoteAddress);
   emitHandshakeBlock(
     node,
     "outbound",
@@ -557,6 +672,23 @@ function parseOutboundHandshakeResult(
     startLine,
     headers,
   );
+  const blockedSignature = blockedClientSignature(headers);
+  if (blockedSignature) {
+    const message = blockedClientMessage(
+      blockedSignature,
+      socket.remoteAddress,
+    );
+    maybeBlockClientHost(node, socket.remoteAddress);
+    emitHandshakeDebug(
+      node,
+      "outbound",
+      "blocked-client",
+      target,
+      message,
+    );
+    throw new Error(message);
+  }
+  node.absorbHandshakeHeaders(headers, socket.remoteAddress);
   if (
     /^GNUTELLA OK/i.test(startLine) ||
     /^GNUTELLA\/0\.4 200/i.test(startLine)

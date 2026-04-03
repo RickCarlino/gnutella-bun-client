@@ -1,14 +1,28 @@
 import net from "node:net";
+import zlib from "node:zlib";
 
-import { TYPE } from "../const";
-import { buildHeader, encodeQueryHit } from "./codec";
-import { socketCanEnd } from "./handshake";
+import { errMsg, parsePeer } from "../shared";
+import { HEADER_LEN, LOCAL_ROUTE, TYPE } from "../const";
+import { buildHeader, encodeQueryHit, parseHeader } from "./codec";
+import {
+  findHeaderEnd,
+  hasToken,
+  parseHttpHeaders,
+  socketCanEnd,
+} from "./handshake";
 import type { GnutellaServent } from "./node";
-import type { ExistingGetRequest } from "./node_types";
+import type { ExistingGetRequest, Peer } from "./node_types";
 
 const BROWSE_HOST_ACCEPT = "application/x-gnutella-packets";
 const BROWSE_HOST_DESCRIPTOR_ID = Buffer.alloc(16, 0);
 const BROWSE_HOST_BATCH_SIZE = 16;
+const BROWSE_HOST_TIMEOUT_MESSAGE = "browse host timeout";
+
+type BrowseTarget = {
+  peer: Peer;
+  host: string;
+  port: number;
+};
 
 function acceptsBrowseHostQhits(request: ExistingGetRequest): boolean {
   const accept = request.headers["accept"];
@@ -32,6 +46,451 @@ function buildBrowseHostResponse(
     "",
     "",
   ].join("\r\n");
+}
+
+function mediaTypeOf(value: string | undefined): string | undefined {
+  return value?.split(";", 1)[0]?.trim().toLowerCase();
+}
+
+function parseContentLength(
+  headers: Record<string, string>,
+): number | undefined {
+  const raw = headers["content-length"];
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0)
+    throw new Error(`invalid Content-Length ${JSON.stringify(raw)}`);
+  return parsed;
+}
+
+function peerAddressMatches(
+  peerSpec: string | undefined,
+  host: string,
+  port: number,
+): boolean {
+  const parsed = parsePeer(peerSpec || "");
+  return !!parsed && parsed.host === host && parsed.port === port;
+}
+
+function peerMatchesBrowseAddress(
+  peer: Peer,
+  host: string,
+  port: number,
+): boolean {
+  const fromListenIp = peer.capabilities.listenIp;
+  if (
+    fromListenIp &&
+    fromListenIp.host === host &&
+    fromListenIp.port === port
+  ) {
+    return true;
+  }
+
+  return (
+    peerAddressMatches(peer.dialTarget, host, port) ||
+    peerAddressMatches(peer.remoteLabel, host, port)
+  );
+}
+
+function syntheticBrowsePeer(host: string, port: number): Peer {
+  return {
+    key: `${host}:${port}`,
+    socket: new net.Socket(),
+    buf: Buffer.alloc(0),
+    outbound: true,
+    remoteLabel: `${host}:${port}`,
+    dialTarget: `${host}:${port}`,
+    role: "leaf",
+    capabilities: {
+      version: "0.6",
+      headers: {},
+      supportsGgep: false,
+      supportsPongCaching: false,
+      supportsBye: false,
+      supportsCompression: false,
+      supportsTls: false,
+      compressIn: false,
+      compressOut: false,
+      isUltrapeer: false,
+      ultrapeerNeeded: false,
+      isCrawler: false,
+    },
+    remoteQrp: {
+      resetSeen: false,
+      tableSize: 0,
+      infinity: 0,
+      entryBits: 0,
+      table: null,
+      seqSize: 0,
+      compressor: 0,
+      parts: new Map<number, Buffer>(),
+    },
+    lastPingAt: 0,
+    connectedAt: 0,
+  };
+}
+
+function resolvePeerBrowseTarget(
+  node: GnutellaServent,
+  peerKey: string,
+): BrowseTarget | undefined {
+  const peer = node.peers.get(peerKey);
+  if (!peer) return undefined;
+
+  const fromListenIp = peer.capabilities.listenIp;
+  if (
+    fromListenIp &&
+    !node.isSelfPeer(fromListenIp.host, fromListenIp.port)
+  ) {
+    return { peer, host: fromListenIp.host, port: fromListenIp.port };
+  }
+
+  const candidates = [
+    peer.dialTarget,
+    peer.outbound ? peer.remoteLabel : undefined,
+    peer.remoteLabel,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parsePeer(candidate || "");
+    if (!parsed || node.isSelfPeer(parsed.host, parsed.port)) continue;
+    return { peer, host: parsed.host, port: parsed.port };
+  }
+
+  throw new Error(`peer ${peerKey} has no browseable host:port`);
+}
+
+function resolveBrowseTarget(
+  node: GnutellaServent,
+  target: string,
+): BrowseTarget {
+  const byPeer = resolvePeerBrowseTarget(node, target);
+  if (byPeer) return byPeer;
+
+  const parsed = parsePeer(target);
+  if (!parsed) throw new Error(`no such peer ${target}`);
+  if (node.isSelfPeer(parsed.host, parsed.port)) {
+    throw new Error("cannot browse self");
+  }
+
+  const existingPeer = [...node.peers.values()].find((peer) =>
+    peerMatchesBrowseAddress(peer, parsed.host, parsed.port),
+  );
+  return {
+    peer: existingPeer || syntheticBrowsePeer(parsed.host, parsed.port),
+    host: parsed.host,
+    port: parsed.port,
+  };
+}
+
+function buildBrowseHostRequest(
+  node: GnutellaServent,
+  host: string,
+  port: number,
+): string {
+  return [
+    "GET / HTTP/1.1",
+    `Host: ${host}:${port}`,
+    `User-Agent: ${node.config().userAgent}`,
+    `Accept: ${BROWSE_HOST_ACCEPT}`,
+    "Accept-Encoding: deflate",
+    "Connection: close",
+    "",
+    "",
+  ].join("\r\n");
+}
+
+function parseChunkSizeLine(
+  body: Buffer,
+  offset: number,
+): {
+  size: number;
+  nextOffset: number;
+} {
+  const lineEnd = body.indexOf(Buffer.from("\r\n"), offset);
+  if (lineEnd === -1) throw new Error("invalid chunked browse-host body");
+  const rawSize = body
+    .subarray(offset, lineEnd)
+    .toString("latin1")
+    .split(";", 1)[0]
+    ?.trim();
+  const size = Number.parseInt(rawSize || "", 16);
+  if (!Number.isFinite(size) || size < 0)
+    throw new Error(
+      `invalid browse-host chunk size ${JSON.stringify(rawSize)}`,
+    );
+  return { size, nextOffset: lineEnd + 2 };
+}
+
+function assertChunkTerminator(body: Buffer, offset: number): void {
+  if (body.toString("latin1", offset, offset + 2) !== "\r\n") {
+    throw new Error("invalid browse-host chunk terminator");
+  }
+}
+
+function decodeChunkedBody(body: Buffer): Buffer {
+  const parts: Buffer[] = [];
+  let offset = 0;
+
+  while (offset < body.length) {
+    const parsed = parseChunkSizeLine(body, offset);
+    const size = parsed.size;
+    offset = parsed.nextOffset;
+    if (size === 0) return Buffer.concat(parts);
+    if (offset + size + 2 > body.length)
+      throw new Error("truncated browse-host chunk");
+    parts.push(body.subarray(offset, offset + size));
+    offset += size;
+    assertChunkTerminator(body, offset);
+    offset += 2;
+  }
+
+  throw new Error("truncated browse-host chunked stream");
+}
+
+function decodeBrowseHostBody(
+  headers: Record<string, string>,
+  body: Buffer,
+): Buffer {
+  const transferEncoding = headers["transfer-encoding"];
+  let decoded = body;
+  if (transferEncoding && !hasToken(transferEncoding, "chunked")) {
+    throw new Error(
+      `unsupported Transfer-Encoding ${JSON.stringify(transferEncoding)}`,
+    );
+  }
+  if (hasToken(transferEncoding, "chunked")) {
+    decoded = decodeChunkedBody(decoded);
+  }
+
+  const contentEncoding = headers["content-encoding"];
+  if (!contentEncoding) return decoded;
+  if (!hasToken(contentEncoding, "deflate")) {
+    throw new Error(
+      `unsupported Content-Encoding ${JSON.stringify(contentEncoding)}`,
+    );
+  }
+  return zlib.inflateSync(decoded);
+}
+
+async function readBrowseHostHttpResponse(
+  socket: net.Socket,
+): Promise<{ head: string; body: Buffer }> {
+  return await new Promise((resolve, reject) => {
+    let done = false;
+    let buf = Buffer.alloc(0);
+    let headerEnd = -1;
+    let expectedBodyBytes: number | undefined;
+
+    const cleanup = () => {
+      socket.off("data", onData);
+      socket.off("end", onEnd);
+      socket.off("close", onClose);
+      socket.off("error", onError);
+    };
+
+    const fail = (error: unknown) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject(error instanceof Error ? error : new Error(errMsg(error)));
+    };
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (headerEnd === -1) {
+        reject(new Error("missing browse-host HTTP response headers"));
+        return;
+      }
+      const head = buf.subarray(0, headerEnd).toString("latin1");
+      const body = buf.subarray(headerEnd);
+      if (expectedBodyBytes != null && body.length < expectedBodyBytes) {
+        reject(new Error("incomplete browse-host HTTP response body"));
+        return;
+      }
+      resolve({
+        head,
+        body:
+          expectedBodyBytes == null
+            ? body
+            : body.subarray(0, expectedBodyBytes),
+      });
+    };
+
+    const maybeParseHeaders = () => {
+      if (headerEnd !== -1) return;
+      const cut = findHeaderEnd(buf.toString("latin1"));
+      if (cut === -1) return;
+      headerEnd = cut;
+      expectedBodyBytes = parseContentLength(
+        parseHttpHeaders(buf.subarray(0, cut).toString("latin1")),
+      );
+    };
+
+    const onData = (chunk: string | Buffer) => {
+      if (done) return;
+      buf = Buffer.concat([buf, Buffer.from(chunk)]);
+      maybeParseHeaders();
+      if (
+        headerEnd !== -1 &&
+        expectedBodyBytes != null &&
+        buf.length - headerEnd >= expectedBodyBytes
+      ) {
+        finish();
+      }
+    };
+
+    const onEnd = () => finish();
+    const onClose = () => {
+      if (done) return;
+      if (
+        headerEnd !== -1 &&
+        (expectedBodyBytes == null ||
+          buf.length - headerEnd >= expectedBodyBytes)
+      ) {
+        finish();
+        return;
+      }
+      fail(
+        new Error(
+          "browse-host connection closed before response completed",
+        ),
+      );
+    };
+    const onError = (error: unknown) => fail(error);
+
+    socket.on("data", onData);
+    socket.on("end", onEnd);
+    socket.on("close", onClose);
+    socket.on("error", onError);
+  });
+}
+
+function validateBrowseHostResponse(head: string): Record<string, string> {
+  const first = head.replace(/\r\n/g, "\n").split("\n", 1)[0] || "";
+  const status = Number(/^HTTP\/\d+\.\d+\s+(\d+)/i.exec(first)?.[1]);
+  if (!Number.isFinite(status))
+    throw new Error("invalid browse-host HTTP response");
+  if (status === 406) {
+    throw new Error("browse host rejected application/x-gnutella-packets");
+  }
+  if (status !== 200) {
+    throw new Error(`browse host failed with ${first}`);
+  }
+
+  const headers = parseHttpHeaders(head);
+  if (mediaTypeOf(headers["content-type"]) !== BROWSE_HOST_ACCEPT) {
+    throw new Error(
+      `unexpected browse-host content type ${JSON.stringify(headers["content-type"] || "")}`,
+    );
+  }
+  return headers;
+}
+
+async function connectBrowseHostSocket(
+  node: GnutellaServent,
+  socket: net.Socket,
+  host: string,
+  port: number,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: unknown) => {
+      socket.removeListener("connect", onConnect);
+      reject(error instanceof Error ? error : new Error(errMsg(error)));
+    };
+    const onConnect = () => {
+      socket.removeListener("error", onError);
+      socket.write(buildBrowseHostRequest(node, host, port));
+      resolve();
+    };
+    socket.once("error", onError);
+    socket.once("connect", onConnect);
+  });
+}
+
+function ingestBrowseHostBody(
+  node: GnutellaServent,
+  peer: Peer,
+  body: Buffer,
+): number {
+  const browseDescriptorId = node.randomId16();
+  const descriptorIdHex = browseDescriptorId.toString("hex");
+  const before = node.lastResults.length;
+
+  node.queryRoutes.set(descriptorIdHex, LOCAL_ROUTE);
+  try {
+    for (let offset = 0; offset < body.length; ) {
+      if (offset + HEADER_LEN > body.length) {
+        throw new Error("truncated browse-host packet header");
+      }
+      const packetHeader = parseHeader(
+        body.subarray(offset, offset + HEADER_LEN),
+      );
+      offset += HEADER_LEN;
+      if (offset + packetHeader.payloadLength > body.length) {
+        throw new Error("truncated browse-host packet payload");
+      }
+      if (packetHeader.payloadType !== TYPE.QUERY_HIT) {
+        throw new Error(
+          `unexpected browse-host packet type 0x${packetHeader.payloadType.toString(16)}`,
+        );
+      }
+      const payload = body.subarray(
+        offset,
+        offset + packetHeader.payloadLength,
+      );
+      offset += packetHeader.payloadLength;
+      node.onQueryHit(
+        peer,
+        {
+          descriptorId: browseDescriptorId,
+          descriptorIdHex,
+          payloadType: packetHeader.payloadType,
+          ttl: packetHeader.ttl,
+          hops: packetHeader.hops,
+        },
+        payload,
+      );
+    }
+  } finally {
+    node.queryRoutes.delete(descriptorIdHex);
+  }
+
+  return node.lastResults.length - before;
+}
+
+export async function browsePeer(
+  node: GnutellaServent,
+  targetSpec: string,
+): Promise<number> {
+  const target = resolveBrowseTarget(node, targetSpec);
+  const socket = node.createConnection({
+    host: target.host,
+    port: target.port,
+  });
+  socket.setNoDelay(true);
+  socket.setTimeout(node.config().downloadTimeoutMs, () =>
+    socket.destroy(new Error(BROWSE_HOST_TIMEOUT_MESSAGE)),
+  );
+  const responsePromise = readBrowseHostHttpResponse(socket);
+
+  try {
+    await connectBrowseHostSocket(node, socket, target.host, target.port);
+    const { head, body } = await responsePromise;
+    const headers = validateBrowseHostResponse(head);
+
+    return ingestBrowseHostBody(
+      node,
+      target.peer,
+      decodeBrowseHostBody(headers, body),
+    );
+  } catch (error) {
+    await responsePromise.catch(() => undefined);
+    throw error;
+  } finally {
+    if (socketCanEnd(socket)) socket.end();
+  }
 }
 
 function buildBrowseHostBody(node: GnutellaServent): Buffer {

@@ -22,6 +22,7 @@ import {
 } from "./handshake";
 import { readHttpDownloadSource } from "./http_download_reader";
 import {
+  browsePeer as browsePeerImpl,
   handleBrowseHostGet,
   isBrowseHostGetRequest,
 } from "./browse_host";
@@ -644,6 +645,13 @@ export async function downloadResult(
   } finally {
     if (!destOverride) node.activeAutoDownloadPaths.delete(destPath);
   }
+}
+
+export async function browsePeer(
+  node: GnutellaServent,
+  peerKey: string,
+): Promise<number> {
+  return await browsePeerImpl(node, peerKey);
 }
 
 export function sendPing(node: GnutellaServent, ttl: number): void {

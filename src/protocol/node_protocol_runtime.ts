@@ -80,7 +80,7 @@ export function attachPeer(
   dialTarget?: string,
 ): Peer {
   const connectedAt = node.now();
-  const key = `peer-${++node.peerSeq}`;
+  const key = `p${++node.peerSeq}`;
   const peer: Peer = {
     key,
     socket,

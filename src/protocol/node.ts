@@ -373,6 +373,7 @@ export class GnutellaServent {
   declare readHttpDownload: TransferMethods["readHttpDownload"];
   declare sendPush: TransferMethods["sendPush"];
   declare downloadResult: TransferMethods["downloadResult"];
+  declare browsePeer: TransferMethods["browsePeer"];
   declare sendPing: TransferMethods["sendPing"];
   declare sendQuery: TransferMethods["sendQuery"];
   declare pollRtcRendezvousOffers: TransferMethods["pollRtcRendezvousOffers"];

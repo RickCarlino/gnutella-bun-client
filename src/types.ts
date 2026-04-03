@@ -197,6 +197,7 @@ export type ConfigDoc = {
     advertisedHost?: string;
     advertisedPort?: number;
     blockedIps?: string[];
+    gwebCacheUrls?: string[];
     rtc: boolean;
     rtcRendezvousUrls?: string[];
     rtcStunServers?: string[];
@@ -219,6 +220,7 @@ export type RuntimeConfig = {
   advertisedHost?: string;
   advertisedPort?: number;
   blockedIps: string[];
+  gwebCacheUrls: string[];
   rtc: boolean;
   rtcRendezvousUrls: string[];
   rtcStunServers: string[];

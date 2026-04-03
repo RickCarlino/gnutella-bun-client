@@ -120,7 +120,7 @@ export const CLI_HELP_LINES = [
   "clear",
   "ping [ttl]",
   "query <search terms...>",
-  "browse",
+  "browse <peerKey|host:port>",
   "info <resultNo>",
   "magnet <resultNo>",
   "download <resultNo> [destPath]",

@@ -164,6 +164,7 @@ export async function connectKnownPeers(
   );
   await node.connectBootstrapPeers({
     peers,
+    caches: c.gwebCacheUrls,
     client: c.vendorCode,
     version: c.userAgent,
     connectTimeoutMs: bootstrapTimeoutMs,

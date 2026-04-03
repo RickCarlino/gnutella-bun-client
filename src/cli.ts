@@ -453,9 +453,15 @@ async function handleBrowseCommand(
   session: CliSession,
   args: string[],
 ): Promise<boolean> {
-  if (args.length !== 1) throw new Error("usage: browse");
-  session.node.sendQuery("    ", 1);
-  log(session, "browse query sent");
+  if (args.length !== 2)
+    throw new Error("usage: browse <peerKey|host:port>");
+  const added = await session.node.browsePeer(args[1]);
+  log(
+    session,
+    added > 0
+      ? `browse loaded ${added} result${added === 1 ? "" : "s"} from ${args[1]}`
+      : `browse returned no results from ${args[1]}`,
+  );
   return true;
 }
 
