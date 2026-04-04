@@ -18,7 +18,7 @@ GBun can be used in three ways:
 
 It interoperates with other Gnutella clients, including GTK Gnutella.
 
-## Downloads
+## Get GBun
 
 - [Windows](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-windows-x64.exe)
 - [Windows (older CPUs)](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-windows-x64-baseline.exe)
@@ -26,14 +26,6 @@ It interoperates with other Gnutella clients, including GTK Gnutella.
 - [macOS Apple Silicon](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-darwin-arm64)
 - [Linux builds](https://github.com/RickCarlino/gnutella-bun-client/releases)
 - [All releases](https://github.com/RickCarlino/gnutella-bun-client/releases)
-
-## Guides
-
-- [Quickstart](QUICKSTART.md): get the CLI working in a few minutes
-- [CLI Guide](CLI.md): full command and config reference
-- [Developer Guide](DEVELOPER.md): embed GBun in your own TypeScript app
-
-## Get GBun
 
 If you want a prebuilt executable, download one from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases).
 
@@ -45,4 +37,8 @@ bun run bin/gnutella.ts init --config gnutella.json
 bun run bin/gnutella.ts run --config gnutella.json
 ```
 
-If you are using a compiled binary, replace `bun run bin/gnutella.ts` with the executable path.
+## Guides
+
+- [Quickstart](QUICKSTART.md): get the CLI working in a few minutes
+- [CLI Guide](CLI.md): full command and config reference
+- [Developer Guide](DEVELOPER.md): embed GBun in your own TypeScript app
