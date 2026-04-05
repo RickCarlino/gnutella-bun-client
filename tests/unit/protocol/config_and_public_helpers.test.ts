@@ -320,6 +320,7 @@ describe("protocol config and public helpers", () => {
         {
           key: "1.2.3.4:6346",
           remoteLabel: "1.2.3.4:6346",
+          browseTarget: "5.6.7.8:6347",
           role: "leaf",
           outbound: false,
           dialTarget: "1.2.3.4:6346",

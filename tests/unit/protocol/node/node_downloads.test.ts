@@ -787,6 +787,7 @@ describe("protocol node", () => {
         {
           key: "p1",
           remoteLabel: "9.8.7.6:4321",
+          browseTarget: "9.8.7.6:4321",
           role: "leaf",
           outbound: true,
           dialTarget: "9.8.7.6:4321",

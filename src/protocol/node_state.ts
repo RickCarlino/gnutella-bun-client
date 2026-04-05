@@ -129,6 +129,7 @@ export function peerInfo(node: GnutellaServent, peer: Peer): PeerInfo {
   const info: PeerInfo = {
     key: peer.key,
     remoteLabel: peer.remoteLabel,
+    browseTarget: peerBrowseTarget(node, peer),
     role: peer.role,
     outbound: peer.outbound,
     dialTarget: peer.dialTarget,
@@ -139,6 +140,32 @@ export function peerInfo(node: GnutellaServent, peer: Peer): PeerInfo {
   if (peer.capabilities.userAgent)
     info.userAgent = peer.capabilities.userAgent;
   return info;
+}
+
+export function peerBrowseTarget(
+  node: GnutellaServent,
+  peer: Peer,
+): string | undefined {
+  const fromListenIp = peer.capabilities.listenIp;
+  if (
+    fromListenIp &&
+    !node.isSelfPeer(fromListenIp.host, fromListenIp.port)
+  ) {
+    return `${fromListenIp.host}:${fromListenIp.port}`;
+  }
+
+  const candidates = [
+    peer.dialTarget,
+    peer.outbound ? peer.remoteLabel : undefined,
+    peer.remoteLabel,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parsePeer(candidate || "");
+    if (!parsed || node.isSelfPeer(parsed.host, parsed.port)) continue;
+    return `${parsed.host}:${parsed.port}`;
+  }
+
+  return undefined;
 }
 
 export function peerCount(node: GnutellaServent): number {

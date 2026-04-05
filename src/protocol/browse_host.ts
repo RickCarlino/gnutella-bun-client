@@ -12,6 +12,7 @@ import {
 } from "./handshake";
 import type { GnutellaServent } from "./node";
 import type { ExistingGetRequest, Peer } from "./node_types";
+import { peerBrowseTarget } from "./node_state";
 
 const BROWSE_HOST_ACCEPT = "application/x-gnutella-packets";
 const BROWSE_HOST_DESCRIPTOR_ID = Buffer.alloc(16, 0);
@@ -136,27 +137,11 @@ function resolvePeerBrowseTarget(
 ): BrowseTarget | undefined {
   const peer = node.peers.get(peerKey);
   if (!peer) return undefined;
-
-  const fromListenIp = peer.capabilities.listenIp;
-  if (
-    fromListenIp &&
-    !node.isSelfPeer(fromListenIp.host, fromListenIp.port)
-  ) {
-    return { peer, host: fromListenIp.host, port: fromListenIp.port };
-  }
-
-  const candidates = [
-    peer.dialTarget,
-    peer.outbound ? peer.remoteLabel : undefined,
-    peer.remoteLabel,
-  ];
-  for (const candidate of candidates) {
-    const parsed = parsePeer(candidate || "");
-    if (!parsed || node.isSelfPeer(parsed.host, parsed.port)) continue;
-    return { peer, host: parsed.host, port: parsed.port };
-  }
-
-  throw new Error(`peer ${peerKey} has no browseable host:port`);
+  const target = peerBrowseTarget(node, peer);
+  const parsed = parsePeer(target || "");
+  if (!parsed)
+    throw new Error(`peer ${peerKey} has no browseable host:port`);
+  return { peer, host: parsed.host, port: parsed.port };
 }
 
 function resolveBrowseTarget(

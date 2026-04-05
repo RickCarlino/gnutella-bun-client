@@ -42,3 +42,13 @@ bun run bin/gnutella.ts run --config gnutella.json
 - [Quickstart](QUICKSTART.md): get the CLI working in a few minutes
 - [CLI Guide](CLI.md): full command and config reference
 - [Developer Guide](DEVELOPER.md): embed GBun in your own TypeScript app
+
+## Remaining Items
+
+- Publish as NPM package.
+- Add better download capabilities (progress tracking, SHA verification, multi-peer downloads)
+- Provision signalling cache for WebRTC
+- Gnutella Pointer System (GPS)
+- Chrome extension for Magnet/GPS documents?
+- Improve blocking support (set inclusion check, drop packets from blocked peers, etc..)
+- Improve WebRTC support: Ability to find peers via signalling server, Non-TCP WebRTC peer connections, etc..

@@ -13,6 +13,7 @@ export type CliNode = {
   getPeers(): Array<{
     key: string;
     remoteLabel: string;
+    browseTarget?: string;
     role: PeerRole;
     outbound: boolean;
     dialTarget?: string;
@@ -261,6 +262,7 @@ export type RuntimeConfig = {
 export type PeerInfo = {
   key: string;
   remoteLabel: string;
+  browseTarget?: string;
   role: PeerRole;
   outbound: boolean;
   dialTarget?: string;
