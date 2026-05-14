@@ -62,8 +62,7 @@ export type MaintenanceOperation =
   | "SHARE_RESCAN"
   | "RECONNECT"
   | "SAVE"
-  | "GWEBCACHE_UPDATE"
-  | "RTC_RENDEZVOUS_POLL";
+  | "GWEBCACHE_UPDATE";
 
 export function subscribe(
   node: GnutellaServent,

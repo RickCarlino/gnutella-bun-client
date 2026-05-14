@@ -106,8 +106,6 @@ LISTEN_PORT_ENV="$LISTEN_PORT" \
     doc.config.listen_port = listenPort;
     doc.config.advertised_host = publicIp;
     doc.config.advertised_port = listenPort;
-    doc.config.rtc = true;
-    doc.config.rtc_rendezvous_urls = [`http://${publicIp}:${listenPort}`];
     doc.config.ultrapeer = true;
 
     fs.writeFileSync(configPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8");

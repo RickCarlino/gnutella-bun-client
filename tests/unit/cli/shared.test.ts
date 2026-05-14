@@ -113,10 +113,6 @@ describe("cli_shared", () => {
           fileSize: 2048,
           fileName: "beta file.bin",
           serventIdHex: "cc".repeat(16),
-          rtc: {
-            cookieHex: "11".repeat(20),
-            rendezvousEndpoints: [{ host: "1.2.3.4", port: 8080 }],
-          },
         },
         {
           resultNo: 8,
@@ -150,7 +146,7 @@ describe("cli_shared", () => {
         "No  File                                               Size  Host",
         "--  ------------------------------------------------  -----  -------------",
         " 2  alpha.txt                                           99B  9.8.7.6:1234",
-        " 7  beta file.bin (RTC)                                 2KB  1.2.3.4:80",
+        " 7  beta file.bin                                       2KB  1.2.3.4:80",
         " 8  12345678901234567890123..abcdefghijklmnopqrstuvw  7.6KB  8.8.8.8:6346",
         "12  zz-top.bin                                        1.2KB  10.0.0.2:6346",
         "21  giant.iso                                         3.5GB  7.7.7.7:6346",

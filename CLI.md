@@ -57,9 +57,6 @@ GBun keeps both settings and remembered state in the same JSON file.
 | `config.max_ultrapeer_connections` | Cap for ultrapeer-to-ultrapeer links.                                                                                                                     |
 | `config.max_leaf_connections`      | Cap for leaf links.                                                                                                                                       |
 | `config.log_ignore`                | Event categories to hide when `monitor` is enabled.                                                                                                       |
-| `config.rtc`                       | Enables the experimental WebRTC download path.                                                                                                            |
-| `config.rtc_rendezvous_urls`       | Rendezvous server URLs for RTC.                                                                                                                           |
-| `config.rtc_stun_servers`          | STUN servers for RTC.                                                                                                                                     |
 
 ### Saved State
 
@@ -179,16 +176,6 @@ bun run bin/gnutella.ts run --config gnutella.json \
 ```
 
 This is useful for smoke tests, local demos, and small automation tasks.
-
-## Standalone RTC Relay
-
-If you only want the RTC rendezvous service, run:
-
-```bash
-bun run bin/rtc_relay.ts --host 0.0.0.0 --port 6346
-```
-
-That process serves the rendezvous endpoints and a Gnutella Web Cache, but it is not a full search and download client on its own.
 
 ## Next Step
 

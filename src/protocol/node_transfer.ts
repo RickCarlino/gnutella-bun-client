@@ -31,12 +31,6 @@ import type { GnutellaServent } from "./node";
 import type { ExistingGetRequest, HttpDownloadState } from "./node_types";
 import { sha1UrnFromUrn } from "./content_urn";
 import { splitQuerySearch } from "./query_search";
-import {
-  downloadViaRtc,
-  handleRtcRendezvousHttp,
-  pollRtcRendezvousOffers as pollRtcRendezvousOffersImpl,
-  queryRtcGgepItems,
-} from "./node_rtc";
 
 type OutgoingQueryParts = {
   search: string;
@@ -62,7 +56,7 @@ function recordDownloadSuccess(
   node: GnutellaServent,
   hit: SearchHit,
   destPath: string,
-  mode: "direct" | "push" | "rtc",
+  mode: "direct" | "push",
 ): void {
   node.emitEvent({
     type: "DOWNLOAD_SUCCEEDED",
@@ -83,12 +77,6 @@ function recordDownloadSuccess(
     mode,
     destPath,
   });
-}
-
-export async function pollRtcRendezvousOffers(
-  node: GnutellaServent,
-): Promise<void> {
-  await pollRtcRendezvousOffersImpl(node);
 }
 
 async function handleGetByFileIndex(
@@ -136,15 +124,8 @@ export async function handleIncomingGet(
   node: GnutellaServent,
   socket: net.Socket,
   head: string,
-  body: Buffer = Buffer.alloc(0),
+  _body: Buffer = Buffer.alloc(0),
 ): Promise<boolean> {
-  const rtcResponse = await handleRtcRendezvousHttp(
-    node,
-    socket,
-    head,
-    body,
-  );
-  if (rtcResponse != null) return rtcResponse;
   if (isBrowseHostGetRequest(head)) {
     return await handleBrowseHostGet(node, socket, head);
   }
@@ -613,16 +594,6 @@ export async function downloadResult(
     : await node.reserveAutoDownloadPath(hit.fileName);
 
   try {
-    if (node.config().rtc && hit.rtc) {
-      try {
-        await downloadViaRtc(node, hit, destPath);
-        recordDownloadSuccess(node, hit, destPath, "rtc");
-        return;
-      } catch {
-        // fall through to ordinary transports
-      }
-    }
-
     try {
       await node.directDownload(hit, destPath);
       recordDownloadSuccess(node, hit, destPath, "direct");
@@ -701,7 +672,6 @@ export function sendQuery(
   const query = splitOutgoingQuery(search);
   const payload = encodeQuery(query.search, {
     ggepHAllowed: !!node.config().enableGgep,
-    ggepItems: queryRtcGgepItems(node),
     maxHits: Math.min(0x1ff, node.config().maxResultsPerQuery),
     urns: query.urns,
   });

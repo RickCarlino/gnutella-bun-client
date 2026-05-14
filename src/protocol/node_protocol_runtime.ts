@@ -56,7 +56,6 @@ import {
   QrpTable,
   splitSearchTerms,
 } from "./qrp";
-import { applyRtcCapabilityToHit, queryHitRtcGgepItems } from "./node_rtc";
 
 function descriptorTypeName(payloadType: number): string {
   return TYPE_NAME[payloadType] || `0x${payloadType.toString(16)}`;
@@ -818,7 +817,6 @@ export function respondQueryHit(
         measuredSpeed: true,
         ggepHashes: q.ggepHAllowed && !!node.config().enableGgep,
         browseHost: !!node.config().enableGgep,
-        privateGgepItems: queryHitRtcGgepItems(node, q, hdr.descriptorId),
       },
     );
     node.sendToPeer(
@@ -898,7 +896,6 @@ export function onQueryHit(
         needsPush: qh.flagPush,
         busy: qh.flagBusy,
       };
-      applyRtcCapabilityToHit(qh, hit);
       node.lastResults.push(hit);
       node.emitEvent({ type: "QUERY_RESULT", at: ts(), hit });
     }

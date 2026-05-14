@@ -242,9 +242,7 @@ export function printResults(
     )
     .map((result) => ({
       resultNo: String(result.resultNo),
-      fileName: sanitizeTableCell(
-        result.rtc ? `${result.fileName} (RTC)` : result.fileName,
-      ),
+      fileName: sanitizeTableCell(result.fileName),
       fileSize: formatSize(result.fileSize),
       remote: sanitizeTableCell(
         `${result.remoteHost}:${result.remotePort}`,

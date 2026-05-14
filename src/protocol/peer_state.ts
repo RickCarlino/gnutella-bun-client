@@ -49,7 +49,6 @@ import {
 } from "../shared";
 import type { ConfigDoc, PeerState, RuntimeConfig } from "../types";
 import { normalizeCacheUrl } from "../gwebcache/shared";
-import { normalizeRtcRendezvousUrl } from "./rtc_rendezvous";
 
 type PersistedConfig = {
   listen_host?: unknown;
@@ -58,9 +57,6 @@ type PersistedConfig = {
   advertised_port?: unknown;
   blocked_ips?: unknown;
   gwebcache_urls?: unknown;
-  rtc?: unknown;
-  rtc_rendezvous_urls?: unknown;
-  rtc_stun_servers?: unknown;
   ultrapeer?: unknown;
   max_connections?: unknown;
   max_ultrapeer_connections?: unknown;
@@ -298,14 +294,6 @@ function normalizedAdvertisedHost(value: unknown): string | undefined {
     : undefined;
 }
 
-function runtimeRtcRendezvousUrls(value: unknown): string[] {
-  return normalizedRtcRendezvousUrls(value) || [];
-}
-
-function runtimeRtcStunServers(value: unknown): string[] {
-  return normalizedRtcStunServers(value) || [];
-}
-
 function runtimeGWebCacheUrls(value: unknown): string[] {
   return normalizedGWebCacheUrls(value) || [];
 }
@@ -330,11 +318,6 @@ export function runtimeConfigFor(
     advertisedPort: normalizedPositivePort(doc.config.advertisedPort),
     blockedIps: normalizedBlockedIps(doc.config.blockedIps) || [],
     gwebCacheUrls: runtimeGWebCacheUrls(doc.config.gwebCacheUrls),
-    rtc: doc.config.rtc === true,
-    rtcRendezvousUrls: runtimeRtcRendezvousUrls(
-      doc.config.rtcRendezvousUrls,
-    ),
-    rtcStunServers: runtimeRtcStunServers(doc.config.rtcStunServers),
     ultrapeer: doc.config.ultrapeer === true,
     monitorIgnoreEvents,
     nodeMode: doc.config.ultrapeer === true ? "ultrapeer" : "leaf",
@@ -406,13 +389,6 @@ export function configDocForRuntime(
     gwebCacheUrls: config.gwebCacheUrls.length
       ? [...config.gwebCacheUrls]
       : undefined,
-    rtc: config.rtc,
-    rtcRendezvousUrls: config.rtcRendezvousUrls.length
-      ? [...config.rtcRendezvousUrls]
-      : undefined,
-    rtcStunServers: config.rtcStunServers.length
-      ? [...config.rtcStunServers]
-      : undefined,
     ultrapeer: config.ultrapeer,
     maxConnections: config.maxConnections,
     maxUltrapeerConnections: config.maxUltrapeerConnections,
@@ -474,21 +450,6 @@ function normalizedGWebCacheUrls(value: unknown): string[] | undefined {
   return normalizedStringArray(value, (entry) => normalizeCacheUrl(entry));
 }
 
-function normalizedRtcRendezvousUrls(
-  value: unknown,
-): string[] | undefined {
-  return normalizedStringArray(value, (entry) =>
-    normalizeRtcRendezvousUrl(entry),
-  );
-}
-
-function normalizedRtcStunServers(value: unknown): string[] | undefined {
-  return normalizedStringArray(value, (entry) => {
-    const normalized = entry.trim();
-    return /^stun:/i.test(normalized) ? normalized : undefined;
-  });
-}
-
 function normalizedServentIdHex(value: unknown): string | undefined {
   if (typeof value !== "string" || !/^[0-9a-f]{32}$/i.test(value))
     return undefined;
@@ -503,9 +464,6 @@ export function defaultDoc(configPath: string): ConfigDoc {
       listenHost: DEFAULT_LISTEN_HOST,
       listenPort: defaultListenPortForServentId(serventIdHex),
       blockedIps: [],
-      rtc: false,
-      rtcRendezvousUrls: [],
-      rtcStunServers: [],
       ultrapeer: false,
       maxConnections: MAX_CONNECTIONS,
       maxUltrapeerConnections: MAX_ULTRAPEER_CONNECTIONS,
@@ -527,19 +485,6 @@ async function ensureDocRuntimeDirs(
   const runtime = runtimeConfigFor(configPath, doc);
   if (ensureConfigDir) await ensureDir(path.dirname(configPath));
   await ensureDir(runtime.downloadsDir);
-}
-
-function applyLoadedRtcConfig(
-  doc: ConfigDoc,
-  config: PersistedConfig,
-): void {
-  doc.config.rtc = config.rtc === true;
-  const rtcRendezvousUrls = normalizedRtcRendezvousUrls(
-    config.rtc_rendezvous_urls,
-  );
-  if (rtcRendezvousUrls) doc.config.rtcRendezvousUrls = rtcRendezvousUrls;
-  const rtcStunServers = normalizedRtcStunServers(config.rtc_stun_servers);
-  if (rtcStunServers) doc.config.rtcStunServers = rtcStunServers;
 }
 
 function applyLoadedPeerLimits(
@@ -587,7 +532,6 @@ function applyOptionalLoadedConfig(
   if (blockedIps) doc.config.blockedIps = blockedIps;
   const gwebCacheUrls = normalizedGWebCacheUrls(config.gwebcache_urls);
   if (gwebCacheUrls) doc.config.gwebCacheUrls = gwebCacheUrls;
-  applyLoadedRtcConfig(doc, config);
   doc.config.ultrapeer = config.ultrapeer === true;
   applyLoadedPeerLimits(doc, config);
   applyLoadedMonitorConfig(doc, config);
@@ -612,9 +556,6 @@ function buildLoadedDoc(
         positiveIntegerOrUndefined(config.listen_port) ||
         defaultListenPortForServentId(serventIdHex),
       blockedIps: [],
-      rtc: config.rtc === true,
-      rtcRendezvousUrls: [],
-      rtcStunServers: [],
       ultrapeer: config.ultrapeer === true,
       maxConnections: defaults.config.maxConnections,
       maxUltrapeerConnections: defaults.config.maxUltrapeerConnections,
@@ -660,13 +601,6 @@ function persistedConfigForRuntime(
     listen_port: runtime.listenPort,
     gwebcache_urls: runtime.gwebCacheUrls.length
       ? [...runtime.gwebCacheUrls]
-      : undefined,
-    rtc: runtime.rtc,
-    rtc_rendezvous_urls: runtime.rtcRendezvousUrls.length
-      ? [...runtime.rtcRendezvousUrls]
-      : undefined,
-    rtc_stun_servers: runtime.rtcStunServers.length
-      ? [...runtime.rtcStunServers]
       : undefined,
     ultrapeer: runtime.ultrapeer,
     max_connections: runtime.maxConnections,
