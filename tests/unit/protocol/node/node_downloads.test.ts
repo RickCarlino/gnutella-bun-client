@@ -330,6 +330,97 @@ describe("protocol node", () => {
     });
   });
 
+  test("serves clear HTTP errors for missing shares and invalid ranges", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const missingSocket = new MockSocket("9.8.7.6", 4321);
+
+      await expect(
+        node.handleIncomingGet(
+          missingSocket as never,
+          "GET /get/99/missing.bin HTTP/1.0\r\n\r\n",
+        ),
+      ).resolves.toBe(false);
+
+      expect(missingSocket.ended).toBe(true);
+      expect(missingSocket.writes[0]?.toString("latin1")).toBe(
+        "HTTP/1.0 404 Not Found\r\n\r\n",
+      );
+
+      const filePath = path.join(dir, "alpha.txt");
+      await fs.writeFile(filePath, "hello", "utf8");
+      const rangeSocket = new MockSocket("9.8.7.6", 4321);
+      const keepAlive = await node.handleExistingGet(
+        rangeSocket as never,
+        [
+          "GET /get/1/alpha.txt HTTP/1.1",
+          "Range: bytes=99-120",
+          "Connection: close",
+          "",
+          "",
+        ].join("\r\n"),
+        filePath,
+      );
+
+      expect(keepAlive).toBe(false);
+      expect(rangeSocket.ended).toBe(true);
+      expect(rangeSocket.writes[0]?.toString("latin1")).toContain(
+        "HTTP/1.1 416 Range Not Satisfiable\r\n",
+      );
+      expect(rangeSocket.writes[0]?.toString("latin1")).toContain(
+        "Content-Range: bytes */5\r\n",
+      );
+    });
+  });
+
+  test("streams existing GET bodies and reports stream failures", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const filePath = path.join(dir, "alpha.txt");
+      const socket = new MockSocket("9.8.7.6", 4321);
+
+      await fs.writeFile(filePath, "hello", "utf8");
+      await expect(
+        node.streamExistingGetBody(
+          socket as never,
+          filePath,
+          { start: 1, end: 3 },
+          false,
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(socket.ended).toBe(true);
+      expect(Buffer.concat(socket.writes).toString("utf8")).toBe("ell");
+
+      const failedSocket = new MockSocket("9.8.7.6", 4321);
+      await expect(
+        node.streamExistingGetBody(
+          failedSocket as never,
+          path.join(dir, "missing.bin"),
+          { start: 0, end: 1 },
+          true,
+        ),
+      ).rejects.toThrow();
+    });
+  });
+
+  test("rejects malformed or unmatched GIV callbacks", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const malformed = new MockSocket("9.8.7.6", 4321);
+      const unmatched = new MockSocket("9.8.7.6", 4321);
+
+      await node.handleIncomingGiv(malformed as never, "GIV nope\n\n");
+      await node.handleIncomingGiv(
+        unmatched as never,
+        `GIV 1:${"11".repeat(16)}/alpha.txt\n\n`,
+      );
+
+      expect(malformed.destroyed).toBe(true);
+      expect(unmatched.destroyed).toBe(true);
+    });
+  });
+
   test("downloads over an existing socket using the current file size as a range start", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));

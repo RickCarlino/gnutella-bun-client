@@ -28,9 +28,11 @@ import {
   runtimeConfigFor,
 } from "./peer_state";
 import * as handshake from "./node_handshake";
+import * as fileServer from "./file_server";
 import * as lifecycle from "./node_lifecycle";
 import * as protocolRuntime from "./node_protocol_runtime";
 import * as state from "./node_state";
+import { refreshShares, totalSharedKBytes } from "./share_library";
 import * as tlsSupport from "./node_tls";
 import * as topology from "./node_topology";
 import * as transfer from "./node_transfer";
@@ -163,8 +165,11 @@ const nodeCoreMethods = {
 
 type CoreMethods = BoundMethods<typeof nodeCoreMethods>;
 type StateMethods = BoundMethods<typeof state>;
+const shareLibraryMethods = { refreshShares, totalSharedKBytes };
+type ShareLibraryMethods = BoundMethods<typeof shareLibraryMethods>;
 type LifecycleMethods = BoundMethods<typeof lifecycle>;
 type HandshakeMethods = BoundMethods<typeof handshake>;
+type FileServerMethods = BoundMethods<typeof fileServer>;
 type ProtocolRuntimeMethods = BoundMethods<typeof protocolRuntime>;
 type TopologyMethods = BoundMethods<typeof topology>;
 type TlsMethods = BoundMethods<typeof tlsSupport>;
@@ -240,8 +245,8 @@ export class GnutellaServent {
   declare trackPendingAdvertisedHost: StateMethods["trackPendingAdvertisedHost"];
   declare absorbHandshakeHeaders: StateMethods["absorbHandshakeHeaders"];
   declare save: StateMethods["save"];
-  declare refreshShares: StateMethods["refreshShares"];
-  declare totalSharedKBytes: StateMethods["totalSharedKBytes"];
+  declare refreshShares: ShareLibraryMethods["refreshShares"];
+  declare totalSharedKBytes: ShareLibraryMethods["totalSharedKBytes"];
   declare addKnownPeer: StateMethods["addKnownPeer"];
   declare updateKnownPeerLastSeen: StateMethods["updateKnownPeerLastSeen"];
   declare peerSeenTimestamp: StateMethods["peerSeenTimestamp"];
@@ -350,14 +355,14 @@ export class GnutellaServent {
   declare onPush: ProtocolRuntimeMethods["onPush"];
   declare onBye: ProtocolRuntimeMethods["onBye"];
   declare fulfillPush: ProtocolRuntimeMethods["fulfillPush"];
-  declare handleIncomingGet: TransferMethods["handleIncomingGet"];
-  declare parseExistingGetRequest: TransferMethods["parseExistingGetRequest"];
-  declare writeInvalidRangeResponse: TransferMethods["writeInvalidRangeResponse"];
-  declare existingGetBodyLength: TransferMethods["existingGetBodyLength"];
-  declare buildExistingGetResponseHeaders: TransferMethods["buildExistingGetResponseHeaders"];
-  declare finishExistingGetResponse: TransferMethods["finishExistingGetResponse"];
-  declare streamExistingGetBody: TransferMethods["streamExistingGetBody"];
-  declare handleExistingGet: TransferMethods["handleExistingGet"];
+  declare handleIncomingGet: FileServerMethods["handleIncomingGet"];
+  declare parseExistingGetRequest: FileServerMethods["parseExistingGetRequest"];
+  declare writeInvalidRangeResponse: FileServerMethods["writeInvalidRangeResponse"];
+  declare existingGetBodyLength: FileServerMethods["existingGetBodyLength"];
+  declare buildExistingGetResponseHeaders: FileServerMethods["buildExistingGetResponseHeaders"];
+  declare finishExistingGetResponse: FileServerMethods["finishExistingGetResponse"];
+  declare streamExistingGetBody: FileServerMethods["streamExistingGetBody"];
+  declare handleExistingGet: FileServerMethods["handleExistingGet"];
   declare handleIncomingGiv: TransferMethods["handleIncomingGiv"];
   declare downloadOverSocket: TransferMethods["downloadOverSocket"];
   declare directDownloadViaRequest: TransferMethods["directDownloadViaRequest"];
@@ -396,9 +401,11 @@ Object.assign(
   GnutellaServent.prototype,
   bindNodeMethods(nodeCoreMethods),
   bindNodeMethods(state),
+  bindNodeMethods(shareLibraryMethods),
   bindNodeMethods(lifecycle),
   bindNodeMethods(tlsSupport),
   bindNodeMethods(handshake),
+  bindNodeMethods(fileServer),
   bindNodeMethods(topology),
   bindNodeMethods(protocolRuntime),
   bindNodeMethods(transfer),
