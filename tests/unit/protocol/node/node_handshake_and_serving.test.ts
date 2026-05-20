@@ -312,7 +312,7 @@ describe("protocol node", () => {
         expect.arrayContaining(["nested", "second", "file", "bin"]),
       );
       expect(node.qrpTable.matchesQuery("cafe lait")).toBe(true);
-      expect(node.qrpTable.matchesQuery("cat track")).toBe(true);
+      expect(node.qrpTable.matchesQuery("cats track")).toBe(true);
       expect(node.qrpTable.matchesQuery("missing-token")).toBe(false);
       expect(node.totalSharedKBytes()).toBe(1);
 

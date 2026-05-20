@@ -13,6 +13,9 @@ import {
 import type { QueryDescriptor, RemoteQrpState, ShareFile } from "../types";
 import { base32Encode } from "./content_urn";
 
+const QRP_MIN_WORD_LENGTH = 3;
+const QRP_MAX_CUT_CHARS = 5;
+
 export function splitSearchTerms(input: string): string[] {
   const ascii = input
     .normalize("NFKD")
@@ -27,7 +30,11 @@ export function tokenizeKeywords(input: string): string[] {
 
 function qrpQueryTerms(input: string): string[] {
   return [
-    ...new Set(splitSearchTerms(input).filter((x) => x.length >= 3)),
+    ...new Set(
+      splitSearchTerms(input).filter(
+        (x) => x.length >= QRP_MIN_WORD_LENGTH,
+      ),
+    ),
   ];
 }
 
@@ -35,18 +42,83 @@ function qrpIndexTerms(input: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const term of qrpQueryTerms(input)) {
-    for (let trim = 0; trim <= 3; trim++) {
-      const candidate = trim === 0 ? term : term.slice(0, -trim);
-      if (candidate.length < 3 || seen.has(candidate)) continue;
-      seen.add(candidate);
-      out.push(candidate);
+    let candidate = term;
+    for (let trim = 0; trim <= QRP_MAX_CUT_CHARS; trim++) {
+      if (!seen.has(candidate)) {
+        seen.add(candidate);
+        out.push(candidate);
+      }
+      if (candidate.length <= QRP_MIN_WORD_LENGTH) break;
+      const next = candidate.slice(0, -1);
+      if (next.length <= QRP_MIN_WORD_LENGTH) break;
+      candidate = next;
     }
   }
   return out;
 }
 
+function qrpWordHitThreshold(hit: number, word: number): boolean {
+  return word < 3 ? hit === word : Math.trunc((3 * hit) / word) >= 2;
+}
+
+function qrpTermsMatch(
+  terms: string[],
+  hasTerm: (term: string) => boolean,
+): boolean {
+  if (!terms.length) return true;
+  let hit = 0;
+  for (const term of terms) {
+    if (hasTerm(term)) hit++;
+  }
+  return qrpWordHitThreshold(hit, terms.length);
+}
+
+function encodeSignedPatchValue(delta: number, bits: number): number {
+  const signBit = 1 << (bits - 1);
+  const min = -signBit;
+  const max = signBit - 1;
+  if (delta < min || delta > max)
+    throw new Error(`QRP ${bits}-bit patch delta out of range ${delta}`);
+  return delta & ((1 << bits) - 1);
+}
+
+function applyPresencePatchValue(
+  current: number,
+  infinity: number,
+  encoded: number,
+  bits: number,
+): number {
+  if (encoded === 0) return current;
+  const signBit = 1 << (bits - 1);
+  return encoded & signBit ? 1 : infinity;
+}
+
+function flipPresencePatchValue(
+  current: number,
+  infinity: number,
+): number {
+  return current < infinity ? infinity : 1;
+}
+
+function qrpHashBytes(str: string): number[] {
+  const bytes: number[] = [];
+  for (const char of str) {
+    let codePoint = char.codePointAt(0) ?? 0;
+    if (codePoint >= 0x41 && codePoint <= 0x5a) codePoint += 0x20;
+    if (codePoint <= 0xffff) {
+      bytes.push(codePoint & 0xff);
+      continue;
+    }
+    const value = codePoint - 0x10000;
+    const high = 0xd800 + (value >> 10);
+    const low = 0xdc00 + (value & 0x3ff);
+    bytes.push(high & 0xff, low & 0xff);
+  }
+  return bytes;
+}
+
 function qrpHash(str: string, bits: number): number {
-  const bytes = Buffer.from(str.toLowerCase(), "utf8");
+  const bytes = qrpHashBytes(str);
   let xor = 0;
   for (let i = 0; i < bytes.length; i++) xor ^= bytes[i] << ((i & 3) * 8);
   const prod = BigInt(xor >>> 0) * BigInt(QRP_HASH_MULTIPLIER >>> 0);
@@ -119,8 +191,8 @@ export class QrpTable {
 
   matchesQuery(search: string): boolean {
     const kws = qrpQueryTerms(search);
-    if (!kws.length) return true;
-    return kws.every(
+    return qrpTermsMatch(
+      kws,
       (kw) => this.table[this.hashKeyword(kw)] < this.infinity,
     );
   }
@@ -173,6 +245,7 @@ export class QrpTable {
   packTable(): Buffer {
     if (this.entryBits === 1) return this.packOneBitTable();
     if (this.entryBits === 4) return this.packNibbleTable();
+    if (this.entryBits === 8) return this.packByteTable();
     throw new Error(`unsupported QRP entry bits ${this.entryBits}`);
   }
 
@@ -189,11 +262,23 @@ export class QrpTable {
   packNibbleTable(): Buffer {
     const out = Buffer.alloc(Math.ceil(this.tableSize / 2));
     for (let i = 0; i < this.tableSize; i++) {
-      const nibble = this.table[i] & 0x0f;
+      const delta =
+        this.table[i] < this.infinity ? this.table[i] - this.infinity : 0;
+      const nibble = encodeSignedPatchValue(delta, 4);
       const byteIdx = i >> 1;
       if ((i & 1) === 0)
         out[byteIdx] = (out[byteIdx] & 0x0f) | (nibble << 4);
       else out[byteIdx] = (out[byteIdx] & 0xf0) | nibble;
+    }
+    return out;
+  }
+
+  packByteTable(): Buffer {
+    const out = Buffer.alloc(this.tableSize);
+    for (let i = 0; i < this.tableSize; i++) {
+      const delta =
+        this.table[i] < this.infinity ? this.table[i] - this.infinity : 0;
+      out[i] = encodeSignedPatchValue(delta, 8);
     }
     return out;
   }
@@ -222,17 +307,20 @@ export class QrpTable {
     return table;
   }
 
+  static mutablePatchTable(state: RemoteQrpState): Uint8Array {
+    return state.table?.slice() ?? QrpTable.createUnpackedTable(state);
+  }
+
   static unpackOneBitTable(
     state: RemoteQrpState,
     packed: Buffer,
   ): Uint8Array {
-    const table = QrpTable.createUnpackedTable(state);
+    const table = QrpTable.mutablePatchTable(state);
     for (let i = 0; i < state.tableSize; i++) {
       const byteIdx = i >> 3;
       const bit = 7 - (i & 7);
-      const present =
-        byteIdx < packed.length && !!(packed[byteIdx] & (1 << bit));
-      table[i] = present ? 1 : state.infinity;
+      if (byteIdx < packed.length && packed[byteIdx] & (1 << bit))
+        table[i] = flipPresencePatchValue(table[i], state.infinity);
     }
     return table;
   }
@@ -241,7 +329,7 @@ export class QrpTable {
     state: RemoteQrpState,
     packed: Buffer,
   ): Uint8Array {
-    const table = QrpTable.createUnpackedTable(state);
+    const table = QrpTable.mutablePatchTable(state);
     for (let i = 0; i < state.tableSize; i++) {
       const byteIdx = i >> 1;
       if (byteIdx >= packed.length) break;
@@ -249,7 +337,29 @@ export class QrpTable {
         (i & 1) === 0
           ? (packed[byteIdx] >> 4) & 0x0f
           : packed[byteIdx] & 0x0f;
-      table[i] = nibble;
+      table[i] = applyPresencePatchValue(
+        table[i],
+        state.infinity,
+        nibble,
+        4,
+      );
+    }
+    return table;
+  }
+
+  static unpackByteTable(
+    state: RemoteQrpState,
+    packed: Buffer,
+  ): Uint8Array {
+    const table = QrpTable.mutablePatchTable(state);
+    for (let i = 0; i < state.tableSize; i++) {
+      if (i >= packed.length) break;
+      table[i] = applyPresencePatchValue(
+        table[i],
+        state.infinity,
+        packed[i],
+        8,
+      );
     }
     return table;
   }
@@ -262,6 +372,8 @@ export class QrpTable {
       return QrpTable.unpackOneBitTable(state, packed);
     if (state.entryBits === 4)
       return QrpTable.unpackNibbleTable(state, packed);
+    if (state.entryBits === 8)
+      return QrpTable.unpackByteTable(state, packed);
     return undefined;
   }
 
@@ -282,9 +394,9 @@ export class QrpTable {
   static matchesRemote(state: RemoteQrpState, search: string): boolean {
     if (!state.table || !state.tableSize) return true;
     const kws = qrpQueryTerms(search);
-    if (!kws.length) return true;
     const bits = Math.log2(state.tableSize);
-    return kws.every(
+    return qrpTermsMatch(
+      kws,
       (kw) => state.table![qrpHash(kw, bits)] < state.infinity,
     );
   }
