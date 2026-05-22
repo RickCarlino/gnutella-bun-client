@@ -1,0 +1,6 @@
+.git
+dist
+downloads
+node_modules
+gnutella.json
+share-index.json
