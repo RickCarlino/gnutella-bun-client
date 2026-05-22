@@ -31,6 +31,7 @@ import * as handshake from "./node_handshake";
 import * as fileServer from "./file_server";
 import * as lifecycle from "./node_lifecycle";
 import * as protocolRuntime from "./node_protocol_runtime";
+import * as qrpRuntime from "./node_qrp_runtime";
 import * as state from "./node_state";
 import { refreshShares, totalSharedKBytes } from "./share_library";
 import * as tlsSupport from "./node_tls";
@@ -171,6 +172,7 @@ type LifecycleMethods = BoundMethods<typeof lifecycle>;
 type HandshakeMethods = BoundMethods<typeof handshake>;
 type FileServerMethods = BoundMethods<typeof fileServer>;
 type ProtocolRuntimeMethods = BoundMethods<typeof protocolRuntime>;
+type QrpRuntimeMethods = BoundMethods<typeof qrpRuntime>;
 type TopologyMethods = BoundMethods<typeof topology>;
 type TlsMethods = BoundMethods<typeof tlsSupport>;
 type TransferMethods = BoundMethods<typeof transfer>;
@@ -341,12 +343,13 @@ export class GnutellaServent {
   declare shiftPendingPush: ProtocolRuntimeMethods["shiftPendingPush"];
   declare cachePongPayload: ProtocolRuntimeMethods["cachePongPayload"];
   declare shouldIgnoreDescriptor: ProtocolRuntimeMethods["shouldIgnoreDescriptor"];
+  declare rejectRelayedLeafDescriptor: ProtocolRuntimeMethods["rejectRelayedLeafDescriptor"];
   declare onPingDescriptor: ProtocolRuntimeMethods["onPingDescriptor"];
   declare onQueryDescriptor: ProtocolRuntimeMethods["onQueryDescriptor"];
   declare dispatchDescriptor: ProtocolRuntimeMethods["dispatchDescriptor"];
   declare handleDescriptor: ProtocolRuntimeMethods["handleDescriptor"];
-  declare onRouteTableUpdate: ProtocolRuntimeMethods["onRouteTableUpdate"];
-  declare sendQrpTable: ProtocolRuntimeMethods["sendQrpTable"];
+  declare onRouteTableUpdate: QrpRuntimeMethods["onRouteTableUpdate"];
+  declare sendQrpTable: QrpRuntimeMethods["sendQrpTable"];
   declare sendBye: ProtocolRuntimeMethods["sendBye"];
   declare respondPong: ProtocolRuntimeMethods["respondPong"];
   declare respondQueryHit: ProtocolRuntimeMethods["respondQueryHit"];
@@ -408,5 +411,6 @@ Object.assign(
   bindNodeMethods(fileServer),
   bindNodeMethods(topology),
   bindNodeMethods(protocolRuntime),
+  bindNodeMethods(qrpRuntime),
   bindNodeMethods(transfer),
 );

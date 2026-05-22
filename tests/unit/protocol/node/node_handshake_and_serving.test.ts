@@ -75,6 +75,7 @@ describe("protocol node", () => {
         nodeMode: "ultrapeer",
       });
       const peer = makePeer("source-peer");
+      peer.role = "ultrapeer";
       const other = makePeer("other-peer");
       other.role = "ultrapeer";
       node.peers.set(other.key, other);
@@ -355,7 +356,7 @@ describe("protocol node", () => {
           "x-ultrapeer": "False",
           "listen-ip": "7.7.7.7:7777",
           "x-max-ttl": "7",
-          "x-query-routing": "0.1",
+          "x-query-routing": "0.2",
           "accept-encoding": "deflate",
           "pong-caching": "0.1",
           ggep: "0.5",
@@ -419,6 +420,9 @@ describe("protocol node", () => {
             "Listen-IP": "9.8.7.6:6346",
             "X-Query-Routing": "0.2",
             "X-Ultrapeer-Query-Routing": "0.1",
+            "X-Dynamic-Querying": "0.1",
+            "X-Ext-Probes": "0.1",
+            "X-Degree": "32",
             GGEP: "0.5",
             "Pong-Caching": "0.1",
             "Bye-Packet": "0.1",
@@ -439,6 +443,9 @@ describe("protocol node", () => {
           ultrapeerNeeded: false,
           queryRoutingVersion: "0.2",
           ultrapeerQueryRoutingVersion: "0.1",
+          dynamicQueryingVersion: "0.1",
+          extProbesVersion: "0.1",
+          degree: 32,
           listenIp: { host: "9.8.7.6", port: 6346 },
         });
 
@@ -500,6 +507,9 @@ describe("protocol node", () => {
           "x-ultrapeer": "True",
           "x-ultrapeer-needed": "True",
           "x-ultrapeer-query-routing": "0.1",
+          "x-dynamic-querying": "0.1",
+          "x-ext-probes": "0.1",
+          "x-degree": "16",
         });
 
         const meshPeer = makePeer("11.11.11.11:1111");
@@ -511,6 +521,9 @@ describe("protocol node", () => {
           "x-ultrapeer": "True",
           "x-ultrapeer-needed": "False",
           "x-ultrapeer-query-routing": "0.1",
+          "x-dynamic-querying": "0.1",
+          "x-ext-probes": "0.1",
+          "x-degree": "16",
         });
 
         const leafPeer = makePeer("12.12.12.12:1212");
@@ -519,6 +532,9 @@ describe("protocol node", () => {
         expect(node.baseHandshakeHeaders()).toMatchObject({
           "x-ultrapeer": "True",
           "x-ultrapeer-query-routing": "0.1",
+          "x-dynamic-querying": "0.1",
+          "x-ext-probes": "0.1",
+          "x-degree": "16",
         });
         expect(
           node.baseHandshakeHeaders()["x-ultrapeer-needed"],

@@ -87,6 +87,9 @@ export type PeerCapabilities = {
   ultrapeerNeeded?: boolean;
   queryRoutingVersion?: string;
   ultrapeerQueryRoutingVersion?: string;
+  dynamicQueryingVersion?: string;
+  extProbesVersion?: string;
+  degree?: number;
   isCrawler?: boolean;
   listenIp?: PeerAddr;
 };

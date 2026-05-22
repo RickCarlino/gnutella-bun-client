@@ -7,6 +7,8 @@ import {
   defaultDoc,
   encodeBye,
   GnutellaServent,
+  parseBye,
+  parseHeader,
   parseRouteTableUpdate,
   QrpTable,
 } from "../../../../src/protocol";
@@ -209,6 +211,33 @@ describe("protocol node", () => {
     });
   });
 
+  test("rejects descriptors relayed by leaf peers", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      const peer = makePeer("leaf-relay");
+      const payload = Buffer.alloc(0);
+      peer.buf = buildHeader(
+        Buffer.alloc(16, 0xcc),
+        TYPE.PING,
+        1,
+        1,
+        payload,
+      );
+
+      node.consumePeerBuffer(peer);
+
+      const socket = peer.socket as unknown as MockSocket;
+      expect(socket.writes).toHaveLength(1);
+      const header = parseHeader(socket.writes[0]!.subarray(0, 23));
+      expect(header.payloadType).toBe(TYPE.BYE);
+      expect(header.ttl).toBe(1);
+      expect(header.hops).toBe(0);
+      const bye = parseBye(socket.writes[0]!.subarray(23));
+      expect(bye.code).toBe(414);
+      expect(bye.message).toContain("Leaf node relayed PING");
+    });
+  });
+
   test("prunes stale routes, pending pushes, and cached pongs", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "protocol.json"));
@@ -332,13 +361,78 @@ describe("protocol node", () => {
       }
 
       const remote = makePeer("remote-qrp");
-      node.onRouteTableUpdate(remote as never, sent[1]);
-      expect(remote.remoteQrp.resetSeen).toBe(false);
       node.onRouteTableUpdate(remote as never, sent[0]);
       for (const payload of sent.slice(1))
         node.onRouteTableUpdate(remote as never, payload);
       expect(remote.remoteQrp.resetSeen).toBe(true);
       expect(remote.remoteQrp.table).not.toBeNull();
+    });
+  });
+
+  test("rejects QRP updates that violate gtk-gnutella validation rules", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+
+      const qrpReset = Buffer.alloc(6);
+      qrpReset[0] = 0x00;
+      qrpReset.writeUInt32LE(8, 1);
+      qrpReset[5] = 1;
+
+      const qrpPatch = (seqNo: number, seqSize: number) =>
+        Buffer.from([0x01, seqNo, seqSize, 0x00, 0x01, 0x80]);
+
+      const sentBye = (peer: ReturnType<typeof makePeer>) => {
+        const socket = peer.socket as unknown as MockSocket;
+        expect(socket.writes).toHaveLength(1);
+        const frame = socket.writes[0]!;
+        const header = parseHeader(frame.subarray(0, 23));
+        expect(header.payloadType).toBe(TYPE.BYE);
+        expect(header.ttl).toBe(1);
+        expect(header.hops).toBe(0);
+        return parseBye(frame.subarray(23));
+      };
+
+      const patchBeforeReset = makePeer("patch-before-reset");
+      node.onRouteTableUpdate(patchBeforeReset as never, qrpPatch(1, 1));
+      expect(sentBye(patchBeforeReset).code).toBe(413);
+
+      const invalidLengthReset = makePeer("invalid-length-reset");
+      node.onRouteTableUpdate(
+        invalidLengthReset as never,
+        Buffer.from([0x00, 12, 0, 0, 0, 1]),
+      );
+      expect(sentBye(invalidLengthReset).message).toContain(
+        "Invalid QRP table length 12",
+      );
+      expect(invalidLengthReset.remoteQrp.resetSeen).toBe(false);
+
+      const invalidInfinityReset = makePeer("invalid-infinity-reset");
+      node.onRouteTableUpdate(
+        invalidInfinityReset as never,
+        Buffer.from([0x00, 8, 0, 0, 0, 0]),
+      );
+      expect(sentBye(invalidInfinityReset).message).toContain(
+        "Invalid QRP infinity 0",
+      );
+      expect(invalidInfinityReset.remoteQrp.resetSeen).toBe(false);
+
+      const skippedSequence = makePeer("skipped-sequence");
+      node.onRouteTableUpdate(skippedSequence as never, qrpReset);
+      node.onRouteTableUpdate(skippedSequence as never, qrpPatch(2, 2));
+      expect(sentBye(skippedSequence).message).toContain(
+        "Invalid QRP seq number 2",
+      );
+
+      const changedSeqSize = makePeer("changed-seq-size");
+      node.onRouteTableUpdate(changedSeqSize as never, qrpReset);
+      node.onRouteTableUpdate(changedSeqSize as never, qrpPatch(1, 2));
+      expect(
+        (changedSeqSize.socket as unknown as MockSocket).writes,
+      ).toHaveLength(0);
+      node.onRouteTableUpdate(changedSeqSize as never, qrpPatch(2, 3));
+      expect(sentBye(changedSeqSize).message).toContain(
+        "Changed QRP seq size",
+      );
     });
   });
 

@@ -25,6 +25,7 @@ import {
   parseHandshakeBlock,
   parseListenIpHeader,
   parsePeerHeaderList,
+  parsePositiveIntHeader,
 } from "./handshake";
 import type { GnutellaServent } from "./node";
 import type { ProbeCtx } from "./node_types";
@@ -148,14 +149,25 @@ function ultrapeerNeededHeader(node: GnutellaServent): string | undefined {
   return undefined;
 }
 
+const GTK_MODERN_ULTRAPEER_MIN_DEGREE = 16;
+
 function baseRoleHeaders(node: GnutellaServent): Record<string, string> {
   const headers: Record<string, string> = {
     "x-ultrapeer": node.nodeMode() === "ultrapeer" ? "True" : "False",
   };
   const ultrapeerNeeded = ultrapeerNeededHeader(node);
   if (ultrapeerNeeded) headers["x-ultrapeer-needed"] = ultrapeerNeeded;
-  if (node.nodeMode() === "ultrapeer")
+  if (node.nodeMode() === "ultrapeer") {
     headers["x-ultrapeer-query-routing"] = "0.1";
+    headers["x-dynamic-querying"] = "0.1";
+    headers["x-ext-probes"] = "0.1";
+    headers["x-degree"] = String(
+      Math.max(
+        GTK_MODERN_ULTRAPEER_MIN_DEGREE,
+        node.config().maxConnections,
+      ),
+    );
+  }
   return headers;
 }
 
@@ -255,6 +267,9 @@ export function buildCapabilities(
     ultrapeerNeeded: parseBoolHeader(h["x-ultrapeer-needed"]),
     queryRoutingVersion: h["x-query-routing"],
     ultrapeerQueryRoutingVersion: h["x-ultrapeer-query-routing"],
+    dynamicQueryingVersion: h["x-dynamic-querying"],
+    extProbesVersion: h["x-ext-probes"],
+    degree: parsePositiveIntHeader(h["x-degree"]),
     isCrawler: !!h["crawler"],
     listenIp: parseListenIpHeader(h["listen-ip"]),
   };

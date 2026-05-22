@@ -30,7 +30,7 @@ export const MAX_TRACKED_PEERS = 40;
 export const PEER_SEEN_THRESHOLD_SEC = 60;
 export const MAX_PEER_AGE_SEC = 7 * 24 * 60 * 60;
 export const GWEBCACHE_REPORT_DELAY_SEC = 5 * 60;
-export const DEFAULT_QUERY_ROUTING_VERSION = "0.1";
+export const DEFAULT_QUERY_ROUTING_VERSION = "0.2";
 export const ENABLE_COMPRESSION = true;
 export const ENABLE_TLS = true;
 export const ENABLE_QRP = true;
@@ -71,6 +71,9 @@ export const CANONICAL_HEADER_NAMES: Record<string, string> = {
   "x-ultrapeer-needed": "X-Ultrapeer-Needed",
   "x-query-routing": "X-Query-Routing",
   "x-ultrapeer-query-routing": "X-Ultrapeer-Query-Routing",
+  "x-dynamic-querying": "X-Dynamic-Querying",
+  "x-ext-probes": "X-Ext-Probes",
+  "x-degree": "X-Degree",
   "accept-encoding": "Accept-Encoding",
   connection: "Connection",
   "content-encoding": "Content-Encoding",
@@ -93,6 +96,9 @@ export const INTERESTING_HANDSHAKE_HEADERS = [
   "x-try-ultrapeers",
   "x-ultrapeer",
   "x-ultrapeer-needed",
+  "x-dynamic-querying",
+  "x-ext-probes",
+  "x-degree",
   "upgrade",
   "connection",
   "listen-ip",

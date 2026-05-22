@@ -2,13 +2,7 @@ import crypto from "node:crypto";
 import type net from "node:net";
 import zlib from "node:zlib";
 
-import {
-  DEFAULT_QRP_ENTRY_BITS,
-  HEADER_LEN,
-  LOCAL_ROUTE,
-  TYPE,
-  TYPE_NAME,
-} from "../const";
+import { HEADER_LEN, LOCAL_ROUTE, TYPE, TYPE_NAME } from "../const";
 import { errMsg, toBuffer, ts } from "../shared";
 import type {
   PendingPush,
@@ -29,7 +23,6 @@ import {
   parsePush,
   parseQuery,
   parseQueryHit,
-  parseRouteTableUpdate,
 } from "./codec";
 import {
   findHeaderEnd,
@@ -39,7 +32,6 @@ import {
 import type { GnutellaServent } from "./node";
 import {
   broadcastPingToPeers,
-  publishedQrpTableForPeer,
   routeQueryToPeers,
   sendPublishedQrpToMeshPeers,
 } from "./node_query_routing";
@@ -53,7 +45,6 @@ import { firstSha1Urn } from "./content_urn";
 import {
   initialRemoteQrpState,
   matchQuery as shareMatchesQuery,
-  QrpTable,
   splitSearchTerms,
 } from "./qrp";
 
@@ -570,6 +561,22 @@ export function shouldIgnoreDescriptor(
   return node.hasSeen(hdr.payloadType, hdr.descriptorIdHex, payload);
 }
 
+export function rejectRelayedLeafDescriptor(
+  node: GnutellaServent,
+  peer: Peer,
+  hdr: RoutedDescriptor,
+): boolean {
+  if (!node.isLeafPeer(peer) || hdr.hops === 0) return false;
+  if (peer.capabilities.supportsBye)
+    node.sendBye(
+      peer,
+      414,
+      `Leaf node relayed ${descriptorTypeName(hdr.payloadType)}`,
+    );
+  else peer.socket.end();
+  return true;
+}
+
 export function onPingDescriptor(
   node: GnutellaServent,
   peer: Peer,
@@ -672,66 +679,12 @@ export function handleDescriptor(
   hdr: RoutedDescriptor,
   payload: Buffer,
 ): void {
+  if (node.rejectRelayedLeafDescriptor(peer, hdr)) return;
   if (node.shouldIgnoreDescriptor(peer, hdr, payload)) return;
   if (hdr.payloadType !== TYPE.ROUTE_TABLE_UPDATE) {
     node.markSeen(hdr.payloadType, hdr.descriptorIdHex, payload);
   }
   node.dispatchDescriptor(peer, hdr, payload);
-}
-
-export function onRouteTableUpdate(
-  node: GnutellaServent,
-  peer: Peer,
-  payload: Buffer,
-): void {
-  const msg = parseRouteTableUpdate(payload);
-  if (msg.variant === "reset") {
-    peer.remoteQrp.resetSeen = true;
-    peer.remoteQrp.tableSize = msg.tableLength;
-    peer.remoteQrp.infinity = msg.infinity;
-    peer.remoteQrp.entryBits = DEFAULT_QRP_ENTRY_BITS;
-    peer.remoteQrp.table = null;
-    peer.remoteQrp.seqSize = 0;
-    peer.remoteQrp.parts.clear();
-    return;
-  }
-  if (!peer.remoteQrp.resetSeen) return;
-  peer.remoteQrp.seqSize = msg.seqSize;
-  peer.remoteQrp.compressor = msg.compressor;
-  peer.remoteQrp.entryBits = msg.entryBits;
-  peer.remoteQrp.parts.set(msg.seqNo, Buffer.from(msg.data));
-  QrpTable.applyPatch(peer.remoteQrp);
-  if (peer.remoteQrp.table && peer.role === "leaf")
-    sendPublishedQrpToMeshPeers(node);
-}
-
-export async function sendQrpTable(
-  node: GnutellaServent,
-  peer: Peer,
-): Promise<void> {
-  const published = publishedQrpTableForPeer(node, peer);
-  if (!published) return;
-  node.sendToPeer(
-    peer,
-    TYPE.ROUTE_TABLE_UPDATE,
-    node.randomId16(),
-    1,
-    0,
-    published.encodeReset(),
-  );
-  for (const patch of published.encodePatchChunks(
-    Math.min(node.config().maxPayloadBytes, 60 * 1024),
-  )) {
-    node.sendToPeer(
-      peer,
-      TYPE.ROUTE_TABLE_UPDATE,
-      node.randomId16(),
-      1,
-      0,
-      patch,
-    );
-    await node.sleep(5);
-  }
 }
 
 export function sendBye(

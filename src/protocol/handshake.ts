@@ -33,6 +33,14 @@ export function parseBoolHeader(
   return undefined;
 }
 
+export function parsePositiveIntHeader(
+  v: string | undefined,
+): number | undefined {
+  if (!v) return undefined;
+  const n = Number(v.trim());
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 export function parsePeerHeaderList(v: string | undefined): PeerAddr[] {
   if (!v) return [];
   return v
