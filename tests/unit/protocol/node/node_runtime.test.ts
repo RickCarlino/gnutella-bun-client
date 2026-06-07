@@ -433,6 +433,21 @@ describe("protocol node", () => {
       expect(sentBye(changedSeqSize).message).toContain(
         "Changed QRP seq size",
       );
+
+      const incompletePatch = makePeer("incomplete-patch");
+      const qrpReset16 = Buffer.alloc(6);
+      qrpReset16[0] = 0x00;
+      qrpReset16.writeUInt32LE(16, 1);
+      qrpReset16[5] = 1;
+      node.onRouteTableUpdate(incompletePatch as never, qrpReset16);
+      node.onRouteTableUpdate(
+        incompletePatch as never,
+        Buffer.from([0x01, 1, 1, 0x00, 0x01, 0xff]),
+      );
+      expect(sentBye(incompletePatch).message).toContain(
+        "Incomplete 1-bit QRP patch covered 8/16 slots",
+      );
+      expect(incompletePatch.remoteQrp.table).toBeNull();
     });
   });
 

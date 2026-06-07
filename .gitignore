@@ -5,3 +5,4 @@ shared/
 gnutella.json
 share-index.json
 .codex
+gtk-gnutella/ # GTK Gnutella is our compatibility target. We keep a ref copy of source around for that purpose.

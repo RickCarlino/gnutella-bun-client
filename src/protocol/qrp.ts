@@ -463,18 +463,39 @@ export class QrpTable {
     return undefined;
   }
 
-  static applyPatch(state: RemoteQrpState): void {
-    if (!QrpTable.canApplyPatch(state)) return;
+  static expectedPackedPatchBytes(state: RemoteQrpState): number | undefined {
+    if (state.entryBits === 1) return Math.ceil(state.tableSize / 8);
+    if (state.entryBits === 4) return Math.ceil(state.tableSize / 2);
+    if (state.entryBits === 8) return state.tableSize;
+    return undefined;
+  }
+
+  static packedPatchCoverageError(
+    state: RemoteQrpState,
+    packed: Buffer,
+  ): string | undefined {
+    const expectedBytes = QrpTable.expectedPackedPatchBytes(state);
+    if (expectedBytes == null || packed.length >= expectedBytes)
+      return undefined;
+    const coveredSlots = Math.floor((packed.length * 8) / state.entryBits);
+    return `Incomplete ${state.entryBits}-bit QRP patch covered ${coveredSlots}/${state.tableSize} slots`;
+  }
+
+  static applyPatch(state: RemoteQrpState): string | undefined {
+    if (!QrpTable.canApplyPatch(state)) return undefined;
     const rawParts = QrpTable.orderedPatchParts(state);
-    if (!rawParts) return;
+    if (!rawParts) return undefined;
     let packed = Buffer.concat(rawParts);
     if (state.compressor === QRP_COMPRESSOR_DEFLATE)
       packed = zlib.inflateSync(packed);
+    const coverageError = QrpTable.packedPatchCoverageError(state, packed);
+    if (coverageError) return coverageError;
     const table = QrpTable.unpackRemoteTable(state, packed);
-    if (!table) return;
+    if (!table) return undefined;
     state.table = table;
     state.parts.clear();
     state.seqSize = 0;
+    return undefined;
   }
 
   static matchesRemote(state: RemoteQrpState, search: string): boolean {

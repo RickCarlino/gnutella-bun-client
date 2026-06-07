@@ -58,7 +58,11 @@ export function onRouteTableUpdate(
   peer.remoteQrp.compressor = msg.compressor;
   peer.remoteQrp.entryBits = msg.entryBits;
   peer.remoteQrp.parts.set(msg.seqNo, Buffer.from(msg.data));
-  QrpTable.applyPatch(peer.remoteQrp);
+  const applyRejection = QrpTable.applyPatch(peer.remoteQrp);
+  if (applyRejection) {
+    rejectQrpUpdate(node, peer, applyRejection);
+    return;
+  }
   if (peer.remoteQrp.table && peer.role === "leaf")
     sendPublishedQrpToMeshPeers(node);
 }
