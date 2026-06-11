@@ -1,6 +1,6 @@
-# GBun
+# Gnutella
 
-GBun is a small Gnutella client you can run from the terminal or embed in a TypeScript app.
+Gnutella is a small Bun-based Gnutella client you can run from the terminal or embed in a TypeScript app.
 
 It is built for people who want to:
 
@@ -10,7 +10,7 @@ It is built for people who want to:
 - browse another peer's shared library
 - keep useful state across restarts
 
-GBun can be used in three ways:
+It can be used in three ways:
 
 - as an interactive CLI
 - as a scripted CLI runner
@@ -18,7 +18,36 @@ GBun can be used in three ways:
 
 It interoperates with other Gnutella clients, including GTK Gnutella.
 
-## Get GBun
+## Install
+
+The npm package is named `gnutella` and requires [Bun](https://bun.sh/) at runtime.
+
+Install the CLI globally:
+
+```bash
+npm install -g gnutella
+gnutella init --config gnutella.json
+gnutella run --config gnutella.json
+```
+
+Install it as a library dependency:
+
+```bash
+npm install gnutella
+```
+
+```ts
+import { GnutellaServent, loadDoc } from "gnutella";
+
+const configPath = "./gnutella.json";
+const doc = await loadDoc(configPath);
+const node = new GnutellaServent(configPath, doc);
+
+await node.start();
+node.sendQuery("hello world");
+```
+
+## Other Ways To Run
 
 - [Windows](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-windows-x64.exe)
 - [Windows (older CPUs)](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-windows-x64-baseline.exe)
@@ -27,7 +56,7 @@ It interoperates with other Gnutella clients, including GTK Gnutella.
 - [Linux builds](https://github.com/RickCarlino/gnutella-bun-client/releases)
 - [All releases](https://github.com/RickCarlino/gnutella-bun-client/releases)
 
-If you want a prebuilt executable, download one from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases).
+If you want a prebuilt executable instead of an npm package, download one from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases).
 
 If you want to run from source:
 
@@ -41,12 +70,8 @@ bun run bin/gnutella.ts run --config gnutella.json
 
 - [Quickstart](QUICKSTART.md): get the CLI working in a few minutes
 - [CLI Guide](CLI.md): full command and config reference
-- [Developer Guide](DEVELOPER.md): embed GBun in your own TypeScript app
+- [Developer Guide](DEVELOPER.md): embed Gnutella in your own TypeScript app
 
-## Remaining Items
+## License
 
-- Publish as NPM package.
-- Add better download capabilities (progress tracking, SHA verification, multi-peer downloads)
-- Gnutella Pointer System (GPS)
-- Chrome extension for Magnet/GPS documents?
-- Improve blocking support (set inclusion check, drop packets from blocked peers, etc..)
+Gnutella is released under the GNU General Public License v3.0. See [LICENSE](LICENSE).

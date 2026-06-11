@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import process from "node:process";
 
 import { errMsg } from "../src/cli_shared";

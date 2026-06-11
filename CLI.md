@@ -6,8 +6,11 @@ This guide covers the full terminal interface: setup, configuration, commands, a
 
 You can use either:
 
+- the npm package with `npm install -g gnutella`
 - a prebuilt binary from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases)
 - the source checkout with Bun
+
+The npm package requires Bun at runtime because the installed CLI uses `#!/usr/bin/env bun`.
 
 If you are running from source:
 
@@ -15,18 +18,24 @@ If you are running from source:
 bun install
 ```
 
-Throughout this guide, commands use:
+Throughout this guide, commands use the npm-installed CLI:
+
+```bash
+gnutella
+```
+
+If you are running from source, replace `gnutella` with:
 
 ```bash
 bun run bin/gnutella.ts
 ```
 
-If you are using a compiled binary, replace that prefix with the executable path.
+If you are using a compiled binary, replace `gnutella` with the executable path.
 
 ## Create A Config
 
 ```bash
-bun run bin/gnutella.ts init --config gnutella.json
+gnutella init --config gnutella.json
 ```
 
 That creates a default config if it does not already exist.
@@ -34,7 +43,7 @@ That creates a default config if it does not already exist.
 Start the client with:
 
 ```bash
-bun run bin/gnutella.ts run --config gnutella.json
+gnutella run --config gnutella.json
 ```
 
 ## Config File Reference
@@ -167,7 +176,7 @@ If you like `monitor` but want less noise, add event names to `config.log_ignore
 You can queue CLI commands with repeated `--exec` flags.
 
 ```bash
-bun run bin/gnutella.ts run --config gnutella.json \
+gnutella run --config gnutella.json \
   --exec 'status' \
   --exec 'query hello world' \
   --exec 'sleep 2' \

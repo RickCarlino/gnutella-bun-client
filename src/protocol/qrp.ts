@@ -463,7 +463,9 @@ export class QrpTable {
     return undefined;
   }
 
-  static expectedPackedPatchBytes(state: RemoteQrpState): number | undefined {
+  static expectedPackedPatchBytes(
+    state: RemoteQrpState,
+  ): number | undefined {
     if (state.entryBits === 1) return Math.ceil(state.tableSize / 8);
     if (state.entryBits === 4) return Math.ceil(state.tableSize / 2);
     if (state.entryBits === 8) return state.tableSize;

@@ -6,8 +6,11 @@ This guide gets you from zero to a working CLI session with sharing, searching, 
 
 You can either:
 
+- install the npm package with `npm install -g gnutella`
 - download a prebuilt binary from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases)
 - run from source with Bun
+
+The npm package requires Bun at runtime because the installed CLI uses `#!/usr/bin/env bun`.
 
 If you are running from source:
 
@@ -15,18 +18,24 @@ If you are running from source:
 bun install
 ```
 
-Throughout this guide, commands use:
+Throughout this guide, commands use the npm-installed CLI:
+
+```bash
+gnutella
+```
+
+If you are running from source, replace `gnutella` with:
 
 ```bash
 bun run bin/gnutella.ts
 ```
 
-If you are using a compiled binary, replace that prefix with the executable path.
+If you are using a compiled binary, replace `gnutella` with the executable path.
 
 ## 2. Create A Config
 
 ```bash
-bun run bin/gnutella.ts init --config gnutella.json
+gnutella init --config gnutella.json
 ```
 
 This creates a config file and a downloads folder.
@@ -42,7 +51,7 @@ If you changed `config.data_dir`, use `<data_dir>/downloads` instead.
 ## 4. Start The Client
 
 ```bash
-bun run bin/gnutella.ts run --config gnutella.json
+gnutella run --config gnutella.json
 ```
 
 GBun will try to bootstrap on its own. If you already know a peer and want to connect to it directly, you can still use `connect <host:port>` after startup.

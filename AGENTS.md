@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The public CLI entrypoint is [`bin/gnutella.ts`](bin/gnutella.ts). Runtime configuration lives in `gnutella.json`; use `gnutella.json.example` as the template for new setups. The protocol implementation lives in [`src/protocol.ts`](src/protocol.ts), shared literal constants live in [`src/const.ts`](src/const.ts), shared simple type declarations live in [`src/types.ts`](src/types.ts), and shared helpers live in [`src/shared.ts`](src/shared.ts) and [`src/cli_shared.ts`](src/cli_shared.ts). Build automation is in `scripts/build-all-targets.sh`. Compiled artifacts are written to `dist/` and should not be committed.
+The public CLI entrypoint is [`bin/gnutella.ts`](bin/gnutella.ts). The npm package is named `gnutella`, and the installed CLI command is also `gnutella`. Runtime configuration lives in `gnutella.json`; use `gnutella.json.example` as the template for new setups. The public library facade lives in [`src/protocol.ts`](src/protocol.ts), shared literal constants live in [`src/const.ts`](src/const.ts), shared simple type declarations live in [`src/types.ts`](src/types.ts), and shared helpers live in [`src/shared.ts`](src/shared.ts) and [`src/cli_shared.ts`](src/cli_shared.ts). Build automation is in `scripts/build-all-targets.sh`. Compiled artifacts are written to `dist/` and should not be committed.
 
 Keep module ownership tight. Put protocol-specific helpers with the protocol code, GWebCache-specific helpers with the GWebCache code, and reserve `src/shared.ts` for genuinely generic helpers. Avoid adding unrelated responsibilities to the same file just because it is already large or already imported widely.
 
@@ -13,6 +13,7 @@ Use Bun directly from the repo root:
 - `bun run bin/gnutella.ts init --config gnutella.json` creates a default config and required directories.
 - `bun run bin/gnutella.ts run --config gnutella.json` starts the interactive client.
 - `bun run bin/gnutella.ts run --config gnutella.json --exec 'query hello' --exec 'quit'` runs scripted checks.
+- `npm pack --dry-run` checks the npm publish payload without publishing.
 - `bun run verify` runs the required post-change verification sequence: type checker, ESLint, ts-unused-exports, unit tests, integration tests, Prettier, and the multi-target build.
 - `./scripts/build-all-targets.sh` compiles standalone binaries into `dist/`.
 
@@ -36,7 +37,7 @@ When adding helpers, prefer one canonical implementation. Do not duplicate gener
 
 ## Testing Guidelines
 
-There is no formal test framework yet. Validate changes with scripted Bun runs and the two-node localhost setup described in `README.md`. Run `bun run verify` after any change to the codebase. When changing routing, downloads, or handshake logic, test both interactive flow and `--exec` automation. If you add automated tests later, place them in a top-level `tests/` directory and name files `*.test.ts`.
+Automated tests use `bun test` under the top-level `tests/` directory. Run `bun run verify` after any change to the codebase. When changing routing, downloads, or handshake logic, keep or add focused unit tests and integration coverage, and test both interactive flow and `--exec` automation when the CLI behavior changes.
 
 Prefer tests that exercise public APIs or explicit collaborators. Avoid coupling tests to internal implementation details unless there is no practical alternative.
 

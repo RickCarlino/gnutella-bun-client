@@ -19,3 +19,18 @@ export { initialRemoteQrpState, QrpTable } from "./protocol/qrp";
 export { buildMagnetUri, parseMagnetUri } from "./protocol/magnet";
 export { defaultDoc, loadDoc, writeDoc } from "./protocol/peer_state";
 export type { Peer } from "./protocol/node_types";
+export type {
+  BlockIpResult,
+  ConfigDoc,
+  ConnectPeerResult,
+  DownloadRecord,
+  GnutellaEvent,
+  GnutellaEventListener,
+  GnutellaServentOptions,
+  NodeStatus,
+  PeerInfo,
+  RuntimeConfig,
+  SearchHit,
+  ShareFile,
+  UnblockIpResult,
+} from "./types";

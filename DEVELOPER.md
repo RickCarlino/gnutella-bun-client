@@ -1,6 +1,6 @@
 # Developer Guide
 
-Use this guide if you want to run GBun inside your own TypeScript app instead of driving it through the CLI.
+Use this guide if you want to run Gnutella inside your own TypeScript app instead of driving it through the CLI.
 
 Most apps only need three things:
 
@@ -11,8 +11,7 @@ Most apps only need three things:
 ## Basic Example
 
 ```ts
-import { GnutellaServent, loadDoc } from "./src/protocol";
-import type { GnutellaEvent } from "./src/types";
+import { GnutellaServent, loadDoc, type GnutellaEvent } from "gnutella";
 
 const configPath = "./gnutella.json";
 const doc = await loadDoc(configPath);
@@ -46,7 +45,7 @@ await node.stop();
 ## Loading And Saving State
 
 ```ts
-import { loadDoc } from "./src/protocol";
+import { loadDoc } from "gnutella";
 
 const doc = await loadDoc("./gnutella.json");
 ```
