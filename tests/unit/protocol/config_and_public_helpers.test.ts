@@ -148,7 +148,7 @@ describe("protocol config and public helpers", () => {
       expect(loaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
       expect(persisted.config.listen_ip).toBe("0.0.0.0");
       expect(persisted.config.listen_port).toBe(createdRuntime.listenPort);
-      expect(persisted.config.gwebcache_urls).toBeUndefined();
+      expect(persisted.config.gwebcache_urls).toEqual([]);
       expect(persisted.config.max_connections).toBeUndefined();
       expect(persisted.config.max_ultrapeer_connections).toBe(64);
       expect(persisted.config.max_leaf_connections).toBe(64);

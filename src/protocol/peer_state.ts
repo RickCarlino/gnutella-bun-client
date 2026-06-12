@@ -626,9 +626,7 @@ function persistedConfigForRuntime(
   const cleanConfig: PersistedConfig = {
     listen_ip: runtime.listenHost,
     listen_port: runtime.listenPort,
-    gwebcache_urls: runtime.gwebCacheUrls.length
-      ? [...runtime.gwebCacheUrls]
-      : undefined,
+    gwebcache_urls: [...runtime.gwebCacheUrls],
     ultrapeer: runtime.ultrapeer,
     max_ultrapeer_connections: runtime.maxUltrapeerConnections,
     max_leaf_connections: runtime.maxLeafConnections,

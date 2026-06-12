@@ -352,7 +352,7 @@ describe("protocol node", () => {
         ]);
 
         expect(node.baseHandshakeHeaders()).toMatchObject({
-          "user-agent": "GnutellaBun/0.6",
+          "user-agent": "GnutellaBun/1.0.0",
           "x-ultrapeer": "False",
           "listen-ip": "7.7.7.7:7777",
           "x-max-ttl": "7",

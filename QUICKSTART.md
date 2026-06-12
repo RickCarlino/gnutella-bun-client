@@ -2,15 +2,12 @@
 
 This guide gets you from zero to a working CLI session with sharing, searching, browsing, and downloading.
 
-## 1. Get The CLI
+## 1. Get GnutellaBun
 
 You can either:
 
-- install the npm package with `npm install -g gnutella`
 - download a prebuilt binary from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases)
 - run from source with Bun
-
-The npm package requires Bun at runtime because the installed CLI uses `#!/usr/bin/env bun`.
 
 If you are running from source:
 
@@ -18,7 +15,7 @@ If you are running from source:
 bun install
 ```
 
-Throughout this guide, commands use the npm-installed CLI:
+Throughout this guide, commands use the CLI command:
 
 ```bash
 gnutella
@@ -40,7 +37,7 @@ gnutella init --config gnutella.json
 
 This creates a config file and a downloads folder.
 
-By default, GBun shares files from `./downloads` and also saves downloaded files there.
+By default, GnutellaBun shares files from `./downloads` and also saves downloaded files there.
 
 ## 3. Put Files In Your Share Folder
 
@@ -54,7 +51,7 @@ If you changed `config.data_dir`, use `<data_dir>/downloads` instead.
 gnutella run --config gnutella.json
 ```
 
-GBun will try to bootstrap on its own. If you already know a peer and want to connect to it directly, you can still use `connect <ip:port>` after startup.
+GnutellaBun will try to bootstrap on its own. If you already know a peer and want to connect to it directly, you can still use `connect <ip:port>` after startup.
 
 Useful first commands:
 
@@ -118,7 +115,7 @@ Or pick an explicit destination:
 download 1 ./my-copy.bin
 ```
 
-If the destination file already exists, GBun resumes from the current file size when possible.
+If the destination file already exists, GnutellaBun resumes from the current file size when possible.
 
 ## 8. Save And Quit
 

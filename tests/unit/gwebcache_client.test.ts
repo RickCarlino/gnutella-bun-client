@@ -310,7 +310,7 @@ describe("gwebcache client", () => {
     expect(first.searchParams.get("net")).toBe("gnutella");
     expect(first.searchParams.get("ping")).toBe("1");
     expect(first.searchParams.get("client")).toBe("GBUN");
-    expect(first.searchParams.get("version")).toBe("GnutellaBun/0.6");
+    expect(first.searchParams.get("version")).toBe("GnutellaBun/1.0.0");
   });
 
   test("fetchBootstrapData records thrown cache request errors", async () => {

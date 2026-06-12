@@ -2,15 +2,12 @@
 
 This guide covers the full terminal interface: setup, configuration, commands, and common workflows.
 
-## Running GBun
+## Running GnutellaBun
 
 You can use either:
 
-- the npm package with `npm install -g gnutella`
 - a prebuilt binary from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases)
 - the source checkout with Bun
-
-The npm package requires Bun at runtime because the installed CLI uses `#!/usr/bin/env bun`.
 
 If you are running from source:
 
@@ -18,7 +15,7 @@ If you are running from source:
 bun install
 ```
 
-Throughout this guide, commands use the npm-installed CLI:
+Throughout this guide, commands use the CLI command:
 
 ```bash
 gnutella
@@ -48,34 +45,34 @@ gnutella run --config gnutella.json
 
 ## Config File Reference
 
-GBun keeps both settings and remembered state in the same JSON file.
+GnutellaBun keeps both settings and remembered state in the same JSON file.
 
 ### Main Settings
 
 | Setting                            | What it is for                                                                                                                                            |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.data_dir`                  | Root folder for GBun data. Shared files and downloaded files both live under `<data_dir>/downloads`.                                                      |
+| `config.data_dir`                  | Root folder for GnutellaBun data. Shared files and downloaded files both live under `<data_dir>/downloads`.                                               |
 | `config.listen_ip`                 | Local IPv4 address to bind to. Leave `0.0.0.0` unless you need something more specific.                                                                   |
-| `config.listen_port`               | Local TCP port GBun listens on.                                                                                                                           |
+| `config.listen_port`               | Local TCP port GnutellaBun listens on.                                                                                                                    |
 | `config.advertised_ip`             | External IPv4 address other peers should use to reach you. Useful when your local bind address is not the address seen on the internet.                   |
 | `config.advertised_port`           | External TCP port other peers should use to reach you.                                                                                                    |
 | `config.blocked_ips`               | IPv4 addresses to refuse, forget, and stop dialing.                                                                                                       |
 | `config.gwebcache_urls`            | Optional custom Gnutella Web Cache list. When set, it replaces the built-in list. This is mainly useful for local development or controlled environments. |
-| `config.ultrapeer`                 | Set `true` if you want GBun to behave like a larger relay-style node. Leave `false` for a lighter client.                                                 |
+| `config.ultrapeer`                 | Set `true` if you want GnutellaBun to behave like a larger relay-style node. Leave `false` for a lighter client.                                          |
 | `config.max_ultrapeer_connections` | Cap for ultrapeer-to-ultrapeer links.                                                                                                                     |
 | `config.max_leaf_connections`      | Cap for leaf links.                                                                                                                                       |
 | `config.log_ignore`                | Event categories to hide when `monitor` is enabled.                                                                                                       |
 
 ### Saved State
 
-| Setting                | What it is for                                                               |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| `state.peers`          | Optional peers GBun will try on startup. GBun can also bootstrap on its own. |
-| `state.servent_id_hex` | GBun's node identity. In normal use, leave it alone.                         |
+| Setting                | What it is for                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `state.peers`          | Optional peers GnutellaBun will try on startup. GnutellaBun can also bootstrap on its own. |
+| `state.servent_id_hex` | GnutellaBun's node identity. In normal use, leave it alone.                                |
 
 ## Where Files Go
 
-GBun uses `<data_dir>/downloads` for two things:
+GnutellaBun uses `<data_dir>/downloads` for two things:
 
 - files you want to share
 - files you download
@@ -98,32 +95,32 @@ With the default config, that folder is `./downloads`.
 
 ### Peers And Network
 
-| Command               | What it does                                        |
-| --------------------- | --------------------------------------------------- |
-| `peers`               | Lists connected peers and their keys such as `p1`.  |
+| Command             | What it does                                        |
+| ------------------- | --------------------------------------------------- |
+| `peers`             | Lists connected peers and their keys such as `p1`.  |
 | `connect <ip:port>` | Connects to a peer and remembers it for later runs. |
-| `ping [ttl]`          | Sends a network ping.                               |
-| `blocked`             | Lists blocked IPv4 addresses.                       |
-| `block <ipv4>`        | Blocks an IPv4 address and drops matching peers.    |
-| `unblock <ipv4>`      | Removes an IPv4 address from the block list.        |
+| `ping [ttl]`        | Sends a network ping.                               |
+| `blocked`           | Lists blocked IPv4 addresses.                       |
+| `block <ipv4>`      | Blocks an IPv4 address and drops matching peers.    |
+| `unblock <ipv4>`    | Removes an IPv4 address from the block list.        |
 
 ### Searching And Browsing
 
-| Command                       | What it does                                                                |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| `query <search terms...>`     | Searches the network.                                                       |
-| `results`                     | Shows the current result list.                                              |
-| `info <resultNo>`             | Shows detailed information for one result.                                  |
-| `magnet <resultNo>`           | Prints a magnet link for one result.                                        |
+| Command                     | What it does                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| `query <search terms...>`   | Searches the network.                                                            |
+| `results`                   | Shows the current result list.                                                   |
+| `info <resultNo>`           | Shows detailed information for one result.                                       |
+| `magnet <resultNo>`         | Prints a magnet link for one result.                                             |
 | `browse <peerKey\|ip:port>` | Loads a peer's full shared library by connected peer key or direct IPv4 address. |
 
 ### Sharing And Downloads
 
-| Command                          | What it does                                                                               |
-| -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `shares`                         | Lists the files you are sharing.                                                           |
-| `rescan`                         | Rebuilds the local share index.                                                            |
-| `download <resultNo> [destPath]` | Downloads one result. If `destPath` is omitted, GBun picks a path in the downloads folder. |
+| Command                          | What it does                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `shares`                         | Lists the files you are sharing.                                                                  |
+| `rescan`                         | Rebuilds the local share index.                                                                   |
+| `download <resultNo> [destPath]` | Downloads one result. If `destPath` is omitted, GnutellaBun picks a path in the downloads folder. |
 
 ## Common Tasks
 
@@ -189,4 +186,4 @@ This is useful for smoke tests, local demos, and small automation tasks.
 
 If you want the shortest path to a working session, go back to [QUICKSTART.md](QUICKSTART.md).
 
-If you want to control GBun from code instead of the terminal, read [DEVELOPER.md](DEVELOPER.md).
+If you want to control GnutellaBun from code instead of the terminal, read [DEVELOPER.md](DEVELOPER.md).
