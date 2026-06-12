@@ -158,8 +158,9 @@ function waitForSecureTlsSocket(
   });
 }
 
-export function tlsEnabled(_node: GnutellaServent): boolean {
+export function tlsEnabled(node: GnutellaServent): boolean {
   if (!ENABLE_TLS) return false;
+  if (!node.config().enableTls) return false;
   try {
     tlsContext();
     return true;

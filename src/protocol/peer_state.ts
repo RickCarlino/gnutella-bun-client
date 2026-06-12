@@ -21,6 +21,7 @@ import {
   ENABLE_GGEP,
   ENABLE_PONG_CACHING,
   ENABLE_QRP,
+  ENABLE_TLS,
   MAX_LEAF_CONNECTIONS,
   MAX_PAYLOAD_BYTES,
   MAX_RESULTS_PER_QUERY,
@@ -62,6 +63,7 @@ type PersistedConfig = {
   max_connections?: unknown;
   max_ultrapeer_connections?: unknown;
   max_leaf_connections?: unknown;
+  enable_tls?: unknown;
   log_ignore?: unknown;
   data_dir?: unknown;
 };
@@ -369,6 +371,10 @@ export function runtimeConfigFor(
     enableBye: ENABLE_BYE,
     enablePongCaching: ENABLE_PONG_CACHING,
     enableGgep: ENABLE_GGEP,
+    enableTls:
+      typeof doc.config.enableTls === "boolean"
+        ? doc.config.enableTls
+        : ENABLE_TLS,
     serveUriRes: SERVE_URI_RES,
     vendorCode: DEFAULT_VENDOR_CODE,
   };
@@ -414,6 +420,7 @@ export function configDocForRuntime(
     ultrapeer: config.ultrapeer,
     maxUltrapeerConnections: config.maxUltrapeerConnections,
     maxLeafConnections: config.maxLeafConnections,
+    enableTls: config.enableTls,
     monitorIgnoreEvents: config.monitorIgnoreEvents.length
       ? [...config.monitorIgnoreEvents]
       : undefined,
@@ -550,6 +557,8 @@ function applyOptionalLoadedConfig(
   if (blockedIps) doc.config.blockedIps = blockedIps;
   const gwebCacheUrls = normalizedGWebCacheUrls(config.gwebcache_urls);
   if (gwebCacheUrls) doc.config.gwebCacheUrls = gwebCacheUrls;
+  if (typeof config.enable_tls === "boolean")
+    doc.config.enableTls = config.enable_tls;
   doc.config.ultrapeer = config.ultrapeer === true;
   applyLoadedPeerLimits(doc, config);
   applyLoadedMonitorConfig(doc, config);
@@ -623,6 +632,7 @@ function persistedConfigForRuntime(
     ultrapeer: runtime.ultrapeer,
     max_ultrapeer_connections: runtime.maxUltrapeerConnections,
     max_leaf_connections: runtime.maxLeafConnections,
+    enable_tls: runtime.enableTls,
     data_dir: runtime.dataDir,
   };
   if (runtime.advertisedHost)

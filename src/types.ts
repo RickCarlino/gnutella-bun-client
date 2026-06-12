@@ -196,6 +196,7 @@ export type ConfigDoc = {
     maxConnections?: number;
     maxUltrapeerConnections?: number;
     maxLeafConnections?: number;
+    enableTls?: boolean;
     monitorIgnoreEvents?: string[];
     dataDir: string;
   };
@@ -242,6 +243,7 @@ export type RuntimeConfig = {
   enableBye: boolean;
   enablePongCaching: boolean;
   enableGgep: boolean;
+  enableTls: boolean;
   serveUriRes: boolean;
   vendorCode: string;
 };
