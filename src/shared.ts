@@ -23,18 +23,20 @@ export function unique<T>(xs: T[]): T[] {
 }
 
 export function normalizePeer(host: string, port: number): string {
-  return `${host.trim()}:${port}`;
+  return `${normalizeIpv4(host) || host.trim()}:${port}`;
 }
 
 export function parsePeer(
   s: string,
 ): { host: string; port: number } | null {
   const t = String(s || "").trim();
-  const m = /^([^:]+):(\d+)$/.exec(t);
+  const m = /^(\d+\.\d+\.\d+\.\d+):(\d+)$/.exec(t);
   if (!m) return null;
+  const host = normalizeIpv4(m[1]);
+  if (!host) return null;
   const port = Number(m[2]);
   if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
-  return { host: m[1], port };
+  return { host, port };
 }
 
 export function normalizeIpv4(

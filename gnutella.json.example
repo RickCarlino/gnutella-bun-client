@@ -1,10 +1,9 @@
 {
   "config": {
-    "listen_host": "0.0.0.0",
+    "listen_ip": "0.0.0.0",
     "listen_port": 22867,
     "blocked_ips": [],
     "ultrapeer": false,
-    "max_connections": 64,
     "max_ultrapeer_connections": 64,
     "max_leaf_connections": 64,
     "log_ignore": [],

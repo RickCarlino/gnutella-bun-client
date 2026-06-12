@@ -208,7 +208,7 @@ describe("protocol node", () => {
       expect(maxInFlight).toBe(
         Math.min(
           BOOTSTRAP_CONNECT_CONCURRENCY,
-          node.config().maxConnections,
+          node.config().maxUltrapeerConnections,
         ),
       );
       expect(timeouts).toEqual([2500, 2500, 2500]);

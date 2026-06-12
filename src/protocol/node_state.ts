@@ -561,7 +561,7 @@ export async function connectToPeer(
   peerSpec: string,
 ): Promise<ConnectPeerResult> {
   const addr = parsePeer(peerSpec);
-  if (!addr) throw new Error("expected host:port");
+  if (!addr) throw new Error("expected ip:port");
   const peer = normalizePeer(addr.host, addr.port);
   if (node.isSelfPeer(addr.host, addr.port))
     throw new Error("cannot add self as peer");

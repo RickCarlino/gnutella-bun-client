@@ -102,9 +102,9 @@ LISTEN_PORT_ENV="$LISTEN_PORT" \
     doc.config ??= {};
     doc.state ??= {};
 
-    doc.config.listen_host = "0.0.0.0";
+    doc.config.listen_ip = "0.0.0.0";
     doc.config.listen_port = listenPort;
-    doc.config.advertised_host = publicIp;
+    doc.config.advertised_ip = publicIp;
     doc.config.advertised_port = listenPort;
     doc.config.ultrapeer = true;
 

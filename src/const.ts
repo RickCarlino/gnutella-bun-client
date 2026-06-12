@@ -9,7 +9,6 @@ export const DEFAULT_LISTEN_PORT_MAX = 29999;
 export const DEFAULT_USER_AGENT = "GnutellaBun/0.6";
 export const DEFAULT_VENDOR_CODE = "GBUN";
 export const DATA_DOWNLOADS_DIRNAME = "downloads";
-export const MAX_CONNECTIONS = 64;
 export const MAX_ULTRAPEER_CONNECTIONS = 64;
 export const MAX_LEAF_CONNECTIONS = 64;
 export const CONNECT_TIMEOUT_MS = 5000;
@@ -120,13 +119,13 @@ export const CLI_HELP_LINES = [
   "blocked",
   "block <ipv4>",
   "unblock <ipv4>",
-  "connect <host:port>",
+  "connect <ip:port>",
   "shares",
   "results",
   "clear",
   "ping [ttl]",
   "query <search terms...>",
-  "browse <peerKey|host:port>",
+  "browse <peerKey|ip:port>",
   "info <resultNo>",
   "magnet <resultNo>",
   "download <resultNo> [destPath]",

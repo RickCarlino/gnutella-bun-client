@@ -55,14 +55,13 @@ GBun keeps both settings and remembered state in the same JSON file.
 | Setting                            | What it is for                                                                                                                                            |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `config.data_dir`                  | Root folder for GBun data. Shared files and downloaded files both live under `<data_dir>/downloads`.                                                      |
-| `config.listen_host`               | Local IPv4 address to bind to. Leave `0.0.0.0` unless you need something more specific.                                                                   |
+| `config.listen_ip`                 | Local IPv4 address to bind to. Leave `0.0.0.0` unless you need something more specific.                                                                   |
 | `config.listen_port`               | Local TCP port GBun listens on.                                                                                                                           |
-| `config.advertised_host`           | External IPv4 address other peers should use to reach you. Useful when your local bind address is not the address seen on the internet.                   |
+| `config.advertised_ip`             | External IPv4 address other peers should use to reach you. Useful when your local bind address is not the address seen on the internet.                   |
 | `config.advertised_port`           | External TCP port other peers should use to reach you.                                                                                                    |
 | `config.blocked_ips`               | IPv4 addresses to refuse, forget, and stop dialing.                                                                                                       |
 | `config.gwebcache_urls`            | Optional custom Gnutella Web Cache list. When set, it replaces the built-in list. This is mainly useful for local development or controlled environments. |
 | `config.ultrapeer`                 | Set `true` if you want GBun to behave like a larger relay-style node. Leave `false` for a lighter client.                                                 |
-| `config.max_connections`           | Overall peer connection cap.                                                                                                                              |
 | `config.max_ultrapeer_connections` | Cap for ultrapeer-to-ultrapeer links.                                                                                                                     |
 | `config.max_leaf_connections`      | Cap for leaf links.                                                                                                                                       |
 | `config.log_ignore`                | Event categories to hide when `monitor` is enabled.                                                                                                       |
@@ -102,7 +101,7 @@ With the default config, that folder is `./downloads`.
 | Command               | What it does                                        |
 | --------------------- | --------------------------------------------------- |
 | `peers`               | Lists connected peers and their keys such as `p1`.  |
-| `connect <host:port>` | Connects to a peer and remembers it for later runs. |
+| `connect <ip:port>` | Connects to a peer and remembers it for later runs. |
 | `ping [ttl]`          | Sends a network ping.                               |
 | `blocked`             | Lists blocked IPv4 addresses.                       |
 | `block <ipv4>`        | Blocks an IPv4 address and drops matching peers.    |
@@ -116,7 +115,7 @@ With the default config, that folder is `./downloads`.
 | `results`                     | Shows the current result list.                                              |
 | `info <resultNo>`             | Shows detailed information for one result.                                  |
 | `magnet <resultNo>`           | Prints a magnet link for one result.                                        |
-| `browse <peerKey\|host:port>` | Loads a peer's full shared library by connected peer key or direct address. |
+| `browse <peerKey\|ip:port>` | Loads a peer's full shared library by connected peer key or direct IPv4 address. |
 
 ### Sharing And Downloads
 

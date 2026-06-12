@@ -59,7 +59,9 @@ export function availableDialSlots(node: GnutellaServent): number {
   if (node.nodeMode() === "ultrapeer") {
     return Math.max(
       0,
-      c.maxConnections - node.connectedMeshPeerCount() - node.dialing.size,
+      c.maxUltrapeerConnections -
+        node.connectedMeshPeerCount() -
+        node.dialing.size,
     );
   }
   return Math.max(
@@ -106,11 +108,11 @@ export function canAcceptPeerRole(
     return { ok: true };
   }
 
-  if (node.connectedMeshPeerCount() >= c.maxConnections) {
+  if (node.connectedMeshPeerCount() >= c.maxUltrapeerConnections) {
     return {
       ok: false,
       code: 503,
-      reason: `Too many ultrapeer connections (${c.maxConnections} max)`,
+      reason: `Too many ultrapeer connections (${c.maxUltrapeerConnections} max)`,
     };
   }
   return { ok: true };

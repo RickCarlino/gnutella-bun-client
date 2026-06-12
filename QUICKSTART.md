@@ -54,7 +54,7 @@ If you changed `config.data_dir`, use `<data_dir>/downloads` instead.
 gnutella run --config gnutella.json
 ```
 
-GBun will try to bootstrap on its own. If you already know a peer and want to connect to it directly, you can still use `connect <host:port>` after startup.
+GBun will try to bootstrap on its own. If you already know a peer and want to connect to it directly, you can still use `connect <ip:port>` after startup.
 
 Useful first commands:
 
@@ -131,6 +131,6 @@ quit
 
 ## If Something Looks Empty
 
-- No peers yet: give bootstrap a little time, or run `connect <host:port>` if you already know a live peer.
+- No peers yet: give bootstrap a little time, or run `connect <ip:port>` if you already know a live peer.
 - No results yet: wait a few seconds after connecting, then try another query.
 - Want the full command list and config reference: read [CLI.md](CLI.md).

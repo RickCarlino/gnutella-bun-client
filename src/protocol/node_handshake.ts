@@ -142,7 +142,9 @@ function emitHandshakeBlock(
 
 function ultrapeerNeededHeader(node: GnutellaServent): string | undefined {
   if (node.nodeMode() !== "ultrapeer") return undefined;
-  if (node.connectedMeshPeerCount() < node.config().maxConnections)
+  if (
+    node.connectedMeshPeerCount() < node.config().maxUltrapeerConnections
+  )
     return "True";
   if (node.connectedLeafCount() < node.config().maxLeafConnections)
     return "False";
@@ -164,7 +166,7 @@ function baseRoleHeaders(node: GnutellaServent): Record<string, string> {
     headers["x-degree"] = String(
       Math.max(
         GTK_MODERN_ULTRAPEER_MIN_DEGREE,
-        node.config().maxConnections,
+        node.config().maxUltrapeerConnections,
       ),
     );
   }

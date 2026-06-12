@@ -146,14 +146,15 @@ describe("protocol config and public helpers", () => {
       expect(loaded.config.advertisedHost).toBeUndefined();
       expect(loaded.config.gwebCacheUrls).toBeUndefined();
       expect(loaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
-      expect(persisted.config.listen_host).toBe("0.0.0.0");
+      expect(persisted.config.listen_ip).toBe("0.0.0.0");
       expect(persisted.config.listen_port).toBe(createdRuntime.listenPort);
       expect(persisted.config.gwebcache_urls).toBeUndefined();
-      expect(persisted.config.max_connections).toBe(64);
+      expect(persisted.config.max_connections).toBeUndefined();
       expect(persisted.config.max_ultrapeer_connections).toBe(64);
       expect(persisted.config.max_leaf_connections).toBe(64);
       expect(persisted.config.data_dir).toBe(path.join(dir, "nested"));
       expect(persisted.config.log_ignore).toBeUndefined();
+      expect("listen_host" in persisted.config).toBe(false);
       expect("listenHost" in persisted.config).toBe(false);
       expect("dataDir" in persisted.config).toBe(false);
       expect(persisted.state.servent_id_hex).toMatch(/^[0-9a-f]{32}$/);
@@ -330,13 +331,12 @@ describe("protocol config and public helpers", () => {
         `${JSON.stringify(
           {
             config: {
-              listen_host: "127.0.0.1",
+              listen_ip: "127.0.0.1",
               listen_port: 7777,
-              advertised_host: "7.7.7.7",
+              advertised_ip: "7.7.7.7",
               advertised_port: 8888,
               data_dir: "./state-dir",
               ultrapeer: true,
-              max_connections: 15,
               max_ultrapeer_connections: 5,
               max_leaf_connections: 45,
               log_ignore: [" ping ", "PONG"],
@@ -359,7 +359,7 @@ describe("protocol config and public helpers", () => {
       expect(snakeLoaded.config.advertisedHost).toBe("7.7.7.7");
       expect(snakeLoaded.config.advertisedPort).toBe(8888);
       expect(snakeLoaded.config.dataDir).toBe(path.join(dir, "state-dir"));
-      expect(snakeLoaded.config.maxConnections).toBe(15);
+      expect(snakeLoaded.config.maxConnections).toBeUndefined();
       expect(snakeLoaded.config.maxUltrapeerConnections).toBe(5);
       expect(snakeLoaded.config.maxLeafConnections).toBe(45);
       expect(snakeLoaded.config.monitorIgnoreEvents).toEqual([
@@ -402,13 +402,48 @@ describe("protocol config and public helpers", () => {
       expect(camelLoaded.config.advertisedHost).toBeUndefined();
       expect(camelLoaded.config.advertisedPort).toBeUndefined();
       expect(camelLoaded.config.dataDir).toBe(dir);
-      expect(camelLoaded.config.maxConnections).toBe(64);
+      expect(camelLoaded.config.maxConnections).toBeUndefined();
       expect(camelLoaded.config.maxUltrapeerConnections).toBe(64);
       expect(camelLoaded.config.maxLeafConnections).toBe(64);
       expect(camelLoaded.config.monitorIgnoreEvents).toBeUndefined();
       expect(camelLoaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
       expect(camelLoaded.state.serventIdHex).not.toBe("cd".repeat(16));
       expect(camelLoaded.state.peers).toEqual({});
+    });
+  });
+
+  test("loads legacy host and max connection aliases", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      await fs.writeFile(
+        configPath,
+        `${JSON.stringify(
+          {
+            config: {
+              listen_host: "127.0.0.1",
+              listen_port: 7777,
+              advertised_host: "7.7.7.7",
+              max_connections: 15,
+            },
+            state: {
+              servent_id_hex: "ab".repeat(16),
+              peers: {},
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const loaded = await loadDoc(configPath);
+      const runtime = new GnutellaServent(configPath, loaded).config();
+
+      expect(loaded.config.listenHost).toBe("127.0.0.1");
+      expect(loaded.config.advertisedHost).toBe("7.7.7.7");
+      expect(loaded.config.maxConnections).toBeUndefined();
+      expect(loaded.config.maxUltrapeerConnections).toBe(15);
+      expect(runtime.maxConnections).toBe(15);
     });
   });
 

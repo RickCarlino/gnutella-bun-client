@@ -64,8 +64,7 @@ function promptThrobber(session: CliSession): string {
 
 function peerLimitDisplay(node: GnutellaServent): number {
   const c = node.config();
-  if (c.nodeMode === "ultrapeer")
-    return c.maxConnections + c.maxLeafConnections;
+  if (c.nodeMode === "ultrapeer") return c.maxConnections;
   if (c.nodeMode === "leaf") return c.maxUltrapeerConnections;
   return c.maxConnections;
 }
@@ -430,7 +429,7 @@ async function handleConnectCommand(
   session: CliSession,
   args: string[],
 ): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: connect <host:port>");
+  if (args.length !== 2) throw new Error("usage: connect <ip:port>");
   logConnectResult(session, await session.node.connectToPeer(args[1]));
   return true;
 }
@@ -454,7 +453,7 @@ async function handleBrowseCommand(
   args: string[],
 ): Promise<boolean> {
   if (args.length !== 2)
-    throw new Error("usage: browse <peerKey|host:port>");
+    throw new Error("usage: browse <peerKey|ip:port>");
   const added = await session.node.browsePeer(args[1]);
   log(
     session,

@@ -140,7 +140,7 @@ describe("protocol node", () => {
     });
   });
 
-  test("browses a direct host:port without a connected peer", async () => {
+  test("browses a direct ip:port without a connected peer", async () => {
     await withTempDir(async (dir) => {
       const alpha = makeShare(1, path.join(dir, "alpha.txt"), "alpha.txt");
       const payload = encodeQueryHit(

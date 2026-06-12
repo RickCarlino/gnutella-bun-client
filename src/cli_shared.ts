@@ -259,10 +259,7 @@ export function printResults(
       "Size".length,
       ...rows.map((row) => row.fileSize.length),
     ),
-    remote: Math.max(
-      "Host".length,
-      ...rows.map((row) => row.remote.length),
-    ),
+    remote: Math.max("IP".length, ...rows.map((row) => row.remote.length)),
   };
 
   const line = (
@@ -285,7 +282,7 @@ export function printResults(
 
   log(
     [
-      line("No", "File".padEnd(widths.fileName, " "), "Size", "Host"),
+      line("No", "File".padEnd(widths.fileName, " "), "Size", "IP"),
       line(
         "-".repeat(widths.resultNo),
         "-".repeat(widths.fileName),

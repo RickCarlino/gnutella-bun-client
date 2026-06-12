@@ -143,7 +143,7 @@ describe("cli_shared", () => {
 
     expect(logs).toEqual([
       [
-        "No  File                                               Size  Host",
+        "No  File                                               Size  IP",
         "--  ------------------------------------------------  -----  -------------",
         " 2  alpha.txt                                           99B  9.8.7.6:1234",
         " 7  beta file.bin                                       2KB  1.2.3.4:80",

@@ -140,7 +140,7 @@ function resolvePeerBrowseTarget(
   const target = peerBrowseTarget(node, peer);
   const parsed = parsePeer(target || "");
   if (!parsed)
-    throw new Error(`peer ${peerKey} has no browseable host:port`);
+    throw new Error(`peer ${peerKey} has no browseable ip:port`);
   return { peer, host: parsed.host, port: parsed.port };
 }
 

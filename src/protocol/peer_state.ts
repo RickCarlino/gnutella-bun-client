@@ -21,7 +21,6 @@ import {
   ENABLE_GGEP,
   ENABLE_PONG_CACHING,
   ENABLE_QRP,
-  MAX_CONNECTIONS,
   MAX_LEAF_CONNECTIONS,
   MAX_PAYLOAD_BYTES,
   MAX_RESULTS_PER_QUERY,
@@ -51,8 +50,10 @@ import type { ConfigDoc, PeerState, RuntimeConfig } from "../types";
 import { normalizeCacheUrl } from "../gwebcache/shared";
 
 type PersistedConfig = {
+  listen_ip?: unknown;
   listen_host?: unknown;
   listen_port?: unknown;
+  advertised_ip?: unknown;
   advertised_host?: unknown;
   advertised_port?: unknown;
   blocked_ips?: unknown;
@@ -268,9 +269,10 @@ function resolveDataDir(
 }
 
 function normalizedListenHost(value: unknown): string {
-  return typeof value === "string" && value.trim()
-    ? value.trim()
-    : DEFAULT_LISTEN_HOST;
+  return (
+    normalizeIpv4(typeof value === "string" ? value : undefined) ||
+    DEFAULT_LISTEN_HOST
+  );
 }
 
 function normalizedPositivePort(value: unknown): number | undefined {
@@ -289,13 +291,21 @@ function defaultListenPortForServentId(serventIdHex: string): number {
 }
 
 function normalizedAdvertisedHost(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim()
-    ? value.trim()
-    : undefined;
+  return normalizeIpv4(typeof value === "string" ? value : undefined);
 }
 
 function runtimeGWebCacheUrls(value: unknown): string[] {
   return normalizedGWebCacheUrls(value) || [];
+}
+
+function derivedMaxConnections(config: {
+  nodeMode: "leaf" | "ultrapeer";
+  maxUltrapeerConnections: number;
+  maxLeafConnections: number;
+}): number {
+  return config.nodeMode === "ultrapeer"
+    ? config.maxUltrapeerConnections + config.maxLeafConnections
+    : config.maxUltrapeerConnections;
 }
 
 export function runtimeConfigFor(
@@ -310,6 +320,13 @@ export function runtimeConfigFor(
   );
   const monitorIgnoreEvents =
     normalizedMonitorIgnoreEvents(doc.config.monitorIgnoreEvents) || [];
+  const nodeMode = doc.config.ultrapeer === true ? "ultrapeer" : "leaf";
+  const maxUltrapeerConnections =
+    positiveIntegerOrUndefined(doc.config.maxUltrapeerConnections) ||
+    MAX_ULTRAPEER_CONNECTIONS;
+  const maxLeafConnections =
+    positiveIntegerOrUndefined(doc.config.maxLeafConnections) ||
+    MAX_LEAF_CONNECTIONS;
   return {
     listenHost: normalizedListenHost(doc.config.listenHost),
     listenPort:
@@ -320,19 +337,17 @@ export function runtimeConfigFor(
     gwebCacheUrls: runtimeGWebCacheUrls(doc.config.gwebCacheUrls),
     ultrapeer: doc.config.ultrapeer === true,
     monitorIgnoreEvents,
-    nodeMode: doc.config.ultrapeer === true ? "ultrapeer" : "leaf",
+    nodeMode,
     dataDir,
     downloadsDir: path.join(dataDir, DATA_DOWNLOADS_DIRNAME),
     peerSeenThresholdSec: PEER_SEEN_THRESHOLD_SEC,
-    maxConnections:
-      positiveIntegerOrUndefined(doc.config.maxConnections) ||
-      MAX_CONNECTIONS,
-    maxUltrapeerConnections:
-      positiveIntegerOrUndefined(doc.config.maxUltrapeerConnections) ||
-      MAX_ULTRAPEER_CONNECTIONS,
-    maxLeafConnections:
-      positiveIntegerOrUndefined(doc.config.maxLeafConnections) ||
-      MAX_LEAF_CONNECTIONS,
+    maxConnections: derivedMaxConnections({
+      nodeMode,
+      maxUltrapeerConnections,
+      maxLeafConnections,
+    }),
+    maxUltrapeerConnections,
+    maxLeafConnections,
     connectTimeoutMs: CONNECT_TIMEOUT_MS,
     pingIntervalSec: PING_INTERVAL_SEC,
     reconnectIntervalSec: RECONNECT_INTERVAL_SEC,
@@ -367,11 +382,18 @@ export function applyRuntimeConfigPatch(
     ...config,
     ...patch,
   };
+  if (
+    patch.maxConnections != null &&
+    patch.maxUltrapeerConnections == null
+  ) {
+    next.maxUltrapeerConnections = patch.maxConnections;
+  }
   if (patch.nodeMode && patch.ultrapeer == null) {
     next.ultrapeer = patch.nodeMode === "ultrapeer";
   } else if (patch.ultrapeer != null && patch.nodeMode == null) {
     next.nodeMode = patch.ultrapeer ? "ultrapeer" : "leaf";
   }
+  next.maxConnections = derivedMaxConnections(next);
   return next;
 }
 
@@ -390,7 +412,6 @@ export function configDocForRuntime(
       ? [...config.gwebCacheUrls]
       : undefined,
     ultrapeer: config.ultrapeer,
-    maxConnections: config.maxConnections,
     maxUltrapeerConnections: config.maxUltrapeerConnections,
     maxLeafConnections: config.maxLeafConnections,
     monitorIgnoreEvents: config.monitorIgnoreEvents.length
@@ -465,7 +486,6 @@ export function defaultDoc(configPath: string): ConfigDoc {
       listenPort: defaultListenPortForServentId(serventIdHex),
       blockedIps: [],
       ultrapeer: false,
-      maxConnections: MAX_CONNECTIONS,
       maxUltrapeerConnections: MAX_ULTRAPEER_CONNECTIONS,
       maxLeafConnections: MAX_LEAF_CONNECTIONS,
       dataDir: base,
@@ -491,13 +511,9 @@ function applyLoadedPeerLimits(
   doc: ConfigDoc,
   config: PersistedConfig,
 ): void {
-  const maxConnections = positiveIntegerOrUndefined(
-    config.max_connections,
-  );
-  if (maxConnections) doc.config.maxConnections = maxConnections;
-  const maxUltrapeerConnections = positiveIntegerOrUndefined(
-    config.max_ultrapeer_connections,
-  );
+  const maxUltrapeerConnections =
+    positiveIntegerOrUndefined(config.max_ultrapeer_connections) ||
+    positiveIntegerOrUndefined(config.max_connections);
   if (maxUltrapeerConnections)
     doc.config.maxUltrapeerConnections = maxUltrapeerConnections;
   const maxLeafConnections = positiveIntegerOrUndefined(
@@ -522,7 +538,9 @@ function applyOptionalLoadedConfig(
   doc: ConfigDoc,
   config: PersistedConfig,
 ): void {
-  const advertisedHost = optionalNonEmptyString(config.advertised_host);
+  const advertisedHost =
+    optionalNonEmptyString(config.advertised_ip) ||
+    optionalNonEmptyString(config.advertised_host);
   if (advertisedHost) doc.config.advertisedHost = advertisedHost;
   const advertisedPort = positiveIntegerOrUndefined(
     config.advertised_port,
@@ -550,6 +568,7 @@ function buildLoadedDoc(
   const doc: ConfigDoc = {
     config: {
       listenHost:
+        optionalNonEmptyString(config.listen_ip) ||
         optionalNonEmptyString(config.listen_host) ||
         defaults.config.listenHost,
       listenPort:
@@ -557,7 +576,6 @@ function buildLoadedDoc(
         defaultListenPortForServentId(serventIdHex),
       blockedIps: [],
       ultrapeer: config.ultrapeer === true,
-      maxConnections: defaults.config.maxConnections,
       maxUltrapeerConnections: defaults.config.maxUltrapeerConnections,
       maxLeafConnections: defaults.config.maxLeafConnections,
       dataDir: resolveDataDir(configPath, config),
@@ -597,19 +615,18 @@ function persistedConfigForRuntime(
   runtime: RuntimeConfig,
 ): PersistedConfig {
   const cleanConfig: PersistedConfig = {
-    listen_host: runtime.listenHost,
+    listen_ip: runtime.listenHost,
     listen_port: runtime.listenPort,
     gwebcache_urls: runtime.gwebCacheUrls.length
       ? [...runtime.gwebCacheUrls]
       : undefined,
     ultrapeer: runtime.ultrapeer,
-    max_connections: runtime.maxConnections,
     max_ultrapeer_connections: runtime.maxUltrapeerConnections,
     max_leaf_connections: runtime.maxLeafConnections,
     data_dir: runtime.dataDir,
   };
   if (runtime.advertisedHost)
-    cleanConfig.advertised_host = runtime.advertisedHost;
+    cleanConfig.advertised_ip = runtime.advertisedHost;
   if (
     runtime.advertisedPort != null &&
     runtime.advertisedPort !== runtime.listenPort
