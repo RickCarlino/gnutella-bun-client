@@ -6,12 +6,12 @@ import path from "node:path";
 import { LOCAL_ROUTE, TYPE } from "../const";
 import { ensureDir, errMsg, fileExists, ts } from "../shared";
 import {
-  buildDownloadRecord,
   directDownloadAttempts,
-  shouldTryPushFallback,
   type DirectDownloadAttempt,
 } from "../transfers";
-import type { SearchHit } from "../types";
+import type { DownloadJob } from "../downloads/types";
+import type { TransferOptions } from "../transfers/types";
+import type { PendingPush, SearchHit } from "../types";
 import {
   buildGetRequest,
   buildUriResRequest,
@@ -36,6 +36,21 @@ function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(errMsg(error));
 }
 
+function abortError(): Error {
+  return new Error("download aborted");
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortError();
+}
+
+async function existingDownloadBytes(destPath: string): Promise<number> {
+  await ensureDir(path.dirname(destPath));
+  return (await fileExists(destPath))
+    ? (await fsp.stat(destPath)).size
+    : 0;
+}
+
 function splitOutgoingQuery(search: string): OutgoingQueryParts {
   const magnet = parseMagnetUri(search);
   if (magnet) {
@@ -45,25 +60,6 @@ function splitOutgoingQuery(search: string): OutgoingQueryParts {
     };
   }
   return splitQuerySearch(search);
-}
-
-function recordDownloadSuccess(
-  node: GnutellaServent,
-  hit: SearchHit,
-  destPath: string,
-  mode: "direct" | "push",
-): void {
-  node.emitEvent({
-    type: "DOWNLOAD_SUCCEEDED",
-    at: ts(),
-    mode,
-    resultNo: hit.resultNo,
-    fileName: hit.fileName,
-    destPath,
-    remoteHost: hit.remoteHost,
-    remotePort: hit.remotePort,
-  });
-  node.downloads.push(buildDownloadRecord(hit, destPath, mode, ts()));
 }
 
 function directDownloadRequest(
@@ -111,6 +107,7 @@ export async function handleIncomingGiv(
       pending.result.fileIndex,
       pending.result.fileName,
       pending.destPath,
+      pending.transferOptions,
     );
     pending.resolve(result);
   } catch (error) {
@@ -124,11 +121,10 @@ export async function downloadOverSocket(
   fileIndex: number,
   fileName: string,
   destPath: string,
+  options: TransferOptions = {},
 ): Promise<unknown> {
-  await ensureDir(path.dirname(destPath));
-  const existing = (await fileExists(destPath))
-    ? (await fsp.stat(destPath)).size
-    : 0;
+  throwIfAborted(options.signal);
+  const existing = await existingDownloadBytes(destPath);
   socket.write(
     buildGetRequest(
       fileIndex,
@@ -143,6 +139,7 @@ export async function downloadOverSocket(
     destPath,
     `${socket.remoteAddress || "?"}:${socket.remotePort || "?"}`,
     existing,
+    options,
   );
   if (socketCanEnd(socket)) socket.end();
   return result;
@@ -155,30 +152,46 @@ export async function directDownloadViaRequest(
   request: string,
   destPath: string,
   existing: number,
+  options: TransferOptions = {},
 ): Promise<unknown> {
+  throwIfAborted(options.signal);
   const socket = node.createConnection({ host, port });
   socket.setNoDelay(true);
   socket.setTimeout(node.config().downloadTimeoutMs, () =>
     socket.destroy(new Error("download timeout")),
   );
   await new Promise<void>((resolve, reject) => {
-    const onError = (error: unknown) => {
+    const cleanup = () => {
       socket.removeListener("connect", onConnect);
+      socket.removeListener("error", onError);
+      options.signal?.removeEventListener("abort", onAbort);
+    };
+    const onError = (error: unknown) => {
+      cleanup();
       reject(toError(error));
     };
     const onConnect = () => {
-      socket.removeListener("error", onError);
+      cleanup();
       socket.write(request);
       resolve();
     };
+    const onAbort = () => {
+      cleanup();
+      socket.destroy(abortError());
+      reject(abortError());
+    };
     socket.once("error", onError);
     socket.once("connect", onConnect);
+    if (options.signal?.aborted) onAbort();
+    else
+      options.signal?.addEventListener("abort", onAbort, { once: true });
   });
   const result = await node.readHttpDownload(
     socket,
     destPath,
     `${host}:${port}`,
     existing,
+    options,
   );
   if (socketCanEnd(socket)) socket.end();
   return result;
@@ -188,11 +201,10 @@ export async function directDownload(
   node: GnutellaServent,
   hit: SearchHit,
   destPath: string,
+  options: TransferOptions = {},
 ): Promise<unknown> {
-  await ensureDir(path.dirname(destPath));
-  const existing = (await fileExists(destPath))
-    ? (await fsp.stat(destPath)).size
-    : 0;
+  throwIfAborted(options.signal);
+  const existing = await existingDownloadBytes(destPath);
 
   let lastError: unknown;
   const attempts = directDownloadAttempts({
@@ -212,6 +224,7 @@ export async function directDownload(
         directDownloadRequest(attempt, hit.remoteHost, hit.remotePort),
         destPath,
         attempt.existingBytes,
+        options,
       );
     } catch (error) {
       lastError = error;
@@ -289,6 +302,7 @@ export async function readHttpDownload(
   destPath: string,
   label: string,
   requestedStart: number,
+  options: TransferOptions = {},
 ): Promise<unknown> {
   return await readHttpDownloadSource({
     attach: ({ onChunk, onEnd, onError }) => {
@@ -315,6 +329,7 @@ export async function readHttpDownload(
     destroyOnFailure: () => socket.destroy(),
     incompleteMessage: "connection closed before full body received",
     label,
+    options,
     requestedStart,
   });
 }
@@ -323,7 +338,9 @@ export async function sendPush(
   node: GnutellaServent,
   hit: SearchHit,
   destPath: string,
+  options: TransferOptions = {},
 ): Promise<unknown> {
+  throwIfAborted(options.signal);
   const route = node.pushRoutes.get(hit.serventIdHex);
   if (!route) throw new Error("no push route for servent");
   const peer = node.peers.get(route.peerKey);
@@ -336,16 +353,34 @@ export async function sendPush(
     node.currentAdvertisedPort(),
   );
   const descriptorId = node.randomId16();
+  let pendingEntry: PendingPush | undefined;
   const pending = new Promise((resolve, reject) => {
-    node.enqueuePendingPush({
+    pendingEntry = {
       serventIdHex: hit.serventIdHex,
       result: hit,
       destPath,
+      transferOptions: options,
       createdAt: node.now(),
       resolve,
       reject,
-    });
+    };
+    node.enqueuePendingPush(pendingEntry);
   });
+  const removePending = () => {
+    if (!pendingEntry) return;
+    const queue = node.pendingPushes.get(pendingEntry.serventIdHex);
+    if (!queue) return;
+    const keep = queue.filter((candidate) => candidate !== pendingEntry);
+    if (keep.length)
+      node.pendingPushes.set(pendingEntry.serventIdHex, keep);
+    else node.pendingPushes.delete(pendingEntry.serventIdHex);
+  };
+  const onAbort = () => {
+    removePending();
+    pendingEntry?.reject(abortError());
+  };
+  if (options.signal?.aborted) onAbort();
+  else options.signal?.addEventListener("abort", onAbort, { once: true });
   node.sendToPeer(
     peer,
     TYPE.PUSH,
@@ -354,48 +389,19 @@ export async function sendPush(
     0,
     payload,
   );
-  return await pending;
+  try {
+    return await pending;
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+  }
 }
 
 export async function downloadResult(
   node: GnutellaServent,
   resultNo: number,
   destOverride?: string,
-): Promise<void> {
-  const hit = node.lastResults.find(
-    (candidate) => candidate.resultNo === resultNo,
-  );
-  if (!hit) throw new Error(`no such result ${resultNo}`);
-
-  const destPath = destOverride
-    ? path.resolve(destOverride)
-    : await node.reserveAutoDownloadPath(hit.fileName);
-
-  try {
-    try {
-      await node.directDownload(hit, destPath);
-      recordDownloadSuccess(node, hit, destPath, "direct");
-      return;
-    } catch (error) {
-      node.emitEvent({
-        type: "DOWNLOAD_DIRECT_FAILED",
-        at: ts(),
-        resultNo: hit.resultNo,
-        fileName: hit.fileName,
-        destPath,
-        remoteHost: hit.remoteHost,
-        remotePort: hit.remotePort,
-        message: errMsg(error),
-      });
-    }
-
-    if (shouldTryPushFallback(hit)) {
-      await node.sendPush(hit, destPath);
-      recordDownloadSuccess(node, hit, destPath, "push");
-    }
-  } finally {
-    if (!destOverride) node.activeAutoDownloadPaths.delete(destPath);
-  }
+): Promise<DownloadJob> {
+  return await node.queueDownloadResult(resultNo, destOverride);
 }
 
 export async function browsePeer(

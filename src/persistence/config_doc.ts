@@ -19,6 +19,13 @@ export function persistedConfigForRuntime(
     max_ttl: runtime.maxTtl,
     enable_tls: runtime.enableTls,
     data_dir: runtime.dataDir,
+    downloads_dir: runtime.downloadsDir,
+    incomplete_downloads_dir: runtime.incompleteDownloadsDir,
+    download_queue_size: runtime.downloadQueueSize,
+    download_max_active_per_host: runtime.downloadMaxActivePerHost,
+    download_retry_limit: runtime.downloadRetryLimit,
+    download_retry_backoff_sec: runtime.downloadRetryBackoffSec,
+    verify_downloads: runtime.verifyDownloads,
   };
   if (runtime.advertisedHost)
     cleanConfig.advertised_ip = runtime.advertisedHost;

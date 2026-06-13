@@ -35,9 +35,9 @@ If you are using a compiled binary, replace `gnutella` with the executable path.
 gnutella init --config gnutella.json
 ```
 
-This creates a config file and a downloads folder.
+This creates a config file, a downloads folder, and an incomplete-downloads folder.
 
-By default, GnutellaBun shares files from `./downloads` and also saves downloaded files there.
+By default, GnutellaBun shares files from `./downloads` and moves completed downloads there after any available SHA1 verification. Partial downloads live in `./incomplete` and are resumed across restarts.
 
 ## 3. Put Files In Your Share Folder
 
@@ -107,6 +107,7 @@ Download to the default folder:
 
 ```text
 download 1
+downloads
 ```
 
 Or pick an explicit destination:
@@ -116,6 +117,8 @@ download 1 ./my-copy.bin
 ```
 
 If the destination file already exists, GnutellaBun resumes from the current file size when possible.
+
+Use `pause <jobId>`, `resume <jobId>`, and `remove <jobId>` to manage jobs shown by `downloads`.
 
 ## 8. Save And Quit
 

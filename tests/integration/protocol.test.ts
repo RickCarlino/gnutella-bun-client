@@ -520,6 +520,16 @@ describe("Integration suite (0.6)", () => {
       const directDest = path.join(A.downloadsDir, "resume-b.bin");
       await fs.writeFile(directDest, "resume-", "utf8");
       await A.node.downloadResult(directHit!.resultNo, directDest);
+      await waitFor(
+        () =>
+          eventsOfType(A, "DOWNLOAD_SUCCEEDED").some(
+            (event) =>
+              event.mode === "direct" &&
+              event.fileName === "resume-b.bin" &&
+              event.destPath === directDest,
+          ),
+        "A to complete a managed direct download",
+      );
       await expect(fs.readFile(directDest, "utf8")).resolves.toBe(
         "resume-from-b",
       );
@@ -558,6 +568,16 @@ describe("Integration suite (0.6)", () => {
 
       const pushDest = path.join(A.downloadsDir, "push-only-c.bin");
       await A.node.downloadResult(pushHit!.resultNo, pushDest);
+      await waitFor(
+        () =>
+          eventsOfType(A, "DOWNLOAD_SUCCEEDED").some(
+            (event) =>
+              event.mode === "push" &&
+              event.fileName === "push-only-c.bin" &&
+              event.destPath === pushDest,
+          ),
+        "A to complete a managed push download",
+      );
       await expect(fs.readFile(pushDest, "utf8")).resolves.toBe(
         "push-from-c",
       );

@@ -152,10 +152,16 @@ export type SearchHit = {
   busy?: boolean;
 };
 
+type PendingPushTransferOptions = {
+  signal?: AbortSignal;
+  onProgress?: (progress: { bytesCompleted: number }) => void;
+};
+
 export type PendingPush = {
   serventIdHex: string;
   result: SearchHit;
   destPath: string;
+  transferOptions?: PendingPushTransferOptions;
   createdAt: number;
   resolve: (value: unknown) => void;
   reject: (error: unknown) => void;
@@ -187,6 +193,13 @@ export type ConfigDoc = {
     enableTls?: boolean;
     monitorIgnoreEvents?: string[];
     dataDir: string;
+    downloadsDir?: string;
+    incompleteDownloadsDir?: string;
+    downloadQueueSize?: number;
+    downloadMaxActivePerHost?: number;
+    downloadRetryLimit?: number;
+    downloadRetryBackoffSec?: number;
+    verifyDownloads?: boolean;
   };
   state: {
     serventIdHex: string;
@@ -206,6 +219,12 @@ export type RuntimeConfig = {
   nodeMode: NodeMode;
   dataDir: string;
   downloadsDir: string;
+  incompleteDownloadsDir: string;
+  downloadQueueSize: number;
+  downloadMaxActivePerHost: number;
+  downloadRetryLimit: number;
+  downloadRetryBackoffSec: number;
+  verifyDownloads: boolean;
   peerSeenThresholdSec: number;
   maxConnections: number;
   maxUltrapeerConnections: number;
@@ -274,7 +293,8 @@ export type GnutellaEvent =
         | "SHARE_RESCAN"
         | "RECONNECT"
         | "SAVE"
-        | "GWEBCACHE_UPDATE";
+        | "GWEBCACHE_UPDATE"
+        | "DOWNLOAD_MANAGER";
       message: string;
     })
   | (EventBase<"PROBE_REJECTED"> & {
@@ -347,6 +367,40 @@ export type GnutellaEvent =
       destPath: string;
       remoteHost: string;
       remotePort: number;
+    })
+  | (EventBase<"DOWNLOAD_QUEUED"> & {
+      jobId: string;
+      resultNo: number;
+      fileName: string;
+      destPath: string;
+    })
+  | (EventBase<"DOWNLOAD_STARTED"> & {
+      jobId: string;
+      fileName: string;
+      remoteHost: string;
+      remotePort: number;
+    })
+  | (EventBase<"DOWNLOAD_PAUSED"> & {
+      jobId: string;
+      fileName: string;
+    })
+  | (EventBase<"DOWNLOAD_RESUMED"> & {
+      jobId: string;
+      fileName: string;
+    })
+  | (EventBase<"DOWNLOAD_REMOVED"> & {
+      jobId: string;
+      fileName: string;
+    })
+  | (EventBase<"DOWNLOAD_FAILED"> & {
+      jobId: string;
+      fileName: string;
+      message: string;
+    })
+  | (EventBase<"DOWNLOAD_VERIFICATION_FAILED"> & {
+      jobId: string;
+      fileName: string;
+      destPath: string;
     })
   | (EventBase<"DOWNLOAD_DIRECT_FAILED"> & {
       resultNo: number;

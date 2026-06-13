@@ -3,6 +3,7 @@ import {
   buildHttpDownloadResult,
   httpDownloadEndDecision,
 } from "../transfers";
+import type { TransferOptions } from "../transfers/types";
 import type { HttpDownloadState } from "./node_types";
 
 type HttpDownloadSourceHandlers = {
@@ -24,6 +25,7 @@ type ReadHttpDownloadSourceArgs = {
   destroyOnFailure?: () => void;
   incompleteMessage: string;
   label: string;
+  options?: TransferOptions;
   requestedStart: number;
 };
 
@@ -38,6 +40,7 @@ export async function readHttpDownloadSource({
   destroyOnFailure,
   incompleteMessage,
   label,
+  options,
   requestedStart,
 }: ReadHttpDownloadSourceArgs): Promise<unknown> {
   return await new Promise((resolve, reject) => {
@@ -51,6 +54,7 @@ export async function readHttpDownloadSource({
     };
     let done = false;
     const onWriteError = (error: Error) => fail(error);
+    const onAbort = () => fail(new Error("download aborted"));
     const detach = attach({
       onChunk: (chunk) => {
         if (done) return;
@@ -66,6 +70,11 @@ export async function readHttpDownloadSource({
           fail(error);
           return;
         }
+        if (state.headerDone) {
+          options?.onProgress?.({
+            bytesCompleted: state.finalStart + state.bodyBytes,
+          });
+        }
         if (state.headerDone && state.remaining === 0) finish();
       },
       onEnd: () => {
@@ -76,10 +85,10 @@ export async function readHttpDownloadSource({
       },
       onError: (error) => fail(error),
     });
-
     const cleanup = () => {
       detach();
       state.ws?.off("error", onWriteError);
+      options?.signal?.removeEventListener("abort", onAbort);
     };
 
     const fail = (error: unknown) => {
@@ -110,5 +119,10 @@ export async function readHttpDownloadSource({
       }
       state.ws.end(() => resolve(meta));
     };
+    if (options?.signal?.aborted) {
+      onAbort();
+    } else {
+      options?.signal?.addEventListener("abort", onAbort, { once: true });
+    }
   });
 }

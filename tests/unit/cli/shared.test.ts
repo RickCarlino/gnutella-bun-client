@@ -4,6 +4,7 @@ import {
   displayResultCount,
   errMsg,
   parseCli,
+  printDownloads,
   printPeers,
   printResultInfo,
   printResultMagnet,
@@ -168,6 +169,42 @@ describe("cli_shared", () => {
         "21    3.5 gb  giant.iso",
         "22    5.6 mb  medium.dat",
         "23    9.0 tb  archive.tar",
+      ].join("\n"),
+    ]);
+  });
+
+  test("prints managed download jobs", () => {
+    const logs: string[] = [];
+    const node = {
+      ...makeNode(),
+      getDownloadJobs: () => [
+        {
+          id: "d1",
+          status: "active" as const,
+          fileName: "alpha.bin",
+          fileSize: 10,
+          urns: [],
+          destPath: "/downloads/alpha.bin",
+          incompletePath: "/incomplete/d1-alpha.bin.part",
+          bytesCompleted: 5,
+          createdAt: "now",
+          updatedAt: "now",
+          sources: [],
+        },
+      ],
+    };
+
+    printDownloads({ ...makeNode(), getDownloadJobs: () => [] }, (msg) =>
+      logs.push(msg),
+    );
+    printDownloads(node, (msg) => logs.push(msg));
+
+    expect(logs).toEqual([
+      "no downloads",
+      [
+        "Id  Status  Done      Size  File",
+        "--  ------  ----  --------  ---------",
+        "d1  active   50%     10 b   alpha.bin",
       ].join("\n"),
     ]);
   });

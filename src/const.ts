@@ -6,6 +6,13 @@ export const DEFAULT_LISTEN_PORT_MAX = 29999;
 export const DEFAULT_USER_AGENT = "GnutellaBun/1.0.0";
 export const DEFAULT_VENDOR_CODE = "GBUN";
 export const DATA_DOWNLOADS_DIRNAME = "downloads";
+export const DATA_INCOMPLETE_DOWNLOADS_DIRNAME = "incomplete";
+export const DATA_DOWNLOADS_STATE_FILENAME = "downloads.json";
+export const DOWNLOAD_QUEUE_SIZE = 6;
+export const DOWNLOAD_MAX_ACTIVE_PER_HOST = 2;
+export const DOWNLOAD_RETRY_LIMIT = 10;
+export const DOWNLOAD_RETRY_BACKOFF_SEC = 60;
+export const VERIFY_DOWNLOADS = true;
 export const MAX_ULTRAPEER_CONNECTIONS = 64;
 export const MAX_LEAF_CONNECTIONS = 64;
 export const CONNECT_TIMEOUT_MS = 5000;
@@ -123,6 +130,10 @@ export const CLI_HELP_LINES = [
   "info <resultNo>",
   "magnet <resultNo>",
   "download <resultNo> [destPath]",
+  "downloads",
+  "pause <jobId>",
+  "resume <jobId>",
+  "remove <jobId>",
   "rescan",
   "save",
   "quit",

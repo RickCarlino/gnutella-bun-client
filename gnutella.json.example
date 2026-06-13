@@ -8,7 +8,14 @@
     "max_leaf_connections": 64,
     "max_ttl": 4,
     "log_ignore": [],
-    "data_dir": "."
+    "data_dir": ".",
+    "downloads_dir": "./downloads",
+    "incomplete_downloads_dir": "./incomplete",
+    "download_queue_size": 6,
+    "download_max_active_per_host": 2,
+    "download_retry_limit": 10,
+    "download_retry_backoff_sec": 60,
+    "verify_downloads": true
   },
   "state": {
     "servent_id_hex": "00112233445566778899aabbccddeeff",

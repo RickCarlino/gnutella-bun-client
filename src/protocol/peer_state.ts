@@ -7,6 +7,7 @@ import {
   ADVERTISED_SPEED_KBPS,
   CONNECT_TIMEOUT_MS,
   DATA_DOWNLOADS_DIRNAME,
+  DATA_INCOMPLETE_DOWNLOADS_DIRNAME,
   DEFAULT_LISTEN_HOST,
   DEFAULT_LISTEN_PORT_MAX,
   DEFAULT_LISTEN_PORT_MIN,
@@ -16,6 +17,10 @@ import {
   DEFAULT_USER_AGENT,
   DEFAULT_VENDOR_CODE,
   DOWNLOAD_TIMEOUT_MS,
+  DOWNLOAD_MAX_ACTIVE_PER_HOST,
+  DOWNLOAD_QUEUE_SIZE,
+  DOWNLOAD_RETRY_BACKOFF_SEC,
+  DOWNLOAD_RETRY_LIMIT,
   ENABLE_BYE,
   ENABLE_COMPRESSION,
   ENABLE_GGEP,
@@ -35,6 +40,7 @@ import {
   ROUTE_TTL_SEC,
   SEEN_TTL_SEC,
   SERVE_URI_RES,
+  VERIFY_DOWNLOADS,
 } from "../const";
 import {
   ensureDir,
@@ -73,6 +79,17 @@ type DataDirConfig = Pick<PersistedConfig, "data_dir">;
 type ConnectionLimitConfig = Pick<
   RuntimeConfig,
   "nodeMode" | "maxUltrapeerConnections" | "maxLeafConnections"
+>;
+
+type RuntimeDownloadConfig = Pick<
+  RuntimeConfig,
+  | "downloadsDir"
+  | "incompleteDownloadsDir"
+  | "downloadQueueSize"
+  | "downloadMaxActivePerHost"
+  | "downloadRetryLimit"
+  | "downloadRetryBackoffSec"
+  | "verifyDownloads"
 >;
 
 function interfaceIpv4Host(
@@ -140,6 +157,16 @@ function resolveDataDir(
   return explicit || base;
 }
 
+function resolveRuntimePath(
+  baseDir: string,
+  value: unknown,
+  fallback: string,
+): string {
+  return (
+    resolveConfiguredPath(baseDir, value) || path.join(baseDir, fallback)
+  );
+}
+
 function normalizedListenHost(value: unknown): string {
   return (
     normalizeIpv4(typeof value === "string" ? value : undefined) ||
@@ -176,6 +203,40 @@ function derivedMaxConnections(config: ConnectionLimitConfig): number {
     : config.maxUltrapeerConnections;
 }
 
+function runtimeDownloadConfig(
+  config: ConfigDoc["config"],
+  dataDir: string,
+): RuntimeDownloadConfig {
+  return {
+    downloadsDir: resolveRuntimePath(
+      dataDir,
+      config.downloadsDir,
+      DATA_DOWNLOADS_DIRNAME,
+    ),
+    incompleteDownloadsDir: resolveRuntimePath(
+      dataDir,
+      config.incompleteDownloadsDir,
+      DATA_INCOMPLETE_DOWNLOADS_DIRNAME,
+    ),
+    downloadQueueSize:
+      positiveIntegerOrUndefined(config.downloadQueueSize) ||
+      DOWNLOAD_QUEUE_SIZE,
+    downloadMaxActivePerHost:
+      positiveIntegerOrUndefined(config.downloadMaxActivePerHost) ||
+      DOWNLOAD_MAX_ACTIVE_PER_HOST,
+    downloadRetryLimit:
+      positiveIntegerOrUndefined(config.downloadRetryLimit) ||
+      DOWNLOAD_RETRY_LIMIT,
+    downloadRetryBackoffSec:
+      positiveIntegerOrUndefined(config.downloadRetryBackoffSec) ||
+      DOWNLOAD_RETRY_BACKOFF_SEC,
+    verifyDownloads:
+      typeof config.verifyDownloads === "boolean"
+        ? config.verifyDownloads
+        : VERIFY_DOWNLOADS,
+  };
+}
+
 export function runtimeConfigFor(
   configPath: string,
   doc: Pick<ConfigDoc, "config" | "state">,
@@ -207,7 +268,7 @@ export function runtimeConfigFor(
     monitorIgnoreEvents,
     nodeMode,
     dataDir,
-    downloadsDir: path.join(dataDir, DATA_DOWNLOADS_DIRNAME),
+    ...runtimeDownloadConfig(doc.config, dataDir),
     peerSeenThresholdSec: PEER_SEEN_THRESHOLD_SEC,
     maxConnections: derivedMaxConnections({
       nodeMode,
@@ -292,6 +353,13 @@ export function configDocForRuntime(
       ? [...config.monitorIgnoreEvents]
       : undefined,
     dataDir: config.dataDir,
+    downloadsDir: config.downloadsDir,
+    incompleteDownloadsDir: config.incompleteDownloadsDir,
+    downloadQueueSize: config.downloadQueueSize,
+    downloadMaxActivePerHost: config.downloadMaxActivePerHost,
+    downloadRetryLimit: config.downloadRetryLimit,
+    downloadRetryBackoffSec: config.downloadRetryBackoffSec,
+    verifyDownloads: config.verifyDownloads,
   };
 }
 
@@ -364,6 +432,16 @@ export function defaultDoc(configPath: string): ConfigDoc {
       maxLeafConnections: MAX_LEAF_CONNECTIONS,
       maxTtl: MAX_TTL,
       dataDir: base,
+      downloadsDir: path.join(base, DATA_DOWNLOADS_DIRNAME),
+      incompleteDownloadsDir: path.join(
+        base,
+        DATA_INCOMPLETE_DOWNLOADS_DIRNAME,
+      ),
+      downloadQueueSize: DOWNLOAD_QUEUE_SIZE,
+      downloadMaxActivePerHost: DOWNLOAD_MAX_ACTIVE_PER_HOST,
+      downloadRetryLimit: DOWNLOAD_RETRY_LIMIT,
+      downloadRetryBackoffSec: DOWNLOAD_RETRY_BACKOFF_SEC,
+      verifyDownloads: VERIFY_DOWNLOADS,
     },
     state: {
       serventIdHex,
@@ -380,6 +458,7 @@ async function ensureDocRuntimeDirs(
   const runtime = runtimeConfigFor(configPath, doc);
   if (ensureConfigDir) await ensureDir(path.dirname(configPath));
   await ensureDir(runtime.downloadsDir);
+  await ensureDir(runtime.incompleteDownloadsDir);
 }
 
 function applyLoadedPeerLimits(
@@ -411,6 +490,61 @@ function applyLoadedMonitorConfig(
     doc.config.monitorIgnoreEvents = monitorIgnoreEvents;
 }
 
+function applyLoadedDownloadPaths(
+  doc: ConfigDoc,
+  config: PersistedConfig,
+): void {
+  if (optionalNonEmptyString(config.downloads_dir)) {
+    doc.config.downloadsDir = resolveRuntimePath(
+      doc.config.dataDir,
+      config.downloads_dir,
+      DATA_DOWNLOADS_DIRNAME,
+    );
+  }
+  if (optionalNonEmptyString(config.incomplete_downloads_dir)) {
+    doc.config.incompleteDownloadsDir = resolveRuntimePath(
+      doc.config.dataDir,
+      config.incomplete_downloads_dir,
+      DATA_INCOMPLETE_DOWNLOADS_DIRNAME,
+    );
+  }
+}
+
+function applyLoadedDownloadLimits(
+  doc: ConfigDoc,
+  config: PersistedConfig,
+): void {
+  const downloadQueueSize = positiveIntegerOrUndefined(
+    config.download_queue_size,
+  );
+  if (downloadQueueSize) doc.config.downloadQueueSize = downloadQueueSize;
+  const downloadMaxActivePerHost = positiveIntegerOrUndefined(
+    config.download_max_active_per_host,
+  );
+  if (downloadMaxActivePerHost)
+    doc.config.downloadMaxActivePerHost = downloadMaxActivePerHost;
+  const downloadRetryLimit = positiveIntegerOrUndefined(
+    config.download_retry_limit,
+  );
+  if (downloadRetryLimit)
+    doc.config.downloadRetryLimit = downloadRetryLimit;
+  const downloadRetryBackoffSec = positiveIntegerOrUndefined(
+    config.download_retry_backoff_sec,
+  );
+  if (downloadRetryBackoffSec)
+    doc.config.downloadRetryBackoffSec = downloadRetryBackoffSec;
+}
+
+function applyLoadedDownloadConfig(
+  doc: ConfigDoc,
+  config: PersistedConfig,
+): void {
+  applyLoadedDownloadPaths(doc, config);
+  applyLoadedDownloadLimits(doc, config);
+  if (typeof config.verify_downloads === "boolean")
+    doc.config.verifyDownloads = config.verify_downloads;
+}
+
 function applyOptionalLoadedConfig(
   doc: ConfigDoc,
   config: PersistedConfig,
@@ -429,6 +563,7 @@ function applyOptionalLoadedConfig(
   if (gwebCacheUrls) doc.config.gwebCacheUrls = gwebCacheUrls;
   if (typeof config.enable_tls === "boolean")
     doc.config.enableTls = config.enable_tls;
+  applyLoadedDownloadConfig(doc, config);
   doc.config.ultrapeer = config.ultrapeer === true;
   applyLoadedPeerLimits(doc, config);
   applyLoadedMonitorConfig(doc, config);

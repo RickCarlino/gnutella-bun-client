@@ -592,7 +592,7 @@ describe("protocol node", () => {
     });
   });
 
-  test("records direct and push downloads while emitting result events", async () => {
+  test("downloadResult creates a managed background download job", async () => {
     await withTempDir(async (dir) => {
       const configPath = path.join(dir, "protocol.json");
       const doc = defaultDoc(configPath);
@@ -616,41 +616,31 @@ describe("protocol node", () => {
       const fallbackPath = path.join(dir, "custom", "push.bin");
 
       node.lastResults = [hit as never];
-      node.directDownload = async () => ({ ok: true });
 
-      await node.downloadResult(7);
-      expect(node.getDownloads()).toHaveLength(1);
-      expect(node.getDownloads()[0]).toMatchObject({
+      const job = await node.downloadResult(7);
+      expect(job).toMatchObject({
+        id: "d1",
+        status: "queued",
         fileName: "alpha.txt",
-        bytes: 99,
-        host: "9.8.7.6",
-        port: 4321,
-        mode: "direct",
         destPath: path.resolve(
           path.join(node.config().downloadsDir, "alpha.txt"),
         ),
       });
-      expect(events).toEqual(["DOWNLOAD_SUCCEEDED"]);
+      expect(node.getDownloadJobs()).toHaveLength(1);
+      expect(node.getDownloadJobs()[0]?.sources).toHaveLength(1);
+      expect(node.getDownloads()).toHaveLength(0);
+      expect(events).toEqual(["DOWNLOAD_QUEUED"]);
 
       events.length = 0;
-      node.downloads = [];
-      node.directDownload = async () => {
-        throw new Error("direct failed");
-      };
-      node.sendPush = async (_hit: unknown, destPath: string) => ({
-        destPath,
-      });
 
-      await node.downloadResult(7, fallbackPath);
-      expect(node.getDownloads()).toHaveLength(1);
-      expect(node.getDownloads()[0]).toMatchObject({
-        mode: "push",
+      const custom = await node.downloadResult(7, fallbackPath);
+      expect(custom).toMatchObject({
+        id: "d2",
+        status: "queued",
         destPath: path.resolve(fallbackPath),
       });
-      expect(events).toEqual([
-        "DOWNLOAD_DIRECT_FAILED",
-        "DOWNLOAD_SUCCEEDED",
-      ]);
+      expect(node.getDownloadJobs()).toHaveLength(2);
+      expect(events).toEqual(["DOWNLOAD_QUEUED"]);
       expect(node.getResults()).toHaveLength(1);
     });
   });
@@ -682,19 +672,16 @@ describe("protocol node", () => {
       await fs.mkdir(path.dirname(occupiedPath), { recursive: true });
       await fs.writeFile(occupiedPath, "existing", "utf8");
       node.lastResults = [hit as never];
-      node.directDownload = async (_hit: unknown, destPath: string) => {
-        seenDestPath = destPath;
-        return { ok: true };
-      };
 
-      await node.downloadResult(7);
+      const job = await node.downloadResult(7);
+      seenDestPath = job.destPath;
 
       expect(seenDestPath).toBe(
         path.resolve(
           path.join(node.config().downloadsDir, "alpha (2).txt"),
         ),
       );
-      expect(node.getDownloads()[0]).toMatchObject({
+      expect(node.getDownloadJobs()[0]).toMatchObject({
         destPath: path.resolve(
           path.join(node.config().downloadsDir, "alpha (2).txt"),
         ),

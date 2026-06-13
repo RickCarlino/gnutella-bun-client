@@ -26,6 +26,7 @@ export async function start(node: GnutellaServent): Promise<void> {
   const c = node.config();
   await node.refreshShares();
   await node.startServer();
+  await node.downloadManager.start();
   scheduleRecurringTask(
     node,
     c.rescanSharesSec * 1000,
@@ -117,6 +118,7 @@ export async function stop(node: GnutellaServent): Promise<void> {
   if (node.stopped) return;
   node.stopped = true;
   clearTimers(node);
+  await node.downloadManager.stop();
   sendShutdownByes(node);
   await waitForByeAcks(node);
   for (const peer of node.peers.values()) peer.socket.destroy();

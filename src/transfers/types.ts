@@ -41,3 +41,12 @@ export type HttpDownloadResult = {
   bytes: number;
   label: string;
 };
+
+type TransferProgress = {
+  bytesCompleted: number;
+};
+
+export type TransferOptions = {
+  signal?: AbortSignal;
+  onProgress?: (progress: TransferProgress) => void;
+};

@@ -15,6 +15,13 @@ export type PersistedConfig = {
   enable_tls?: unknown;
   log_ignore?: unknown;
   data_dir?: unknown;
+  downloads_dir?: unknown;
+  incomplete_downloads_dir?: unknown;
+  download_queue_size?: unknown;
+  download_max_active_per_host?: unknown;
+  download_retry_limit?: unknown;
+  download_retry_backoff_sec?: unknown;
+  verify_downloads?: unknown;
 };
 
 export type PersistedState = {

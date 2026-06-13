@@ -49,20 +49,27 @@ GnutellaBun keeps both settings and remembered state in the same JSON file.
 
 ### Main Settings
 
-| Setting                            | What it is for                                                                                                                                            |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.data_dir`                  | Root folder for GnutellaBun data. Shared files and downloaded files both live under `<data_dir>/downloads`.                                               |
-| `config.listen_ip`                 | Local IPv4 address to bind to. Leave `0.0.0.0` unless you need something more specific.                                                                   |
-| `config.listen_port`               | Local TCP port GnutellaBun listens on.                                                                                                                    |
-| `config.advertised_ip`             | External IPv4 address other peers should use to reach you. Useful when your local bind address is not the address seen on the internet.                   |
-| `config.advertised_port`           | External TCP port other peers should use to reach you.                                                                                                    |
-| `config.blocked_ips`               | IPv4 addresses to refuse, forget, and stop dialing.                                                                                                       |
-| `config.gwebcache_urls`            | Optional custom Gnutella Web Cache list. When set, it replaces the built-in list. This is mainly useful for local development or controlled environments. |
-| `config.ultrapeer`                 | Set `true` if you want GnutellaBun to behave like a larger relay-style node. Leave `false` for a lighter client.                                          |
-| `config.max_ultrapeer_connections` | Cap for ultrapeer-to-ultrapeer links.                                                                                                                     |
-| `config.max_leaf_connections`      | Cap for leaf links.                                                                                                                                       |
-| `config.max_ttl`                   | Maximum descriptor TTL to advertise and relay. Defaults to `4`.                                                                                           |
-| `config.log_ignore`                | Event categories to hide when `monitor` is enabled.                                                                                                       |
+| Setting                               | What it is for                                                                                                                                            |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.data_dir`                     | Root folder for GnutellaBun runtime data. Completed downloads default to `<data_dir>/downloads` and partial downloads default to `<data_dir>/incomplete`. |
+| `config.listen_ip`                    | Local IPv4 address to bind to. Leave `0.0.0.0` unless you need something more specific.                                                                   |
+| `config.listen_port`                  | Local TCP port GnutellaBun listens on.                                                                                                                    |
+| `config.advertised_ip`                | External IPv4 address other peers should use to reach you. Useful when your local bind address is not the address seen on the internet.                   |
+| `config.advertised_port`              | External TCP port other peers should use to reach you.                                                                                                    |
+| `config.blocked_ips`                  | IPv4 addresses to refuse, forget, and stop dialing.                                                                                                       |
+| `config.gwebcache_urls`               | Optional custom Gnutella Web Cache list. When set, it replaces the built-in list. This is mainly useful for local development or controlled environments. |
+| `config.ultrapeer`                    | Set `true` if you want GnutellaBun to behave like a larger relay-style node. Leave `false` for a lighter client.                                          |
+| `config.max_ultrapeer_connections`    | Cap for ultrapeer-to-ultrapeer links.                                                                                                                     |
+| `config.max_leaf_connections`         | Cap for leaf links.                                                                                                                                       |
+| `config.max_ttl`                      | Maximum descriptor TTL to advertise and relay. Defaults to `4`.                                                                                           |
+| `config.log_ignore`                   | Event categories to hide when `monitor` is enabled.                                                                                                       |
+| `config.downloads_dir`                | Final destination for completed downloads. Relative paths are resolved under `data_dir`. Defaults to `<data_dir>/downloads`.                              |
+| `config.incomplete_downloads_dir`     | Workspace for partial downloads. Relative paths are resolved under `data_dir`. Defaults to `<data_dir>/incomplete`.                                       |
+| `config.download_queue_size`          | Maximum active downloads. Defaults to `6`.                                                                                                                |
+| `config.download_max_active_per_host` | Maximum active downloads from one remote host. Defaults to `2`.                                                                                           |
+| `config.download_retry_limit`         | Maximum attempts per source before a job fails. Defaults to `10`.                                                                                         |
+| `config.download_retry_backoff_sec`   | Delay before retrying a failed source. Defaults to `60`.                                                                                                  |
+| `config.verify_downloads`             | Verify completed downloads against SHA1 URNs when available. Defaults to `true`.                                                                          |
 
 ### Saved State
 
@@ -73,12 +80,12 @@ GnutellaBun keeps both settings and remembered state in the same JSON file.
 
 ## Where Files Go
 
-GnutellaBun uses `<data_dir>/downloads` for two things:
+GnutellaBun uses `<data_dir>/downloads` for two things by default:
 
 - files you want to share
-- files you download
+- completed downloads
 
-With the default config, that folder is `./downloads`.
+Partial downloads live under `<data_dir>/incomplete` by default and are resumed across restarts. Completed downloads with SHA1 URNs are verified before they are moved into the downloads folder.
 
 ## Command Reference
 
@@ -117,11 +124,15 @@ With the default config, that folder is `./downloads`.
 
 ### Sharing And Downloads
 
-| Command                          | What it does                                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `shares`                         | Lists the files you are sharing.                                                                  |
-| `rescan`                         | Rebuilds the local share index.                                                                   |
-| `download <resultNo> [destPath]` | Downloads one result. If `destPath` is omitted, GnutellaBun picks a path in the downloads folder. |
+| Command                          | What it does                                                                                                                             |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `shares`                         | Lists the files you are sharing.                                                                                                         |
+| `rescan`                         | Rebuilds the local share index.                                                                                                          |
+| `download <resultNo> [destPath]` | Creates or updates a background download job for one result. If `destPath` is omitted, GnutellaBun picks a path in the downloads folder. |
+| `downloads`                      | Lists persisted download jobs and current progress.                                                                                      |
+| `pause <jobId>`                  | Stops a queued or active download while keeping partial data.                                                                            |
+| `resume <jobId>`                 | Requeues a paused or failed download.                                                                                                    |
+| `remove <jobId>`                 | Removes a download job and deletes its incomplete file. Completed files are left alone.                                                  |
 
 ## Common Tasks
 
@@ -132,6 +143,7 @@ query jazz piano
 results
 info 1
 download 1
+downloads
 ```
 
 ### Browse The Host Behind A Result

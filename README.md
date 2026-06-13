@@ -2,21 +2,20 @@
 
 GnutellaBun is a small Bun-based Gnutella client you can run from the terminal or embed in a TypeScript app.
 
-It is built for people who want to:
+GnutellaBun is compatible with major clients like GTK-Gnutella, Phex, Shareaza and others.
 
-- share files from one folder
+It allows you to:
+
+- share files from a downloads folder
 - search the Gnutella network
-- inspect results before downloading
-- browse another peer's shared library
-- keep useful state across restarts
+- browse peer's shared files
+- manage downloads (pause/resume/cancel)
 
 It can be used in three ways:
 
 - as an interactive CLI
 - as a scripted CLI runner
 - as a library inside another app
-
-It interoperates with other Gnutella clients, including GTK Gnutella.
 
 ## Prebuilt Binaries
 
@@ -48,7 +47,7 @@ bun run bin/gnutella.ts run --config gnutella.json
 
 ## Library Use
 
-**NOTE:** Node support is not done. Use Bun.
+**NOTE:** This is GnutellaBun, not GnutellaNode. Although you can install it via NPM, it requires Bun. If you truly need Node support, raise an issue.
 
 When used from this repository, the public TypeScript import is:
 

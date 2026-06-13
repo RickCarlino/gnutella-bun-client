@@ -55,7 +55,8 @@ export type MaintenanceOperation =
   | "SHARE_RESCAN"
   | "RECONNECT"
   | "SAVE"
-  | "GWEBCACHE_UPDATE";
+  | "GWEBCACHE_UPDATE"
+  | "DOWNLOAD_MANAGER";
 
 export function subscribe(
   node: GnutellaServent,
@@ -364,7 +365,9 @@ export async function save(node: GnutellaServent): Promise<void> {
   node.doc.state = node.persistedState;
   await ensureDir(path.dirname(node.configPath));
   await ensureDir(c.downloadsDir);
+  await ensureDir(c.incompleteDownloadsDir);
   await writeDoc(node.configPath, node.doc);
+  await node.downloadManager.persist();
   await persistShareIndex(node);
 }
 

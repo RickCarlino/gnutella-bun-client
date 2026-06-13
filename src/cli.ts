@@ -12,6 +12,7 @@ import {
   displayResultCount,
   errMsg,
   parseCli,
+  printDownloads,
   printPeers,
   printResultInfo,
   printResultMagnet,
@@ -284,6 +285,48 @@ function formatQueryMonitorEvent(
   }
 }
 
+function formatDownloadJobMonitorEvent(
+  event: GnutellaEvent,
+): MonitorLogEntry | undefined {
+  switch (event.type) {
+    case "DOWNLOAD_QUEUED":
+      return monitorEntry(
+        `[download queued] job=${event.jobId} result=${event.resultNo} path=${quoted(event.destPath)} name=${quoted(event.fileName)}`,
+        "DOWNLOAD_QUEUED",
+      );
+    case "DOWNLOAD_STARTED":
+      return monitorEntry(
+        `[download start] job=${event.jobId} remote=${event.remoteHost}:${event.remotePort} name=${quoted(event.fileName)}`,
+        "DOWNLOAD_STARTED",
+      );
+    case "DOWNLOAD_PAUSED":
+      return monitorEntry(
+        `[download paused] job=${event.jobId} name=${quoted(event.fileName)}`,
+        "DOWNLOAD_PAUSED",
+      );
+    case "DOWNLOAD_RESUMED":
+      return monitorEntry(
+        `[download resumed] job=${event.jobId} name=${quoted(event.fileName)}`,
+        "DOWNLOAD_RESUMED",
+      );
+    case "DOWNLOAD_REMOVED":
+      return monitorEntry(
+        `[download removed] job=${event.jobId} name=${quoted(event.fileName)}`,
+        "DOWNLOAD_REMOVED",
+      );
+    case "DOWNLOAD_FAILED":
+      return monitorEntry(
+        `[download failed] job=${event.jobId} name=${quoted(event.fileName)} message=${quoted(event.message)}`,
+        "DOWNLOAD_FAILED",
+      );
+    case "DOWNLOAD_VERIFICATION_FAILED":
+      return monitorEntry(
+        `[download verify failed] job=${event.jobId} path=${quoted(event.destPath)} name=${quoted(event.fileName)}`,
+        "DOWNLOAD_VERIFICATION_FAILED",
+      );
+  }
+}
+
 function formatTransferMonitorEvent(
   event: GnutellaEvent,
 ): MonitorLogEntry | undefined {
@@ -325,6 +368,7 @@ function formatMonitorEvent(
     formatHandshakeMonitorEvent(event) ||
     formatPeerMonitorEvent(event) ||
     formatQueryMonitorEvent(event) ||
+    formatDownloadJobMonitorEvent(event) ||
     formatTransferMonitorEvent(event)
   );
 }
@@ -440,7 +484,41 @@ async function handleDownloadCommand(
 ): Promise<boolean> {
   if (args.length < 2)
     throw new Error("usage: download <resultNo> [destPath]");
-  await session.node.downloadResult(Number(args[1]), args[2]);
+  const job = await session.node.downloadResult(Number(args[1]), args[2]);
+  log(
+    session,
+    `download ${job.id} ${job.status} path=${quoted(job.destPath)}`,
+  );
+  return true;
+}
+
+async function handlePauseDownloadCommand(
+  session: CliSession,
+  args: string[],
+): Promise<boolean> {
+  if (args.length !== 2) throw new Error("usage: pause <jobId>");
+  const job = await session.node.pauseDownload(args[1]);
+  log(session, `download ${job.id} ${job.status}`);
+  return true;
+}
+
+async function handleResumeDownloadCommand(
+  session: CliSession,
+  args: string[],
+): Promise<boolean> {
+  if (args.length !== 2) throw new Error("usage: resume <jobId>");
+  const job = await session.node.resumeDownload(args[1]);
+  log(session, `download ${job.id} ${job.status}`);
+  return true;
+}
+
+async function handleRemoveDownloadCommand(
+  session: CliSession,
+  args: string[],
+): Promise<boolean> {
+  if (args.length !== 2) throw new Error("usage: remove <jobId>");
+  await session.node.removeDownload(args[1]);
+  log(session, `download ${args[1]} removed`);
   return true;
 }
 
@@ -558,6 +636,13 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   info: handleInfoCommand,
   magnet: handleMagnetCommand,
   download: handleDownloadCommand,
+  downloads: async (session) => {
+    printDownloads(session.node, (msg) => log(session, msg));
+    return true;
+  },
+  pause: handlePauseDownloadCommand,
+  resume: handleResumeDownloadCommand,
+  remove: handleRemoveDownloadCommand,
   rescan: async (session) => {
     await session.node.refreshShares();
     printStatus(session.node, (msg) => log(session, msg));

@@ -78,7 +78,11 @@ You can subscribe in the constructor with `onEvent`, or later with `subscribe()`
 Useful events for most apps:
 
 - `QUERY_RESULT`: a search hit arrived
+- `DOWNLOAD_QUEUED`: a managed download job was created or updated
+- `DOWNLOAD_STARTED`: a managed download started transferring
 - `DOWNLOAD_SUCCEEDED`: a download finished
+- `DOWNLOAD_FAILED`: a managed download exhausted its sources
+- `DOWNLOAD_VERIFICATION_FAILED`: SHA1 verification failed
 - `PEER_CONNECTED`: a peer connected
 - `PEER_DROPPED`: a peer disconnected
 - `SHARES_REFRESHED`: the share list changed
@@ -123,14 +127,20 @@ Browse results are added to the normal result list returned by `getResults()`.
 ### Download A Result
 
 ```ts
-await node.downloadResult(1);
+const job = await node.downloadResult(1);
+console.log(job.id, job.status);
 ```
 
 Or choose the destination path yourself:
 
 ```ts
-await node.downloadResult(1, "./downloads/example.bin");
+const job = await node.downloadResult(1, "./downloads/example.bin");
 ```
+
+`downloadResult()` creates or updates a persisted background job and returns
+immediately. Use `getDownloadJobs()` to inspect progress, `pauseDownload(id)`
+to pause, `resumeDownload(id)` to requeue a paused or failed job, and
+`removeDownload(id)` to forget a job and delete its incomplete file.
 
 ### Refresh Shared Files
 
@@ -149,7 +159,8 @@ These getters are the ones most apps care about:
 - `getKnownPeers()`: remembered peer addresses
 - `getShares()`: local shared files
 - `getResults()`: current result list
-- `getDownloads()`: completed downloads
+- `getDownloadJobs()`: persisted managed download jobs
+- `getDownloads()`: completed download history for the current process
 
 Example:
 
@@ -157,6 +168,7 @@ Example:
 const status = node.getStatus();
 const peers = node.getPeers();
 const results = node.getResults();
+const downloads = node.getDownloadJobs();
 ```
 
 ## Runtime Overrides
@@ -185,7 +197,7 @@ For most embedding cases, this flow works well:
 5. `connectToPeer(...)` or rely on remembered peers
 6. `sendQuery(...)` or `browsePeer(...)`
 7. inspect `getResults()`
-8. `downloadResult(...)` when needed
+8. `downloadResult(...)` when needed, then inspect `getDownloadJobs()`
 9. `save()` and `stop()` on shutdown
 
 ## Next Step

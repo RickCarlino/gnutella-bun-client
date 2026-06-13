@@ -1,6 +1,7 @@
 import net from "node:net";
 import path from "node:path";
 
+import { DownloadManager, type DownloadJob } from "../downloads";
 import { LOCAL_ROUTE } from "../const";
 import {
   connectBootstrapPeers,
@@ -202,6 +203,7 @@ export class GnutellaServent {
   lastResults: SearchHit[] = [];
   resultSeq = 1;
   downloads: DownloadRecord[] = [];
+  downloadManager: DownloadManager;
   pendingPushes = new Map<string, PendingPush[]>();
   activeAutoDownloadPaths = new Set<string>();
   timers: NodeJS.Timeout[] = [];
@@ -394,9 +396,36 @@ export class GnutellaServent {
     );
     this.doc.config = configDocForRuntime(this.runtimeConfig);
     this.collaborators = buildCollaborators(options.collaborators);
+    this.downloadManager = new DownloadManager(this);
     this.startedAtMs = this.collaborators.clock.now();
     this.serventId = fromHex16(doc.state.serventIdHex);
     if (options.onEvent) this.listeners.add(options.onEvent);
+  }
+
+  async queueDownloadResult(
+    resultNo: number,
+    destOverride?: string,
+  ): Promise<DownloadJob> {
+    return await this.downloadManager.queueFromResultNo(
+      resultNo,
+      destOverride,
+    );
+  }
+
+  getDownloadJobs(): DownloadJob[] {
+    return this.downloadManager.getJobs();
+  }
+
+  async pauseDownload(jobId: string): Promise<DownloadJob> {
+    return await this.downloadManager.pause(jobId);
+  }
+
+  async resumeDownload(jobId: string): Promise<DownloadJob> {
+    return await this.downloadManager.resume(jobId);
+  }
+
+  async removeDownload(jobId: string): Promise<void> {
+    await this.downloadManager.remove(jobId);
   }
 }
 

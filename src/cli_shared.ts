@@ -1,6 +1,7 @@
 import { errMsg } from "./shared";
 import type { CliNode, ParsedCli } from "./types";
 import { buildMagnetUri } from "./protocol/magnet";
+import type { DownloadJob } from "./downloads";
 
 const SIZE_FORMAT = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
@@ -14,6 +15,9 @@ const RESULT_COUNT_DISPLAY_MAX = 999;
 const PEER_TABLE_WIDTH_MAX = 80;
 
 type ResultInfo = ReturnType<CliNode["getResults"]>[number];
+type DownloadCliNode = CliNode & {
+  getDownloadJobs(): DownloadJob[];
+};
 type FormattedSize = { value: string; unit: string };
 
 function formattedSize(bytes: number): FormattedSize {
@@ -286,6 +290,72 @@ export function printResults(
         "-".repeat(widths.fileName),
       ),
       ...rows.map((row) => line(row.resultNo, row.fileSize, row.fileName)),
+    ].join("\n"),
+  );
+}
+
+function downloadProgress(job: DownloadJob): string {
+  if (job.fileSize <= 0) return `${job.bytesCompleted}B`;
+  const percent = Math.min(
+    100,
+    Math.floor((job.bytesCompleted / job.fileSize) * 100),
+  );
+  return `${percent}%`;
+}
+
+export function printDownloads(
+  node: DownloadCliNode,
+  log: (msg: string) => void,
+): void {
+  const jobs = node.getDownloadJobs();
+  if (!jobs.length) {
+    log("no downloads");
+    return;
+  }
+  const rows = jobs.map((job) => ({
+    id: sanitizeTableCell(job.id),
+    status: sanitizeTableCell(job.status),
+    progress: downloadProgress(job),
+    size: formatResultSize(job.fileSize),
+    fileName: sanitizeTableCell(job.fileName),
+  }));
+  const widths = {
+    id: Math.max("Id".length, ...rows.map((row) => row.id.length)),
+    status: Math.max(
+      "Status".length,
+      ...rows.map((row) => row.status.length),
+    ),
+    progress: Math.max(
+      "Done".length,
+      ...rows.map((row) => row.progress.length),
+    ),
+    size: Math.max("Size".length, ...rows.map((row) => row.size.length)),
+    fileName: Math.max(
+      "File".length,
+      ...rows.map((row) => row.fileName.length),
+    ),
+  };
+  const line = (
+    id: string,
+    status: string,
+    progress: string,
+    size: string,
+    fileName: string,
+  ) =>
+    `${id.padEnd(widths.id, " ")}  ${status.padEnd(widths.status, " ")}  ${progress.padStart(widths.progress, " ")}  ${size.padStart(widths.size, " ")}  ${fileName.padEnd(widths.fileName, " ")}`.trimEnd();
+  log(
+    [
+      line("Id", "Status", "Done", "Size", "File"),
+      line(
+        "-".repeat(widths.id),
+        "-".repeat(widths.status),
+        "-".repeat(widths.progress),
+        "-".repeat(widths.size),
+        "-".repeat(widths.fileName),
+      ),
+      ...rows.map((row) =>
+        line(row.id, row.status, row.progress, row.size, row.fileName),
+      ),
     ].join("\n"),
   );
 }
