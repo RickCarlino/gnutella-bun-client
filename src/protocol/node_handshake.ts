@@ -1,6 +1,14 @@
 import net from "node:net";
 
-import { DEFAULT_USER_AGENT, MAX_XTRY } from "../const";
+import { MAX_XTRY } from "../const";
+import {
+  buildBaseHandshakeHeaders,
+  buildClientFinalHeaders as buildPolicyClientFinalHeaders,
+  buildPeerCapabilities,
+  buildRejectHeaders,
+  buildServerHandshakeHeaders as buildPolicyServerHandshakeHeaders,
+  type LocalHandshakePolicy,
+} from "../handshake_policy";
 import {
   errMsg,
   normalizeIpv4,
@@ -19,13 +27,9 @@ import {
   describeHandshakeResponse,
   findHeaderEnd,
   hasToken,
-  lowerCaseHeaders,
   mergeHeaders,
-  parseBoolHeader,
   parseHandshakeBlock,
-  parseListenIpHeader,
   parsePeerHeaderList,
-  parsePositiveIntHeader,
 } from "./handshake";
 import type { GnutellaServent } from "./node";
 import type { ProbeCtx } from "./node_types";
@@ -140,70 +144,40 @@ function emitHandshakeBlock(
   );
 }
 
-function ultrapeerNeededHeader(node: GnutellaServent): string | undefined {
-  if (node.nodeMode() !== "ultrapeer") return undefined;
-  if (
-    node.connectedMeshPeerCount() < node.config().maxUltrapeerConnections
-  )
-    return "True";
-  if (node.connectedLeafCount() < node.config().maxLeafConnections)
-    return "False";
-  return undefined;
-}
-
-const GTK_MODERN_ULTRAPEER_MIN_DEGREE = 16;
-
-function baseRoleHeaders(node: GnutellaServent): Record<string, string> {
-  const headers: Record<string, string> = {
-    "x-ultrapeer": node.nodeMode() === "ultrapeer" ? "True" : "False",
-  };
-  const ultrapeerNeeded = ultrapeerNeededHeader(node);
-  if (ultrapeerNeeded) headers["x-ultrapeer-needed"] = ultrapeerNeeded;
-  if (node.nodeMode() === "ultrapeer") {
-    headers["x-ultrapeer-query-routing"] = "0.1";
-    headers["x-dynamic-querying"] = "0.1";
-    headers["x-ext-probes"] = "0.1";
-    headers["x-degree"] = String(
-      Math.max(
-        GTK_MODERN_ULTRAPEER_MIN_DEGREE,
-        node.config().maxUltrapeerConnections,
-      ),
-    );
-  }
-  return headers;
-}
-
-function baseFeatureHeaders(
+function localHandshakePolicy(
   node: GnutellaServent,
-): Record<string, string> {
+  tlsEnabled = node.tlsEnabled(),
+): LocalHandshakePolicy {
   const c = node.config();
-  const headers: Record<string, string> = {};
-  if (c.enableQrp)
-    headers["x-query-routing"] = c.queryRoutingVersion || "0.1";
-  if (c.enableCompression) headers["accept-encoding"] = "deflate";
-  if (c.enablePongCaching) headers["pong-caching"] = "0.1";
-  if (c.enableGgep) headers["ggep"] = "0.5";
-  if (c.enableBye) headers["bye-packet"] = "0.1";
-  return headers;
+  return {
+    userAgent: c.userAgent,
+    advertisedHost: node.currentAdvertisedHost(),
+    advertisedPort: node.currentAdvertisedPort(),
+    maxTtl: c.maxTtl,
+    nodeMode: node.nodeMode(),
+    maxUltrapeerConnections: c.maxUltrapeerConnections,
+    maxLeafConnections: c.maxLeafConnections,
+    connectedMeshPeerCount: node.connectedMeshPeerCount(),
+    connectedLeafCount: node.connectedLeafCount(),
+    enableQrp: c.enableQrp,
+    queryRoutingVersion: c.queryRoutingVersion,
+    enableCompression: c.enableCompression,
+    enablePongCaching: c.enablePongCaching,
+    enableGgep: c.enableGgep,
+    enableBye: c.enableBye,
+    tlsEnabled,
+    tlsUpgradeToken: node.tlsUpgradeToken(),
+  };
 }
 
 export function baseHandshakeHeaders(
   node: GnutellaServent,
   remoteIp?: string,
 ): Record<string, string> {
-  const c = node.config();
-  const advertisedHost = node.currentAdvertisedHost();
-  const advertisedPort = node.currentAdvertisedPort();
-  const headers: Record<string, string> = {
-    "user-agent": c.userAgent || DEFAULT_USER_AGENT,
-    "listen-ip": `${advertisedHost}:${advertisedPort}`,
-    "x-max-ttl": String(c.maxTtl),
-    ...baseRoleHeaders(node),
-    ...baseFeatureHeaders(node),
-  };
-  const observedRemote = normalizeIpv4(remoteIp);
-  if (observedRemote) headers["remote-ip"] = observedRemote;
-  return headers;
+  return buildBaseHandshakeHeaders(
+    localHandshakePolicy(node, false),
+    remoteIp,
+  );
 }
 
 export function buildServerHandshakeHeaders(
@@ -211,18 +185,11 @@ export function buildServerHandshakeHeaders(
   requestHeaders: Record<string, string>,
   remoteIp?: string,
 ): Record<string, string> {
-  const headers = node.baseHandshakeHeaders(remoteIp);
-  if (node.tlsEnabled() && node.peerRequestedTlsUpgrade(requestHeaders)) {
-    headers.upgrade = node.tlsUpgradeToken();
-    headers.connection = "Upgrade";
-  }
-  if (
-    node.config().enableCompression &&
-    hasToken(requestHeaders["accept-encoding"], "deflate")
-  ) {
-    headers["content-encoding"] = "deflate";
-  }
-  return headers;
+  return buildPolicyServerHandshakeHeaders(
+    localHandshakePolicy(node),
+    requestHeaders,
+    remoteIp,
+  );
 }
 
 export function buildClientFinalHeaders(
@@ -230,18 +197,11 @@ export function buildClientFinalHeaders(
   serverHeaders: Record<string, string>,
   remoteIp?: string,
 ): Record<string, string> {
-  const headers: Record<string, string> = {};
-  const observedRemote = normalizeIpv4(remoteIp);
-  if (observedRemote) headers["remote-ip"] = observedRemote;
-  if (node.tlsEnabled() && node.peerAcceptedTlsUpgrade(serverHeaders))
-    headers.connection = "Upgrade";
-  if (
-    node.config().enableCompression &&
-    hasToken(serverHeaders["accept-encoding"], "deflate")
-  ) {
-    headers["content-encoding"] = "deflate";
-  }
-  return headers;
+  return buildPolicyClientFinalHeaders(
+    localHandshakePolicy(node),
+    serverHeaders,
+    remoteIp,
+  );
 }
 
 export function buildCapabilities(
@@ -251,30 +211,14 @@ export function buildCapabilities(
   compressIn: boolean,
   compressOut: boolean,
 ): PeerCapabilities {
-  const h = lowerCaseHeaders(headers);
-  return {
+  return buildPeerCapabilities({
     version,
-    headers: h,
-    userAgent: h["user-agent"],
-    supportsGgep: !!h["ggep"],
-    supportsPongCaching: !!h["pong-caching"],
-    supportsBye: !!h["bye-packet"],
-    supportsTls: node.peerRequestedTlsUpgrade(h),
-    supportsCompression:
-      hasToken(h["accept-encoding"], "deflate") ||
-      hasToken(h["content-encoding"], "deflate"),
+    headers,
     compressIn,
     compressOut,
-    isUltrapeer: parseBoolHeader(h["x-ultrapeer"]),
-    ultrapeerNeeded: parseBoolHeader(h["x-ultrapeer-needed"]),
-    queryRoutingVersion: h["x-query-routing"],
-    ultrapeerQueryRoutingVersion: h["x-ultrapeer-query-routing"],
-    dynamicQueryingVersion: h["x-dynamic-querying"],
-    extProbesVersion: h["x-ext-probes"],
-    degree: parsePositiveIntHeader(h["x-degree"]),
-    isCrawler: !!h["crawler"],
-    listenIp: parseListenIpHeader(h["listen-ip"]),
-  };
+    tlsEnabled: node.tlsEnabled(),
+    tlsUpgradeToken: node.tlsUpgradeToken(),
+  });
 }
 
 export function selectTryPeers(
@@ -337,13 +281,11 @@ export function reject06(
   extraHeaders: Record<string, string> = {},
 ): void {
   const tryPeers = node.selectTryPeers();
-  const headers = lowerCaseHeaders(extraHeaders);
-  const observedRemote = normalizeIpv4(socket.remoteAddress);
-  if (observedRemote) headers["remote-ip"] = observedRemote;
-  if (tryPeers.length) {
-    headers["x-try"] = tryPeers.join(",");
-    headers["x-try-ultrapeers"] = tryPeers.join(",");
-  }
+  const headers = buildRejectHeaders({
+    extraHeaders,
+    remoteIp: socket.remoteAddress,
+    tryPeers,
+  });
   emitHandshakeBlock(
     node,
     "inbound",

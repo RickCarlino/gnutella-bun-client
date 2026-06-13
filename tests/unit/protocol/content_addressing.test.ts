@@ -7,9 +7,17 @@ import {
   parseQueryHit,
 } from "../../../src/protocol";
 import { encodeQueryHit } from "../../../src/protocol/codec";
-import { bitprintUrnFromHashes } from "../../../src/protocol/content_urn";
+import {
+  bitprintUrnFromHashes,
+  bitprintUrnFromGgepHash,
+  firstSha1Urn,
+  normalizeUrnList,
+  sha1BufferFromUrn,
+  sha1ToUrn,
+  sha1UrnFromUrn,
+  textUrnFromGgepUrn,
+} from "../../../src/protocol/content_urn";
 import { encodeGgep } from "../../../src/protocol/ggep";
-import { sha1ToUrn } from "../../../src/protocol/qrp";
 import { makeShare } from "./node/helpers";
 
 describe("protocol content addressing", () => {
@@ -83,5 +91,58 @@ describe("protocol content addressing", () => {
     expect(parsed.flagGgep).toBe(true);
     expect(parsed.results).toHaveLength(1);
     expect(parsed.results[0]?.urns).toEqual([share.sha1Urn!]);
+  });
+
+  test("normalizes URN lists, extracts SHA-1 fallbacks, and decodes hashes", () => {
+    const sha1 = Buffer.alloc(20, 0x11);
+    const tiger = Buffer.alloc(24, 0x22);
+    const sha1Urn = sha1ToUrn(sha1);
+    const bitprint = bitprintUrnFromHashes(sha1, tiger);
+    const treeTiger = `urn:tree:tiger/:${"a".repeat(39)}`;
+
+    expect(sha1UrnFromUrn(bitprint.toLowerCase())).toBe(sha1Urn);
+    expect(sha1BufferFromUrn(bitprint)).toEqual(sha1);
+    expect(sha1BufferFromUrn("urn:sha1:too-short")).toBeUndefined();
+    expect(firstSha1Urn([treeTiger, bitprint])).toBe(sha1Urn);
+    expect(
+      normalizeUrnList([
+        sha1Urn.toLowerCase(),
+        bitprint.toLowerCase(),
+        sha1Urn,
+        treeTiger,
+        "urn:unknown:Value",
+        "not-a-urn",
+      ]),
+    ).toEqual([
+      sha1Urn,
+      bitprint,
+      `urn:tree:tiger/:${"A".repeat(39)}`,
+      "urn:unknown:Value",
+    ]);
+  });
+
+  test("parses text and binary GGEP URN hash forms", () => {
+    const sha1 = Buffer.alloc(20, 0x44);
+    const tiger = Buffer.alloc(24, 0x55);
+    const sha1Urn = sha1ToUrn(sha1);
+    const bitprint = bitprintUrnFromHashes(sha1, tiger);
+
+    expect(textUrnFromGgepUrn(Buffer.from(sha1Urn.toLowerCase()))).toBe(
+      sha1Urn,
+    );
+    expect(
+      textUrnFromGgepUrn(
+        Buffer.from(sha1Urn.slice("urn:".length).toLowerCase()),
+      ),
+    ).toBe(sha1Urn);
+    expect(textUrnFromGgepUrn(Buffer.from("   "))).toBeUndefined();
+    expect(textUrnFromGgepUrn(Buffer.from("not-a-urn"))).toBeUndefined();
+
+    expect(
+      bitprintUrnFromGgepHash(
+        Buffer.concat([Buffer.from([0x02]), sha1, tiger]),
+      ),
+    ).toBe(bitprint);
+    expect(bitprintUrnFromGgepHash(Buffer.alloc(44))).toBeUndefined();
   });
 });

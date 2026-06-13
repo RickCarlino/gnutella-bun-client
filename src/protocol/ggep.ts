@@ -15,6 +15,17 @@ export type GgepItem = {
   data: Buffer;
 };
 
+type GgepLengthCursor = {
+  length: number;
+  nextOffset: number;
+};
+
+type ParsedGgepItem = {
+  item: GgepItem;
+  nextOffset: number;
+  last: boolean;
+};
+
 function hasZeroByte(data: Buffer): boolean {
   return data.includes(0);
 }
@@ -73,10 +84,7 @@ function encodeLength(length: number): Buffer {
   return Buffer.from(bytes);
 }
 
-function decodeLength(
-  raw: Buffer,
-  start: number,
-): { length: number; nextOffset: number } {
+function decodeLength(raw: Buffer, start: number): GgepLengthCursor {
   let offset = start;
   let length = 0;
   for (let i = 0; i < 3; i++) {
@@ -99,10 +107,7 @@ function maybeDeflateDecode(data: Buffer, flags: number): Buffer {
   return zlib.inflateRawSync(data);
 }
 
-function parseGgepItem(
-  raw: Buffer,
-  start: number,
-): { item: GgepItem; nextOffset: number; last: boolean } {
+function parseGgepItem(raw: Buffer, start: number): ParsedGgepItem {
   let offset = start;
   const flags = raw[offset++];
   if (flags == null) throw new Error("truncated GGEP flags");

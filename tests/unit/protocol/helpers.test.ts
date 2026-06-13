@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
+import { parseRouteTableUpdate } from "../../../src/protocol";
 import {
+  canRouteRemoteQrpQuery,
   initialRemoteQrpState,
-  parseRouteTableUpdate,
   QrpTable,
-} from "../../../src/protocol";
+} from "../../../src/query_routing";
 import type { ShareFile } from "../../../src/types";
 
 describe("protocol helper coverage", () => {
@@ -81,6 +82,72 @@ describe("protocol helper coverage", () => {
     expect(table.matchesQuery("alpha gamma delta")).toBe(false);
     expect(table.matchesQuery("alpha beta")).toBe(true);
     expect(table.matchesQuery("alpha gamma")).toBe(false);
+  });
+
+  test("uses gtk-gnutella QRP routing rules for URNs and short words", () => {
+    const share: ShareFile = {
+      index: 1,
+      name: "alpha beta.txt",
+      rel: "alpha beta.txt",
+      abs: "/tmp/alpha beta.txt",
+      size: 5,
+      mtimeMs: 1,
+      sha1: Buffer.alloc(20, 1),
+      sha1Urn: "urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      keywords: ["alpha", "beta"],
+    };
+    const table = new QrpTable();
+    table.rebuildFromShares([share]);
+    const remote = initialRemoteQrpState();
+    remote.resetSeen = true;
+    remote.tableSize = table.tableSize;
+    remote.infinity = table.infinity;
+    remote.entryBits = table.entryBits;
+    remote.table = table.table.slice();
+
+    expect(
+      canRouteRemoteQrpQuery(remote, {
+        search: "",
+        urns: [share.sha1Urn!],
+      }),
+    ).toBe(false);
+    expect(
+      canRouteRemoteQrpQuery(remote, {
+        search: "alpha beta",
+        urns: ["urn:sha1:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"],
+      }),
+    ).toBe(true);
+    expect(
+      canRouteRemoteQrpQuery(remote, {
+        search: "ab cd",
+        urns: [],
+      }),
+    ).toBe(false);
+
+    table.table[table.hashKeyword(share.sha1Urn!)] = 1;
+    remote.table = table.table.slice();
+    expect(
+      canRouteRemoteQrpQuery(remote, {
+        search: "",
+        urns: [share.sha1Urn!],
+      }),
+    ).toBe(true);
+  });
+
+  test("scales QRP tables when merging different table sizes", () => {
+    const small = new QrpTable(8, 7, 1);
+    small.table[small.hashKeyword("alpha")] = 1;
+
+    const expanded = new QrpTable(16, 7, 1);
+    expanded.mergeFromQrp(small);
+    expect(expanded.matchesQuery("alpha")).toBe(true);
+
+    const large = new QrpTable(16, 7, 1);
+    large.table[large.hashKeyword("alpha")] = 1;
+
+    const shrunk = new QrpTable(8, 7, 1);
+    shrunk.mergeFromQrp(large);
+    expect(shrunk.matchesQuery("alpha")).toBe(true);
   });
 
   test("applies QRP spec appendix patch examples", () => {

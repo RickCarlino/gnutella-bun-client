@@ -73,6 +73,7 @@ describe("protocol node", () => {
       overrideRuntimeConfig(node, {
         ultrapeer: true,
         nodeMode: "ultrapeer",
+        maxTtl: 7,
       });
       const peer = makePeer("source-peer");
       peer.role = "ultrapeer";
@@ -355,7 +356,7 @@ describe("protocol node", () => {
           "user-agent": "GnutellaBun/1.0.0",
           "x-ultrapeer": "False",
           "listen-ip": "7.7.7.7:7777",
-          "x-max-ttl": "7",
+          "x-max-ttl": "4",
           "x-query-routing": "0.2",
           "accept-encoding": "deflate",
           "pong-caching": "0.1",

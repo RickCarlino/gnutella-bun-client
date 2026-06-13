@@ -1,27 +1,44 @@
 import type { PeerCapabilities, PeerRole } from "../types";
+import {
+  availableDialSlots as topologyAvailableDialSlots,
+  canAcceptPeerRole as topologyCanAcceptPeerRole,
+  classifyRemotePeerRole,
+  countLeafPeers,
+  countMeshPeers,
+  countPeersByRole as topologyCountPeersByRole,
+  isLeafPeerRole,
+  isMeshPeerRole,
+  shouldRelayForMode,
+  type AdmissionResult,
+  type TopologySlotState,
+} from "../topology";
 import type { GnutellaServent } from "./node";
 import type { Peer } from "./node_types";
 
-function isMeshPeerRole(role: PeerRole): boolean {
-  return role !== "leaf";
-}
-
 export function nodeMode(node: GnutellaServent) {
   return node.config().nodeMode;
+}
+
+function topologySlotState(node: GnutellaServent): TopologySlotState {
+  const c = node.config();
+  return {
+    nodeMode: node.nodeMode(),
+    maxUltrapeerConnections: c.maxUltrapeerConnections,
+    maxLeafConnections: c.maxLeafConnections,
+    connectedMeshPeerCount: node.connectedMeshPeerCount(),
+    connectedLeafCount: node.connectedLeafCount(),
+    dialingCount: node.dialing.size,
+  };
 }
 
 export function classifyPeerRole(
   node: GnutellaServent,
   capabilities: PeerCapabilities,
 ): PeerRole {
-  const remoteIsUltrapeer = capabilities.isUltrapeer;
-  const mode = node.nodeMode();
-
-  if (mode === "ultrapeer") {
-    return remoteIsUltrapeer === true ? "ultrapeer" : "leaf";
-  }
-
-  return remoteIsUltrapeer === true ? "ultrapeer" : "leaf";
+  return classifyRemotePeerRole({
+    localMode: node.nodeMode(),
+    remoteIsUltrapeer: capabilities.isUltrapeer,
+  });
 }
 
 export function peerRole(
@@ -35,102 +52,41 @@ export function countPeersByRole(
   node: GnutellaServent,
   role: PeerRole,
 ): number {
-  let count = 0;
-  for (const peer of node.peers.values()) {
-    if (peer.role === role) count++;
-  }
-  return count;
+  return topologyCountPeersByRole(node.peers.values(), role);
 }
 
 export function connectedLeafCount(node: GnutellaServent): number {
-  return node.countPeersByRole("leaf");
+  return countLeafPeers(node.peers.values());
 }
 
 export function connectedMeshPeerCount(node: GnutellaServent): number {
-  let count = 0;
-  for (const peer of node.peers.values()) {
-    if (isMeshPeerRole(peer.role)) count++;
-  }
-  return count;
+  return countMeshPeers(node.peers.values());
 }
 
 export function availableDialSlots(node: GnutellaServent): number {
-  const c = node.config();
-  if (node.nodeMode() === "ultrapeer") {
-    return Math.max(
-      0,
-      c.maxUltrapeerConnections -
-        node.connectedMeshPeerCount() -
-        node.dialing.size,
-    );
-  }
-  return Math.max(
-    0,
-    c.maxUltrapeerConnections -
-      node.connectedMeshPeerCount() -
-      node.dialing.size,
-  );
+  return topologyAvailableDialSlots(topologySlotState(node));
 }
 
 export function canAcceptPeerRole(
   node: GnutellaServent,
   role: PeerRole,
-): { ok: true } | { ok: false; code: number; reason: string } {
-  const c = node.config();
-  const mode = node.nodeMode();
-
-  if (mode === "leaf") {
-    if (role === "leaf") {
-      return {
-        ok: false,
-        code: 503,
-        reason: `Shielded leaf node (${c.maxUltrapeerConnections} ultrapeers max)`,
-      };
-    }
-    if (node.connectedMeshPeerCount() >= c.maxUltrapeerConnections) {
-      return {
-        ok: false,
-        code: 503,
-        reason: `Too many ultrapeer connections (${c.maxUltrapeerConnections} max)`,
-      };
-    }
-    return { ok: true };
-  }
-
-  if (role === "leaf") {
-    if (node.connectedLeafCount() >= c.maxLeafConnections) {
-      return {
-        ok: false,
-        code: 503,
-        reason: `Too many leaf connections (${c.maxLeafConnections} max)`,
-      };
-    }
-    return { ok: true };
-  }
-
-  if (node.connectedMeshPeerCount() >= c.maxUltrapeerConnections) {
-    return {
-      ok: false,
-      code: 503,
-      reason: `Too many ultrapeer connections (${c.maxUltrapeerConnections} max)`,
-    };
-  }
-  return { ok: true };
+): AdmissionResult {
+  return topologyCanAcceptPeerRole(topologySlotState(node), role);
 }
 
 export function shouldRelayQueries(node: GnutellaServent): boolean {
-  return node.nodeMode() === "ultrapeer";
+  return shouldRelayForMode(node.nodeMode());
 }
 
 export function shouldRelayPings(node: GnutellaServent): boolean {
-  return node.nodeMode() === "ultrapeer";
+  return shouldRelayForMode(node.nodeMode());
 }
 
 export function isLeafPeer(
   _node: GnutellaServent,
   peer: Pick<Peer, "role">,
 ): boolean {
-  return peer.role === "leaf";
+  return isLeafPeerRole(peer.role);
 }
 
 export function isMeshPeer(

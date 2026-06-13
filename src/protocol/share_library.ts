@@ -1,44 +1,23 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 
-import { ensureDir, ts, unique, walkFilesIter } from "../shared";
+import { ensureDir, ts, walkFilesIter } from "../shared";
+import {
+  buildShareCatalog,
+  shareMatchesCatalogEntry,
+  withShareHash,
+  type ShareCatalogFile,
+  type ShareCatalogHash,
+} from "../share_catalog";
 import type { ShareFile } from "../types";
+import { sha1ToUrn } from "./content_urn";
+import { sha1File } from "./file_hash";
 import type { GnutellaServent } from "./node";
-import { sha1File, sha1ToUrn, tokenizeKeywords } from "./qrp";
 import {
   loadShareIndex,
   writeShareIndex,
   type ShareIndexEntry,
 } from "./share_index";
-
-function shareKeywords(abs: string, rel: string): string[] {
-  return unique([
-    ...tokenizeKeywords(path.basename(abs)),
-    ...tokenizeKeywords(rel),
-    ...tokenizeKeywords(path.parse(abs).name),
-  ]);
-}
-
-function cachedShareHash(
-  entry: ShareIndexEntry | undefined,
-  size: number,
-  mtimeMs: number,
-):
-  | {
-      sha1: Buffer;
-      sha1Urn: string;
-      sha1Hex: string;
-    }
-  | undefined {
-  if (!entry || entry.size !== size || entry.mtimeMs !== mtimeMs)
-    return undefined;
-  if (!entry.sha1Hex || !entry.sha1Urn) return undefined;
-  return {
-    sha1: Buffer.from(entry.sha1Hex, "hex"),
-    sha1Urn: entry.sha1Urn,
-    sha1Hex: entry.sha1Hex,
-  };
-}
 
 function rebuildShareState(
   node: GnutellaServent,
@@ -85,9 +64,7 @@ function shareMatchesIndexEntry(
   share: Pick<ShareFile, "size" | "mtimeMs">,
   entry: ShareIndexEntry | undefined,
 ): entry is ShareIndexEntry {
-  return (
-    !!entry && entry.size === share.size && entry.mtimeMs === share.mtimeMs
-  );
+  return shareMatchesCatalogEntry(share, entry);
 }
 
 async function fileStillMatchesShare(
@@ -121,12 +98,17 @@ function applyShareHash(
   entry: ShareIndexEntry,
   sha1: Buffer,
 ): void {
-  const sha1Urn = sha1ToUrn(sha1);
-  share.sha1 = sha1;
-  share.sha1Urn = sha1Urn;
-  entry.sha1Hex = sha1.toString("hex");
-  entry.sha1Urn = sha1Urn;
-  node.sharesByUrn.set(sha1Urn.toLowerCase(), share);
+  const hash: ShareCatalogHash = {
+    sha1,
+    sha1Hex: sha1.toString("hex"),
+    sha1Urn: sha1ToUrn(sha1),
+  };
+  const updated = withShareHash(share, entry, hash);
+  share.sha1 = updated.share.sha1;
+  share.sha1Urn = updated.share.sha1Urn;
+  entry.sha1Hex = updated.entry.sha1Hex;
+  entry.sha1Urn = updated.entry.sha1Urn;
+  node.sharesByUrn.set(hash.sha1Urn.toLowerCase(), share);
 }
 
 async function hashPendingShare(
@@ -176,47 +158,22 @@ export async function refreshShares(node: GnutellaServent): Promise<void> {
   await loadShareIndexOnce(node);
   await ensureDir(node.config().downloadsDir);
   const downloadsDir = node.config().downloadsDir;
-  const shares: ShareFile[] = [];
-  const nextShareIndexEntries = new Map<string, ShareIndexEntry>();
-  const pendingHashes: ShareFile[] = [];
+  const files: ShareCatalogFile[] = [];
   const generation = node.shareRefreshGeneration + 1;
   node.shareRefreshGeneration = generation;
-  let idx = 1;
   for await (const abs of walkFilesIter(downloadsDir)) {
     const st = await fsp.stat(abs);
     const rel = path.relative(downloadsDir, abs).replace(/\\/g, "/");
-    const share: ShareFile = {
-      index: idx++,
-      name: path.basename(abs),
+    files.push({
       rel,
       abs,
       size: st.size,
       mtimeMs: st.mtimeMs,
-      keywords: shareKeywords(abs, rel),
-    };
-    const entry: ShareIndexEntry = {
-      rel,
-      size: st.size,
-      mtimeMs: st.mtimeMs,
-    };
-    const cached = cachedShareHash(
-      node.shareIndexEntries.get(rel),
-      share.size,
-      share.mtimeMs,
-    );
-    if (cached) {
-      share.sha1 = cached.sha1;
-      share.sha1Urn = cached.sha1Urn;
-      entry.sha1Hex = cached.sha1Hex;
-      entry.sha1Urn = cached.sha1Urn;
-    } else {
-      pendingHashes.push(share);
-    }
-    shares.push(share);
-    nextShareIndexEntries.set(rel, entry);
+    });
   }
-  node.shareIndexEntries = nextShareIndexEntries;
-  rebuildShareState(node, shares);
+  const catalog = buildShareCatalog(files, node.shareIndexEntries);
+  node.shareIndexEntries = catalog.entries;
+  rebuildShareState(node, catalog.shares);
   node.emitEvent({
     type: "SHARES_REFRESHED",
     at: ts(),
@@ -229,11 +186,11 @@ export async function refreshShares(node: GnutellaServent): Promise<void> {
     }
   }
   persistShareIndexLater(node);
-  if (pendingHashes.length === 0) {
+  if (catalog.pendingHashes.length === 0) {
     node.shareHashTask = null;
     return;
   }
-  const task = hashPendingShares(node, pendingHashes, generation)
+  const task = hashPendingShares(node, catalog.pendingHashes, generation)
     .catch((e) => node.emitMaintenanceError("SHARE_RESCAN", e))
     .finally(() => {
       if (node.shareHashTask === task) node.shareHashTask = null;

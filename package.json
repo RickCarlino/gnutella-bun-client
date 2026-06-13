@@ -11,7 +11,8 @@
   "exports": {
     ".": "./src/protocol.ts",
     "./types": "./src/types.ts",
-    "./gwebcache": "./src/gwebcache_client.ts"
+    "./gwebcache": "./src/gwebcache_client.ts",
+    "./query-routing": "./src/query_routing/index.ts"
   },
   "files": [
     "bin",
@@ -65,7 +66,7 @@
     "test:integration": "bun test tests/integration/protocol.test.ts",
     "test:unit": "bun test tests/unit",
     "typecheck": "tsc --noEmit",
-    "unused-exports": "ts-unused-exports tsconfig.json --excludePathsFromReport=src/protocol.ts --exitWithCount",
+    "unused-exports": "ts-unused-exports tsconfig.json \"--excludePathsFromReport=src/protocol.ts;src/query_routing/index.ts\" --exitWithCount",
     "fix": "./scripts/fix-all.sh",
     "verify": "./scripts/verify-all.sh"
   }

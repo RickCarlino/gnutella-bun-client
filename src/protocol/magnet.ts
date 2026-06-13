@@ -11,6 +11,19 @@ type ParsedMagnet = {
   alternateSources: string[];
 };
 
+type ParsedMagnetParams = {
+  uri: string;
+  params: URLSearchParams;
+};
+
+type MagnetBuildInput = {
+  fileName?: string;
+  fileSize?: number;
+  search?: string;
+  urns?: string[];
+  sha1Urn?: string;
+};
+
 type MagnetFields = {
   xt: string[];
   xs: string[];
@@ -58,12 +71,7 @@ function pickFirst(values: string[]): string | undefined {
   return values.find((value) => value.length > 0);
 }
 
-function parseMagnetParams(raw: string):
-  | {
-      uri: string;
-      params: URLSearchParams;
-    }
-  | undefined {
+function parseMagnetParams(raw: string): ParsedMagnetParams | undefined {
   const uri = raw.trim();
   if (!/^magnet:\?/i.test(uri)) return undefined;
   return {
@@ -155,13 +163,7 @@ export function parseMagnetUri(raw: string): ParsedMagnet | undefined {
   };
 }
 
-export function buildMagnetUri(input: {
-  fileName?: string;
-  fileSize?: number;
-  search?: string;
-  urns?: string[];
-  sha1Urn?: string;
-}): string {
+export function buildMagnetUri(input: MagnetBuildInput): string {
   const params = new URLSearchParams();
   const urns = normalizeUrnList([
     ...(input.urns || []),

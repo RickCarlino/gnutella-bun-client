@@ -7,6 +7,7 @@ import {
   reportSelfToGWebCaches,
   type GWebCacheBootstrapState,
 } from "../gwebcache_client";
+import { QrpTable } from "../query_routing/qrp";
 import { sleep } from "../shared";
 import type {
   ConfigDoc,
@@ -39,7 +40,6 @@ import * as topology from "./node_topology";
 import * as transfer from "./node_transfer";
 import type { ShareIndexEntry } from "./share_index";
 import type { Peer } from "./node_types";
-import { QrpTable } from "./qrp";
 
 type BoundMethods<T extends Record<string, unknown>> = {
   [K in keyof T as T[K] extends (...args: infer AllArgs) => unknown

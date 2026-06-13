@@ -3,8 +3,8 @@ import fsp from "node:fs/promises";
 import net from "node:net";
 
 import { errMsg } from "../shared";
+import { parseByteRange } from "../transfers";
 import type { ShareFile } from "../types";
-import { parseByteRange } from "./codec";
 import { hasToken, parseHttpHeaders, socketCanEnd } from "./handshake";
 import {
   handleBrowseHostGet,

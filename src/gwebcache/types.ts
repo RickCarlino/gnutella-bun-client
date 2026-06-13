@@ -92,21 +92,17 @@ export type BootstrapOptions = {
   fetchImpl?: FetchLike;
 };
 
+type BootstrapCacheError = {
+  cache: string;
+  message: string;
+};
+
 export type BootstrapResult = {
   peers: string[];
   caches: string[];
   queriedCaches: string[];
   successfulCaches: string[];
-  errors: Array<{
-    cache: string;
-    message: string;
-  }>;
-};
-
-export type BootstrapPeer = {
-  host: string;
-  port: number;
-  peer: string;
+  errors: BootstrapCacheError[];
 };
 
 export type GWebCacheBootstrapState = {

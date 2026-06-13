@@ -1,4 +1,10 @@
-import { DEFAULT_QRP_ENTRY_BITS, TYPE } from "../const";
+import { TYPE } from "../const";
+import {
+  DEFAULT_QRP_ENTRY_BITS,
+  QrpTable,
+  validateRemoteQrpPatchSequence,
+  validateRemoteQrpReset,
+} from "../query_routing/qrp";
 import { errMsg } from "../shared";
 import { parseRouteTableUpdate } from "./codec";
 import type { GnutellaServent } from "./node";
@@ -7,11 +13,6 @@ import {
   sendPublishedQrpToMeshPeers,
 } from "./node_query_routing";
 import type { Peer } from "./node_types";
-import {
-  QrpTable,
-  validateRemoteQrpPatchSequence,
-  validateRemoteQrpReset,
-} from "./qrp";
 
 function rejectQrpUpdate(
   node: GnutellaServent,

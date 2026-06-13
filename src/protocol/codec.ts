@@ -1,5 +1,6 @@
 import { HEADER_LEN } from "../const";
 import { bytesToIpBE, ipToBytesBE } from "../shared";
+export { parseByteRange } from "../transfers/ranges";
 import type {
   QueryDescriptor,
   QueryHitDescriptor,
@@ -18,11 +19,11 @@ import {
   bitprintUrnFromGgepHash,
   firstSha1Urn,
   normalizeUrnList,
+  sha1ToUrn,
   sha1BufferFromUrn,
   textUrnFromGgepUrn,
 } from "./content_urn";
 import { splitQuerySearch } from "./query_search";
-import { sha1ToUrn } from "./qrp";
 
 const MODERN_QUERY_FLAG_BITS = [
   ["requesterFirewalled", 14],
@@ -31,6 +32,26 @@ const MODERN_QUERY_FLAG_BITS = [
   ["ggepHAllowed", 11],
   ["outOfBand", 10],
 ] as const;
+
+type QueryExtensionBlocks = {
+  textBlocks: Buffer[];
+  ggepItems: GgepItem[];
+};
+
+type QueryHitDescriptorBlockOptions = {
+  vendorCode?: string;
+  push: boolean;
+  busy?: boolean;
+  haveUploaded?: boolean;
+  measuredSpeed?: boolean;
+  ggep?: boolean;
+  privateArea?: Buffer;
+};
+
+type HttpDownloadHeader = {
+  remaining: number;
+  finalStart: number;
+};
 
 function normalizedModernQueryMaxHits(
   maxHits: number | undefined,
@@ -61,10 +82,9 @@ function splitFsBlocks(buf: Buffer): Buffer[] {
   return blocks.filter((x) => x.length > 0);
 }
 
-function splitTextAndGgepExtensions(rawExtensions: Buffer): {
-  textBlocks: Buffer[];
-  ggepItems: GgepItem[];
-} {
+function splitTextAndGgepExtensions(
+  rawExtensions: Buffer,
+): QueryExtensionBlocks {
   const ggepStart = rawExtensions.indexOf(0xc3);
   if (ggepStart === -1) {
     return {
@@ -151,15 +171,7 @@ function qhdFlagMeaningful(
   return !!(enabler & (1 << bit));
 }
 
-function buildQhdBlock(options: {
-  vendorCode?: string;
-  push: boolean;
-  busy?: boolean;
-  haveUploaded?: boolean;
-  measuredSpeed?: boolean;
-  ggep?: boolean;
-  privateArea?: Buffer;
-}): Buffer {
+function buildQhdBlock(options: QueryHitDescriptorBlockOptions): Buffer {
   const vendor = Buffer.alloc(4, 0);
   Buffer.from(
     (options.vendorCode || DEFAULT_VENDOR_CODE).slice(0, 4).padEnd(4, " "),
@@ -337,58 +349,6 @@ function parseQueryHitResultAt(
     },
     nextOffset: extEnd + 1,
   };
-}
-
-function parseByteRangeSuffix(
-  endRaw: string,
-  size: number,
-  last: number,
-): { start: number; end: number; partial: boolean } | null {
-  const suffixLen = Number(endRaw);
-  if (!Number.isInteger(suffixLen) || suffixLen <= 0) return null;
-  const length = Math.min(suffixLen, size);
-  return { start: size - length, end: last, partial: length < size };
-}
-
-function explicitByteRangeEnd(
-  endRaw: string,
-  start: number,
-  size: number,
-  last: number,
-): number | undefined {
-  const end = endRaw ? Number(endRaw) : last;
-  if (!Number.isInteger(end) || end < start) return undefined;
-  if (size === 0) return -1;
-  return Math.min(end, last);
-}
-
-function parseByteRangeExplicit(
-  startRaw: string,
-  endRaw: string,
-  size: number,
-  last: number,
-): { start: number; end: number; partial: boolean } | null {
-  const start = Number(startRaw);
-  if (!Number.isInteger(start) || start < 0) return null;
-  if (size > 0 && start > last) return null;
-  const end = explicitByteRangeEnd(endRaw, start, size, last);
-  if (end == null) return null;
-  return { start, end, partial: size > 0 && (start > 0 || end < last) };
-}
-
-export function parseByteRange(
-  rangeHeader: string | undefined,
-  size: number,
-): { start: number; end: number; partial: boolean } | null {
-  const last = size > 0 ? size - 1 : -1;
-  if (!rangeHeader) return { start: 0, end: last, partial: false };
-  const m = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
-  if (!m) return null;
-  const startRaw = m[1];
-  const endRaw = m[2];
-  if (!startRaw && !endRaw) return null;
-  if (!startRaw) return parseByteRangeSuffix(endRaw, size, last);
-  return parseByteRangeExplicit(startRaw, endRaw, size, last);
 }
 
 export function buildHeader(
@@ -692,7 +652,7 @@ export function buildUriResRequest(
 export function parseHttpDownloadHeader(
   head: string,
   requestedStart: number,
-): { remaining: number; finalStart: number } {
+): HttpDownloadHeader {
   const first = head.replace(/\r\n/g, "\n").split("\n", 1)[0];
   const match = /^HTTP\/(\d+\.\d+)\s+(\d+)/i.exec(first);
   if (!match) throw new Error("invalid HTTP response");

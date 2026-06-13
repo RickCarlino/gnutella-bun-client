@@ -61,6 +61,7 @@ GnutellaBun keeps both settings and remembered state in the same JSON file.
 | `config.ultrapeer`                 | Set `true` if you want GnutellaBun to behave like a larger relay-style node. Leave `false` for a lighter client.                                          |
 | `config.max_ultrapeer_connections` | Cap for ultrapeer-to-ultrapeer links.                                                                                                                     |
 | `config.max_leaf_connections`      | Cap for leaf links.                                                                                                                                       |
+| `config.max_ttl`                   | Maximum descriptor TTL to advertise and relay. Defaults to `4`.                                                                                           |
 | `config.log_ignore`                | Event categories to hide when `monitor` is enabled.                                                                                                       |
 
 ### Saved State

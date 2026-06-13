@@ -18,6 +18,7 @@ import {
   ts,
   unique,
 } from "../shared";
+import { downloadPathCandidate } from "../transfers";
 import type {
   BlockIpResult,
   ConnectPeerResult,
@@ -35,7 +36,6 @@ import type {
 } from "../types";
 import { observedAdvertisedHostCandidate } from "./handshake";
 import {
-  appendPathSuffix,
   configDocForRuntime,
   detectLocalAdvertisedIpv4,
   filterBlockedPeerState,
@@ -728,8 +728,7 @@ export function reserveAutoDownloadPath(
   let suffixNo = 1;
   return (async () => {
     for (;;) {
-      const candidate =
-        suffixNo === 1 ? basePath : appendPathSuffix(basePath, suffixNo);
+      const candidate = downloadPathCandidate(basePath, suffixNo);
       if (node.activeAutoDownloadPaths.has(candidate)) {
         suffixNo++;
         continue;

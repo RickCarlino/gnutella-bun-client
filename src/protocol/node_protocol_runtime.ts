@@ -1,8 +1,25 @@
-import crypto from "node:crypto";
 import type net from "node:net";
 import zlib from "node:zlib";
 
-import { HEADER_LEN, LOCAL_ROUTE, TYPE, TYPE_NAME } from "../const";
+import { HEADER_LEN, TYPE, TYPE_NAME } from "../const";
+import {
+  forwardedDescriptorLifetime,
+  normalizeQueryLifetime as normalizeQueryLifetimePolicy,
+  overflowPongCacheKeys,
+  pongCacheKey,
+  pongReplyTtl,
+  queryHitReplyTtl,
+  responseRouteDecision,
+  selectCachedPongPayloads,
+  shouldMarkDescriptorSeen,
+  shouldRelayPing,
+  shouldSuppressDescriptor,
+} from "../descriptor_routing";
+import type { DescriptorLifetime } from "../descriptor_routing/types";
+import {
+  initialRemoteQrpState,
+  splitSearchTerms,
+} from "../query_routing/qrp";
 import { errMsg, toBuffer, ts } from "../shared";
 import type {
   PendingPush,
@@ -42,11 +59,7 @@ import type {
   Peer,
 } from "./node_types";
 import { firstSha1Urn } from "./content_urn";
-import {
-  initialRemoteQrpState,
-  matchQuery as shareMatchesQuery,
-  splitSearchTerms,
-} from "./qrp";
+import { matchQuery as shareMatchesQuery } from "./query_matching";
 
 function descriptorTypeName(payloadType: number): string {
   return TYPE_NAME[payloadType] || `0x${payloadType.toString(16)}`;
@@ -426,15 +439,16 @@ export function forwardToRoute(
   hops: number,
   payload: Buffer,
 ): void {
-  if (ttl <= 0) return;
+  const lifetime = forwardedDescriptorLifetime(ttl, hops);
+  if (!lifetime) return;
   const peer = node.peers.get(route.peerKey);
   if (!peer) return;
   node.sendToPeer(
     peer,
     payloadType,
     descriptorId,
-    Math.max(0, ttl - 1),
-    hops + 1,
+    lifetime.ttl,
+    lifetime.hops,
     payload,
   );
 }
@@ -479,11 +493,8 @@ export function normalizeQueryLifetime(
   node: GnutellaServent,
   ttl: number,
   hops: number,
-): { ttl: number; hops: number } | null {
-  if (ttl > 15) return null;
-  const maxLife = Math.max(1, node.config().maxTtl);
-  if (hops > maxLife) return null;
-  return { ttl: Math.max(0, Math.min(ttl, maxLife - hops)), hops };
+): DescriptorLifetime | null {
+  return normalizeQueryLifetimePolicy(ttl, hops, node.config().maxTtl);
 }
 
 export function isIndexQuery(
@@ -532,16 +543,14 @@ export function cachePongPayload(
   node: GnutellaServent,
   payload: Buffer,
 ): void {
-  const digest = crypto.createHash("sha1").update(payload).digest("hex");
+  const digest = pongCacheKey(payload);
   node.pongCache.set(digest, {
     payload: Buffer.from(payload),
     at: node.now(),
   });
-  if (node.pongCache.size <= 64) return;
-  const oldest = [...node.pongCache.entries()]
-    .sort((a, b) => a[1].at - b[1].at)
-    .slice(0, node.pongCache.size - 64);
-  for (const [key] of oldest) node.pongCache.delete(key);
+  for (const key of overflowPongCacheKeys(node.pongCache.entries(), 64)) {
+    node.pongCache.delete(key);
+  }
 }
 
 export function shouldIgnoreDescriptor(
@@ -550,15 +559,15 @@ export function shouldIgnoreDescriptor(
   hdr: RoutedDescriptor,
   payload: Buffer,
 ): boolean {
-  if (
-    peer.closingAfterBye &&
-    hdr.payloadType !== TYPE.QUERY_HIT &&
-    hdr.payloadType !== TYPE.PUSH
-  ) {
-    return true;
-  }
-  if (hdr.payloadType === TYPE.ROUTE_TABLE_UPDATE) return false;
-  return node.hasSeen(hdr.payloadType, hdr.descriptorIdHex, payload);
+  return shouldSuppressDescriptor({
+    closingAfterBye: !!peer.closingAfterBye,
+    payloadType: hdr.payloadType,
+    alreadySeen: node.hasSeen(
+      hdr.payloadType,
+      hdr.descriptorIdHex,
+      payload,
+    ),
+  });
 }
 
 export function rejectRelayedLeafDescriptor(
@@ -589,7 +598,7 @@ export function onPingDescriptor(
   });
   node.respondPong(peer, hdr);
   if (!node.shouldRelayPings()) return;
-  if (hdr.ttl <= 1 || node.now() - peer.lastPingAt < 1000) return;
+  if (!shouldRelayPing(hdr.ttl, node.now(), peer.lastPingAt, 1000)) return;
   peer.lastPingAt = node.now();
   broadcastPingToPeers(
     node,
@@ -681,7 +690,7 @@ export function handleDescriptor(
 ): void {
   if (node.rejectRelayedLeafDescriptor(peer, hdr)) return;
   if (node.shouldIgnoreDescriptor(peer, hdr, payload)) return;
-  if (hdr.payloadType !== TYPE.ROUTE_TABLE_UPDATE) {
+  if (shouldMarkDescriptorSeen(hdr.payloadType)) {
     node.markSeen(hdr.payloadType, hdr.descriptorIdHex, payload);
   }
   node.dispatchDescriptor(peer, hdr, payload);
@@ -709,7 +718,7 @@ export function respondPong(
   peer: Peer,
   hdr: Pick<DescriptorHeader, "descriptorId" | "hops">,
 ): void {
-  const ttl = Math.max(1, hdr.hops);
+  const ttl = pongReplyTtl(hdr.hops);
   const own = encodePong(
     node.currentAdvertisedPort(),
     node.currentAdvertisedHost(),
@@ -719,17 +728,12 @@ export function respondPong(
   node.sendToPeer(peer, TYPE.PONG, hdr.descriptorId, ttl, 0, own);
   if (!node.config().enablePongCaching) return;
   let sent = 1;
-  const cached = [...node.pongCache.values()].sort((a, b) => b.at - a.at);
-  for (const entry of cached) {
-    if (sent >= 10) break;
-    node.sendToPeer(
-      peer,
-      TYPE.PONG,
-      hdr.descriptorId,
-      ttl,
-      0,
-      entry.payload,
-    );
+  for (const payload of selectCachedPongPayloads(
+    node.pongCache.values(),
+    sent,
+    10,
+  )) {
+    node.sendToPeer(peer, TYPE.PONG, hdr.descriptorId, ttl, 0, payload);
     sent++;
   }
 }
@@ -750,10 +754,7 @@ export function respondQueryHit(
   const limit = Math.max(1, node.config().maxResultsPerQuery);
   const batchSize = 16;
   const chosen = matches.slice(0, limit);
-  const replyTtl = Math.min(
-    node.config().maxTtl,
-    Math.max(1, hdr.hops + 2),
-  );
+  const replyTtl = queryHitReplyTtl(hdr.hops, node.config().maxTtl);
   for (let off = 0; off < chosen.length; off += batchSize) {
     const batch = chosen.slice(off, off + batchSize);
     const out = encodeQueryHit(
@@ -792,9 +793,12 @@ export function onPong(
   const pong = parsePong(payload);
   node.cachePongPayload(payload);
   node.addKnownPeer(pong.ip, pong.port);
-  const route = node.pingRoutes.get(hdr.descriptorIdHex);
-  if (!route) return;
-  if (route === LOCAL_ROUTE) {
+  const decision = responseRouteDecision(
+    node.pingRoutes.get(hdr.descriptorIdHex),
+    { forwardInLeaf: true },
+  );
+  if (decision.kind === "drop") return;
+  if (decision.kind === "local") {
     node.emitEvent({
       type: "PONG",
       at: ts(),
@@ -806,7 +810,7 @@ export function onPong(
     return;
   }
   node.forwardToRoute(
-    route,
+    decision.route,
     TYPE.PONG,
     hdr.descriptorId,
     hdr.ttl,
@@ -826,9 +830,12 @@ export function onQueryHit(
     peerKey: peer.key,
     ts: node.now(),
   });
-  const route = node.queryRoutes.get(hdr.descriptorIdHex);
-  if (!route) return;
-  if (route === LOCAL_ROUTE) {
+  const decision = responseRouteDecision(
+    node.queryRoutes.get(hdr.descriptorIdHex),
+    { nodeMode: node.nodeMode() },
+  );
+  if (decision.kind === "drop") return;
+  if (decision.kind === "local") {
     for (const result of qh.results) {
       const hit: SearchHit = {
         resultNo: node.resultSeq++,
@@ -854,9 +861,8 @@ export function onQueryHit(
     }
     return;
   }
-  if (node.nodeMode() === "leaf") return;
   node.forwardToRoute(
-    route,
+    decision.route,
     TYPE.QUERY_HIT,
     hdr.descriptorId,
     hdr.ttl,
@@ -877,10 +883,13 @@ export async function onPush(
     return;
   }
   if (node.nodeMode() === "leaf") return;
-  const route = node.pushRoutes.get(push.serventIdHex);
-  if (!route) return;
+  const decision = responseRouteDecision(
+    node.pushRoutes.get(push.serventIdHex),
+    { nodeMode: node.nodeMode() },
+  );
+  if (decision.kind !== "forward") return;
   node.forwardToRoute(
-    route,
+    decision.route,
     TYPE.PUSH,
     hdr.descriptorId,
     hdr.ttl,

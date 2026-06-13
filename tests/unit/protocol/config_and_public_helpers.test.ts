@@ -339,6 +339,7 @@ describe("protocol config and public helpers", () => {
               ultrapeer: true,
               max_ultrapeer_connections: 5,
               max_leaf_connections: 45,
+              max_ttl: 9,
               log_ignore: [" ping ", "PONG"],
               seed_peers: ["1.2.3.4:6346"],
             },
@@ -362,10 +363,14 @@ describe("protocol config and public helpers", () => {
       expect(snakeLoaded.config.maxConnections).toBeUndefined();
       expect(snakeLoaded.config.maxUltrapeerConnections).toBe(5);
       expect(snakeLoaded.config.maxLeafConnections).toBe(45);
+      expect(snakeLoaded.config.maxTtl).toBe(9);
       expect(snakeLoaded.config.monitorIgnoreEvents).toEqual([
         "PING",
         "PONG",
       ]);
+      expect(
+        new GnutellaServent(configPath, snakeLoaded).config().maxTtl,
+      ).toBe(9);
       expect(snakeLoaded.state.serventIdHex).toBe("ab".repeat(16));
       expect(snakeLoaded.state.peers).toEqual({});
 
@@ -382,6 +387,7 @@ describe("protocol config and public helpers", () => {
               maxConnections: 99,
               maxUltrapeerConnections: 8,
               maxLeafConnections: 123,
+              maxTtl: 12,
               monitorIgnoreEvents: ["query"],
               seedPeers: ["2.3.4.5:6346"],
             },
@@ -405,6 +411,7 @@ describe("protocol config and public helpers", () => {
       expect(camelLoaded.config.maxConnections).toBeUndefined();
       expect(camelLoaded.config.maxUltrapeerConnections).toBe(64);
       expect(camelLoaded.config.maxLeafConnections).toBe(64);
+      expect(camelLoaded.config.maxTtl).toBe(4);
       expect(camelLoaded.config.monitorIgnoreEvents).toBeUndefined();
       expect(camelLoaded.state.serventIdHex).toMatch(/^[0-9a-f]{32}$/);
       expect(camelLoaded.state.serventIdHex).not.toBe("cd".repeat(16));

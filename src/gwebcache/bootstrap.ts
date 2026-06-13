@@ -1,4 +1,9 @@
-import { normalizePeer, parsePeer } from "../shared";
+import {
+  addPeerCandidatesToKnownSet,
+  normalizePeerCandidates,
+  peerCandidateSetKey,
+  shouldFetchFreshPeerCandidates,
+} from "../peer_discovery";
 import {
   DEFAULT_MAX_BOOTSTRAP_CACHES,
   DEFAULT_MAX_BOOTSTRAP_PEERS,
@@ -16,7 +21,6 @@ import {
 } from "./response";
 import type {
   BootstrapOptions,
-  BootstrapPeer,
   BootstrapResult,
   ConnectBootstrapOptions,
   ConnectBootstrapResult,
@@ -26,38 +30,6 @@ import type {
   ReportSelfOptions,
   ReportSelfResult,
 } from "./types";
-
-function normalizeBootstrapPeers(
-  peers: readonly string[],
-  isSelfPeer?: (host: string, port: number) => boolean,
-): BootstrapPeer[] {
-  const out: BootstrapPeer[] = [];
-  const seen = new Set<string>();
-
-  for (const peer of peers) {
-    const parsed = parsePeer(peer);
-    if (!parsed) continue;
-    if (isSelfPeer?.(parsed.host, parsed.port)) continue;
-
-    const normalized = normalizePeer(parsed.host, parsed.port);
-    if (seen.has(normalized)) continue;
-    seen.add(normalized);
-    out.push({
-      host: parsed.host,
-      port: parsed.port,
-      peer: normalized,
-    });
-  }
-
-  return out;
-}
-
-function bootstrapPeerSetKey(peers: BootstrapPeer[]): string {
-  return peers
-    .map((peer) => peer.peer)
-    .sort((a, b) => a.localeCompare(b))
-    .join(",");
-}
 
 function buildReportReferenceUrl(
   cache: string,
@@ -117,25 +89,18 @@ function emptyConnectBootstrapResult(
   };
 }
 
-function exhaustedBootstrapPeerSet(
-  candidates: BootstrapPeer[],
-  initialAttempt: Awaited<ReturnType<typeof connectBootstrapPeerSet>>,
-): boolean {
-  return (
-    candidates.length === 0 ||
-    initialAttempt.attemptedPeers.length >= candidates.length
-  );
-}
-
 function shouldSkipCacheBootstrap(
-  candidates: BootstrapPeer[],
+  candidates: ReturnType<typeof normalizePeerCandidates>,
   initialAttempt: Awaited<ReturnType<typeof connectBootstrapPeerSet>>,
   candidateKey: string,
   state: GWebCacheBootstrapState | undefined,
 ): boolean {
-  if (!exhaustedBootstrapPeerSet(candidates, initialAttempt)) return true;
-  if (state?.active) return true;
-  return state?.lastExhaustedPeerSet === candidateKey;
+  return !shouldFetchFreshPeerCandidates({
+    candidates,
+    initialAttempt,
+    candidateKey,
+    state,
+  });
 }
 
 function buildBootstrapFetchOptions(
@@ -156,15 +121,13 @@ function buildBootstrapFetchOptions(
 }
 
 function addDiscoveredBootstrapPeers(
-  peers: BootstrapPeer[],
+  peers: ReturnType<typeof normalizePeerCandidates>,
   knownPeers: Set<string>,
   addPeer: ConnectBootstrapOptions["addPeer"],
 ): string[] {
-  const addedPeers: string[] = [];
-  for (const peer of peers) {
-    knownPeers.add(peer.peer);
-    addedPeers.push(peer.peer);
-    addPeer?.(peer.peer);
+  const addedPeers = addPeerCandidatesToKnownSet(peers, knownPeers);
+  for (const peer of addedPeers) {
+    addPeer?.(peer);
   }
   return addedPeers;
 }
@@ -182,7 +145,7 @@ async function fetchAndRetryBootstrapPeers(
     buildBootstrapFetchOptions(options),
   );
   rememberAliveCaches(options.state, bootstrap.successfulCaches);
-  const discovered = normalizeBootstrapPeers(
+  const discovered = normalizePeerCandidates(
     bootstrap.peers,
     options.isSelfPeer,
   ).filter((peer) => !knownPeers.has(peer.peer));
@@ -200,7 +163,7 @@ async function fetchAndRetryBootstrapPeers(
 }
 
 async function connectBootstrapPeerSet(
-  peers: BootstrapPeer[],
+  peers: ReturnType<typeof normalizePeerCandidates>,
   options: Pick<
     ConnectBootstrapOptions,
     | "availableSlots"
@@ -433,11 +396,11 @@ function finishCacheBootstrap(
 export async function connectBootstrapPeers(
   options: ConnectBootstrapOptions,
 ): Promise<ConnectBootstrapResult> {
-  const candidates = normalizeBootstrapPeers(
+  const candidates = normalizePeerCandidates(
     options.peers,
     options.isSelfPeer,
   );
-  const candidateKey = bootstrapPeerSetKey(candidates);
+  const candidateKey = peerCandidateSetKey(candidates);
   const knownPeers = new Set(candidates.map((peer) => peer.peer));
   const initialAttempt = await connectBootstrapPeerSet(
     candidates,

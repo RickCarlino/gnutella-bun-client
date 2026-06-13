@@ -6,6 +6,7 @@
     "ultrapeer": false,
     "max_ultrapeer_connections": 64,
     "max_leaf_connections": 64,
+    "max_ttl": 4,
     "log_ignore": [],
     "data_dir": "."
   },

@@ -1,18 +1,22 @@
 import { errMsg } from "./shared";
-import { RESULT_NAME_WIDTH_MAX } from "./const";
 import type { CliNode, ParsedCli } from "./types";
 import { buildMagnetUri } from "./protocol/magnet";
 
 const SIZE_FORMAT = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
   maximumFractionDigits: 1,
+  useGrouping: false,
 });
-const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
+const SIZE_UNITS = ["b", "kb", "mb", "gb", "tb", "pb"];
+const SIZE_VALUE_WIDTH = 5;
+const SIZE_UNIT_WIDTH = 2;
 const RESULT_COUNT_DISPLAY_MAX = 999;
 const PEER_TABLE_WIDTH_MAX = 80;
 
 type ResultInfo = ReturnType<CliNode["getResults"]>[number];
+type FormattedSize = { value: string; unit: string };
 
-function formatSize(bytes: number): string {
+function formattedSize(bytes: number): FormattedSize {
   const safeBytes =
     Number.isFinite(bytes) && bytes > 0 ? Math.floor(bytes) : 0;
   let value = safeBytes;
@@ -21,7 +25,20 @@ function formatSize(bytes: number): string {
     value /= 1024;
     unitIndex++;
   }
-  return `${SIZE_FORMAT.format(value)}${SIZE_UNITS[unitIndex]}`;
+  return {
+    value: unitIndex === 0 ? String(value) : SIZE_FORMAT.format(value),
+    unit: SIZE_UNITS[unitIndex],
+  };
+}
+
+function formatSize(bytes: number): string {
+  const size = formattedSize(bytes);
+  return `${size.value} ${size.unit}`;
+}
+
+function formatResultSize(bytes: number): string {
+  const size = formattedSize(bytes);
+  return `${size.value.padStart(SIZE_VALUE_WIDTH, " ")} ${size.unit.padEnd(SIZE_UNIT_WIDTH, " ")}`;
 }
 
 export function displayResultCount(count: number): number {
@@ -234,19 +251,12 @@ export function printResults(
   const rows = [...results]
     .sort(
       (a, b) =>
-        a.resultNo - b.resultNo ||
-        a.fileName.localeCompare(b.fileName) ||
-        a.fileSize - b.fileSize ||
-        a.remoteHost.localeCompare(b.remoteHost) ||
-        a.remotePort - b.remotePort,
+        a.resultNo - b.resultNo || a.fileName.localeCompare(b.fileName),
     )
     .map((result) => ({
       resultNo: String(result.resultNo),
+      fileSize: formatResultSize(result.fileSize),
       fileName: sanitizeTableCell(result.fileName),
-      fileSize: formatSize(result.fileSize),
-      remote: sanitizeTableCell(
-        `${result.remoteHost}:${result.remotePort}`,
-      ),
     }));
 
   const widths = {
@@ -254,49 +264,28 @@ export function printResults(
       "No".length,
       ...rows.map((row) => row.resultNo.length),
     ),
-    fileName: RESULT_NAME_WIDTH_MAX,
     fileSize: Math.max(
       "Size".length,
       ...rows.map((row) => row.fileSize.length),
     ),
-    remote: Math.max("IP".length, ...rows.map((row) => row.remote.length)),
+    fileName: Math.max(
+      "File".length,
+      ...rows.map((row) => row.fileName.length),
+    ),
   };
 
-  const line = (
-    resultNo: string,
-    fileName: string,
-    fileSize: string,
-    remote: string,
-  ) =>
-    `${resultNo.padStart(widths.resultNo, " ")}  ${fileName}  ${fileSize.padStart(widths.fileSize, " ")}  ${remote}`.trimEnd();
-
-  const fitName = (fileName: string): string => {
-    if (fileName.length <= widths.fileName - 2)
-      return fileName.padEnd(widths.fileName, " ");
-    if (widths.fileName <= 2) return fileName.slice(0, widths.fileName);
-    const kept = widths.fileName - 2;
-    const head = Math.floor(kept / 2);
-    const tail = kept - head;
-    return `${fileName.slice(0, head)}..${fileName.slice(-tail)}`;
-  };
+  const line = (resultNo: string, fileSize: string, fileName: string) =>
+    `${resultNo.padStart(widths.resultNo, " ")}  ${fileSize.padStart(widths.fileSize, " ")}  ${fileName.padEnd(widths.fileName, " ")}`.trimEnd();
 
   log(
     [
-      line("No", "File".padEnd(widths.fileName, " "), "Size", "IP"),
+      line("No", "Size", "File"),
       line(
         "-".repeat(widths.resultNo),
-        "-".repeat(widths.fileName),
         "-".repeat(widths.fileSize),
-        "-".repeat(widths.remote),
+        "-".repeat(widths.fileName),
       ),
-      ...rows.map((row) =>
-        line(
-          row.resultNo,
-          fitName(row.fileName),
-          row.fileSize,
-          row.remote,
-        ),
-      ),
+      ...rows.map((row) => line(row.resultNo, row.fileSize, row.fileName)),
     ].join("\n"),
   );
 }

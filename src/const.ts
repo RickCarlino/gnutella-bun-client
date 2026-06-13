@@ -1,8 +1,5 @@
 export const HEADER_LEN = 23;
 export const LOCAL_ROUTE = "__local__";
-export const DEFAULT_QRP_TABLE_SIZE = 65536;
-export const DEFAULT_QRP_INFINITY = 7;
-export const DEFAULT_QRP_ENTRY_BITS = 1;
 export const DEFAULT_LISTEN_HOST = "0.0.0.0";
 export const DEFAULT_LISTEN_PORT_MIN = 20000;
 export const DEFAULT_LISTEN_PORT_MAX = 29999;
@@ -18,7 +15,7 @@ export const RESCAN_SHARES_SEC = 30;
 export const ROUTE_TTL_SEC = 600;
 export const SEEN_TTL_SEC = 600;
 export const MAX_PAYLOAD_BYTES = 1024 * 1024;
-export const MAX_TTL = 7;
+export const MAX_TTL = 4;
 export const DEFAULT_PING_TTL = 1;
 export const DEFAULT_QUERY_TTL = 4;
 export const ADVERTISED_SPEED_KBPS = 512;
@@ -37,8 +34,6 @@ export const ENABLE_BYE = true;
 export const ENABLE_PONG_CACHING = true;
 export const ENABLE_GGEP = true;
 export const SERVE_URI_RES = true;
-export const QRP_COMPRESSOR_NONE = 0;
-export const QRP_COMPRESSOR_DEFLATE = 1;
 export const MAX_XTRY = 10;
 export const BYE_DEFAULT_CODE = 200;
 export const BOOTSTRAP_CONNECT_CONCURRENCY = 8;
@@ -104,7 +99,6 @@ export const INTERESTING_HANDSHAKE_HEADERS = [
   "remote-ip",
 ] as const;
 
-export const QRP_HASH_MULTIPLIER = 0x4f1bbcdc;
 export const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 export const PROMPT_THROBBER_FRAMES = ["*", "o", ".", " "] as const;
@@ -134,5 +128,3 @@ export const CLI_HELP_LINES = [
   "quit",
   "sleep",
 ] as const;
-
-export const RESULT_NAME_WIDTH_MAX = 48;

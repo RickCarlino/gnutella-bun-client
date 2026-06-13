@@ -6,6 +6,7 @@ import {
   buildHeader,
   defaultDoc,
   encodeBye,
+  encodeQuery,
   GnutellaServent,
   parseBye,
   parseHeader,
@@ -16,6 +17,7 @@ import { TYPE } from "../../../../src/const";
 import { sleep } from "../../../../src/shared";
 import {
   makeNode,
+  makeHeader,
   makePeer,
   makeShare,
   MockSocket,
@@ -159,7 +161,7 @@ describe("protocol node", () => {
             payloadType: TYPE.PING,
             payloadTypeName: "PING",
             descriptorIdHex: "aa".repeat(16),
-            ttl: 7,
+            ttl: node.config().maxTtl,
             hops: 2,
             payloadLength: 0,
           }),
@@ -530,6 +532,74 @@ describe("protocol node", () => {
       expect(QrpTable.matchesRemote(remote.remoteQrp, "leaf zeta")).toBe(
         true,
       );
+    });
+  });
+
+  test("does not forward leaf-routed queries before the leaf QRT arrives", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      overrideRuntimeConfig(node, {
+        ultrapeer: true,
+        nodeMode: "ultrapeer",
+        enableQrp: true,
+      });
+
+      const source = makePeer("source-ultrapeer");
+      source.role = "ultrapeer";
+      const leaf = makePeer("leaf-without-qrt");
+      leaf.role = "leaf";
+      node.peers.set(source.key, source);
+      node.peers.set(leaf.key, leaf);
+
+      const sent: Array<{ peerKey: string; payloadType: number }> = [];
+      node.sendToPeer = (
+        peerArg: unknown,
+        payloadType: number,
+        _descriptorId: Buffer,
+        _ttl: number,
+        _hops: number,
+        _payload: Buffer,
+      ) => {
+        sent.push({
+          peerKey: (peerArg as ReturnType<typeof makePeer>).key,
+          payloadType,
+        });
+      };
+
+      node.onQueryDescriptor(
+        source as never,
+        makeHeader(TYPE.QUERY, 1, 0, 1),
+        encodeQuery("alpha"),
+      );
+      expect(sent).toEqual([]);
+
+      const table = new QrpTable();
+      table.rebuildFromShares([
+        makeShare(
+          1,
+          path.join(node.config().downloadsDir, "alpha.txt"),
+          "alpha.txt",
+        ),
+      ]);
+      leaf.remoteQrp = {
+        resetSeen: true,
+        tableSize: table.tableSize,
+        infinity: table.infinity,
+        entryBits: table.entryBits,
+        table: table.table.slice(),
+        seqSize: 0,
+        compressor: 0,
+        parts: new Map<number, Buffer>(),
+      };
+
+      node.onQueryDescriptor(
+        source as never,
+        makeHeader(TYPE.QUERY, 1, 0, 2),
+        encodeQuery("alpha"),
+      );
+      expect(sent).toEqual([
+        { peerKey: leaf.key, payloadType: TYPE.QUERY },
+      ]);
     });
   });
 

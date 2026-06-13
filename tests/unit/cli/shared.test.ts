@@ -86,7 +86,7 @@ describe("cli_shared", () => {
     ]);
   });
 
-  test("prints results as one aligned table with remote host ports", () => {
+  test("prints results as one aligned table with sizes and full file names", () => {
     const logs: string[] = [];
     const node = makeNode({
       getResults: () => [
@@ -102,7 +102,7 @@ describe("cli_shared", () => {
           resultNo: 2,
           remoteHost: "9.8.7.6",
           remotePort: 1234,
-          fileSize: 99,
+          fileSize: 1,
           fileName: "alpha.txt",
           serventIdHex: "bb".repeat(16),
         },
@@ -130,11 +130,27 @@ describe("cli_shared", () => {
           fileName: "giant.iso",
           serventIdHex: "ee".repeat(16),
         },
+        {
+          resultNo: 22,
+          remoteHost: "6.6.6.6",
+          remotePort: 6346,
+          fileSize: 5872026,
+          fileName: "medium.dat",
+          serventIdHex: "ff".repeat(16),
+        },
+        {
+          resultNo: 23,
+          remoteHost: "5.5.5.5",
+          remotePort: 6346,
+          fileSize: 9895604649984,
+          fileName: "archive.tar",
+          serventIdHex: "11".repeat(16),
+        },
       ],
       getStatus: () => ({
         peers: 0,
         shares: 0,
-        results: 5,
+        results: 7,
         knownPeers: 0,
       }),
     });
@@ -143,13 +159,15 @@ describe("cli_shared", () => {
 
     expect(logs).toEqual([
       [
-        "No  File                                               Size  IP",
-        "--  ------------------------------------------------  -----  -------------",
-        " 2  alpha.txt                                           99B  9.8.7.6:1234",
-        " 7  beta file.bin                                       2KB  1.2.3.4:80",
-        " 8  12345678901234567890123..abcdefghijklmnopqrstuvw  7.6KB  8.8.8.8:6346",
-        "12  zz-top.bin                                        1.2KB  10.0.0.2:6346",
-        "21  giant.iso                                         3.5GB  7.7.7.7:6346",
+        "No      Size  File",
+        "--  --------  -----------------------------------------------",
+        " 2      1 b   alpha.txt",
+        " 7    2.0 kb  beta file.bin",
+        " 8    7.6 kb  12345678901234567890123Xabcdefghijklmnopqrstuvw",
+        "12    1.2 kb  zz-top.bin",
+        "21    3.5 gb  giant.iso",
+        "22    5.6 mb  medium.dat",
+        "23    9.0 tb  archive.tar",
       ].join("\n"),
     ]);
   });
@@ -187,7 +205,7 @@ describe("cli_shared", () => {
       [
         "result: #12",
         'file: "zz-top.bin"',
-        "size: 1.2KB (1200B)",
+        "size: 1.2 kb (1200B)",
         "remote: 10.0.0.2:6346",
         "speed: 512KB/s",
         "file index: 7",

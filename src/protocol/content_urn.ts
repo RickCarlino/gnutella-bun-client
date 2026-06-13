@@ -35,7 +35,7 @@ function base32Decode(text: string): Buffer | undefined {
   return Buffer.from(out);
 }
 
-export function base32Encode(data: Buffer): string {
+function base32Encode(data: Buffer): string {
   let result = "";
   let bits = 0;
   let value = 0;
@@ -49,6 +49,10 @@ export function base32Encode(data: Buffer): string {
   }
   if (bits > 0) result += BASE32_ALPHABET[(value << (5 - bits)) & 31];
   return result;
+}
+
+export function sha1ToUrn(sha1: Buffer): string {
+  return `${SHA1_URN_PREFIX}${base32Encode(sha1)}`;
 }
 
 function normalizeSha1Urn(raw: string): string | undefined {

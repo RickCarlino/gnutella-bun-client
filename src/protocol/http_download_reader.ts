@@ -1,4 +1,8 @@
 import { errMsg } from "../shared";
+import {
+  buildHttpDownloadResult,
+  httpDownloadEndDecision,
+} from "../transfers";
 import type { HttpDownloadState } from "./node_types";
 
 type HttpDownloadSourceHandlers = {
@@ -65,8 +69,10 @@ export async function readHttpDownloadSource({
         if (state.headerDone && state.remaining === 0) finish();
       },
       onEnd: () => {
-        if (!done && state.headerDone && state.remaining === 0) finish();
-        else if (!done) fail(new Error(incompleteMessage));
+        if (done) return;
+        const decision = httpDownloadEndDecision(state, incompleteMessage);
+        if (decision.kind === "complete") finish();
+        else fail(new Error(decision.message));
       },
       onError: (error) => fail(error),
     });
@@ -97,11 +103,7 @@ export async function readHttpDownloadSource({
       if (done) return;
       done = true;
       cleanup();
-      const meta = {
-        destPath,
-        bytes: state.finalStart + state.bodyBytes,
-        label,
-      };
+      const meta = buildHttpDownloadResult(state, destPath, label);
       if (!state.ws) {
         resolve(meta);
         return;

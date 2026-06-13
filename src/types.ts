@@ -6,47 +6,41 @@ import type {
   ReportSelfOptions,
   ReportSelfResult,
 } from "./gwebcache/types";
+import type { RemoteQrpState as StandaloneRemoteQrpState } from "./query_routing/qrp";
 
 type EventBase<T extends string> = { type: T; at: string };
 
+type CliSearchResult = {
+  resultNo: number;
+  queryIdHex?: string;
+  queryHops?: number;
+  remoteHost: string;
+  remotePort: number;
+  speedKBps?: number;
+  fileIndex?: number;
+  fileSize: number;
+  fileName: string;
+  serventIdHex: string;
+  viaPeerKey?: string;
+  sha1Urn?: string;
+  urns?: string[];
+  metadata?: string[];
+  vendorCode?: string;
+  needsPush?: boolean;
+  busy?: boolean;
+};
+
+type ShareSummary = {
+  index: number;
+  size: number;
+  rel: string;
+};
+
 export type CliNode = {
-  getPeers(): Array<{
-    key: string;
-    remoteLabel: string;
-    browseTarget?: string;
-    role: PeerRole;
-    outbound: boolean;
-    dialTarget?: string;
-    userAgent?: string;
-    compression: boolean;
-    tls: boolean;
-  }>;
-  getResults(): Array<{
-    resultNo: number;
-    queryIdHex?: string;
-    queryHops?: number;
-    remoteHost: string;
-    remotePort: number;
-    speedKBps?: number;
-    fileIndex?: number;
-    fileSize: number;
-    fileName: string;
-    serventIdHex: string;
-    viaPeerKey?: string;
-    sha1Urn?: string;
-    urns?: string[];
-    metadata?: string[];
-    vendorCode?: string;
-    needsPush?: boolean;
-    busy?: boolean;
-  }>;
-  getShares(): Array<{ index: number; size: number; rel: string }>;
-  getStatus(): {
-    peers: number;
-    shares: number;
-    results: number;
-    knownPeers: number;
-  };
+  getPeers(): PeerInfo[];
+  getResults(): CliSearchResult[];
+  getShares(): ShareSummary[];
+  getStatus(): NodeStatus;
 };
 
 export type ParsedCli = {
@@ -61,16 +55,7 @@ export type Route = { peerKey: string; ts: number };
 type NodeMode = "leaf" | "ultrapeer";
 export type PeerRole = "leaf" | "ultrapeer";
 
-export type RemoteQrpState = {
-  resetSeen: boolean;
-  tableSize: number;
-  infinity: number;
-  entryBits: number;
-  table: Uint8Array | null;
-  seqSize: number;
-  compressor: number;
-  parts: Map<number, Buffer>;
-};
+export type RemoteQrpState = StandaloneRemoteQrpState;
 
 export type PeerCapabilities = {
   version: string;
@@ -108,19 +93,21 @@ export type QueryDescriptor = {
   rawExtensions: Buffer;
 };
 
+type QueryHitResultDescriptor = {
+  fileIndex: number;
+  fileSize: number;
+  fileName: string;
+  urns: string[];
+  metadata: string[];
+  rawExtension: Buffer;
+};
+
 export type QueryHitDescriptor = {
   hits: number;
   port: number;
   ip: string;
   speedKBps: number;
-  results: Array<{
-    fileIndex: number;
-    fileSize: number;
-    fileName: string;
-    urns: string[];
-    metadata: string[];
-    rawExtension: Buffer;
-  }>;
+  results: QueryHitResultDescriptor[];
   vendorCode?: string;
   openDataSize?: number;
   flagGgep?: boolean;
@@ -196,6 +183,7 @@ export type ConfigDoc = {
     maxConnections?: number;
     maxUltrapeerConnections?: number;
     maxLeafConnections?: number;
+    maxTtl?: number;
     enableTls?: boolean;
     monitorIgnoreEvents?: string[];
     dataDir: string;

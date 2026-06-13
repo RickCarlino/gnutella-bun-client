@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import fsp from "node:fs/promises";
-import os from "node:os";
+import os, { type NetworkInterfaceInfo } from "node:os";
 import path from "node:path";
 
 import {
@@ -25,7 +25,6 @@ import {
   MAX_LEAF_CONNECTIONS,
   MAX_PAYLOAD_BYTES,
   MAX_RESULTS_PER_QUERY,
-  MAX_TRACKED_PEERS,
   MAX_TTL,
   MAX_ULTRAPEER_CONNECTIONS,
   PEER_SEEN_THRESHOLD_SEC,
@@ -43,40 +42,25 @@ import {
   isRoutableIpv4,
   isUnspecifiedIpv4,
   normalizeIpv4,
-  normalizePeer,
-  parsePeer,
   unique,
 } from "../shared";
-import type { ConfigDoc, PeerState, RuntimeConfig } from "../types";
+import type { ConfigDoc, RuntimeConfig } from "../types";
 import { normalizeCacheUrl } from "../gwebcache/shared";
+import {
+  filterBlockedPeerState,
+  normalizePeerState,
+  persistedDocForRuntime,
+} from "../persistence";
+import type { PersistedConfig, PersistedDoc } from "../persistence/types";
 
-type PersistedConfig = {
-  listen_ip?: unknown;
-  listen_host?: unknown;
-  listen_port?: unknown;
-  advertised_ip?: unknown;
-  advertised_host?: unknown;
-  advertised_port?: unknown;
-  blocked_ips?: unknown;
-  gwebcache_urls?: unknown;
-  ultrapeer?: unknown;
-  max_connections?: unknown;
-  max_ultrapeer_connections?: unknown;
-  max_leaf_connections?: unknown;
-  enable_tls?: unknown;
-  log_ignore?: unknown;
-  data_dir?: unknown;
-};
-
-type PersistedState = {
-  servent_id_hex?: unknown;
-  peers?: unknown;
-};
-
-type PersistedDoc = {
-  config?: PersistedConfig;
-  state?: PersistedState;
-};
+export {
+  filterBlockedPeerState,
+  peerStateEquals,
+  peerStateTargets,
+  rememberPeerInState,
+  sortPeerStateEntries,
+  trimPeerState,
+} from "../persistence";
 
 type LocalIpv4Candidates = {
   routable?: string;
@@ -84,10 +68,16 @@ type LocalIpv4Candidates = {
   loopback: string;
 };
 
-function interfaceIpv4Host(addr: {
-  address: string;
-  family?: string | number;
-}): string | undefined {
+type DataDirConfig = Pick<PersistedConfig, "data_dir">;
+
+type ConnectionLimitConfig = Pick<
+  RuntimeConfig,
+  "nodeMode" | "maxUltrapeerConnections" | "maxLeafConnections"
+>;
+
+function interfaceIpv4Host(
+  addr: Pick<NetworkInterfaceInfo, "address" | "family">,
+): string | undefined {
   const family = String(addr.family || "");
   if (family !== "IPv4" && family !== "4") return undefined;
   const host = normalizeIpv4(addr.address);
@@ -129,124 +119,6 @@ export function detectLocalAdvertisedIpv4(listenHost: string): string {
   return candidates.privateAddr || candidates.loopback;
 }
 
-function normalizePeerTimestamp(value: unknown): number {
-  const ts = Number(value);
-  if (!Number.isFinite(ts)) return 0;
-  return Math.max(0, Math.floor(ts));
-}
-
-function normalizePeerState(value: unknown): PeerState {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return {};
-
-  const out = new Map<string, number>();
-  for (const [peerSpec, rawTimestamp] of Object.entries(
-    value as Record<string, unknown>,
-  )) {
-    const addr = parsePeer(peerSpec);
-    if (!addr) continue;
-    const peer = normalizePeer(addr.host, addr.port);
-    const timestamp = normalizePeerTimestamp(rawTimestamp);
-    const current = out.get(peer) ?? 0;
-    if (!out.has(peer) || timestamp > current) out.set(peer, timestamp);
-  }
-
-  return Object.fromEntries(out);
-}
-
-export function sortPeerStateEntries(
-  peers: PeerState,
-): Array<[peer: string, lastSeen: number]> {
-  const entries = Object.entries(normalizePeerState(peers)) as Array<
-    [string, number]
-  >;
-  entries.sort((a, b) => b[1] - a[1]);
-  return entries;
-}
-
-export function trimPeerState(
-  peers: PeerState,
-  limit = MAX_TRACKED_PEERS,
-): PeerState {
-  if (limit <= 0) return {};
-  return Object.fromEntries(sortPeerStateEntries(peers).slice(0, limit));
-}
-
-export function filterBlockedPeerState(
-  peers: PeerState,
-  blockedIps: readonly string[],
-): PeerState {
-  const blocked = new Set(
-    blockedIps
-      .map((entry) => normalizeIpv4(entry))
-      .filter((entry): entry is string => !!entry),
-  );
-  if (!blocked.size) return trimPeerState(peers);
-  return Object.fromEntries(
-    sortPeerStateEntries(peers).filter(([peer]) => {
-      const addr = parsePeer(peer);
-      const host = normalizeIpv4(addr?.host);
-      return !host || !blocked.has(host);
-    }),
-  );
-}
-
-export function rememberPeerInState(
-  peers: PeerState,
-  peerSpec: string,
-  timestamp = 0,
-): PeerState {
-  const addr = parsePeer(peerSpec);
-  if (!addr) return trimPeerState(peers);
-
-  const peer = normalizePeer(addr.host, addr.port);
-  const current = normalizePeerState(peers);
-  const existing = current[peer];
-  const nextTimestamp = Math.max(
-    existing ?? 0,
-    normalizePeerTimestamp(timestamp),
-  );
-  const shouldPromote =
-    existing == null ||
-    nextTimestamp > existing ||
-    (existing === 0 && nextTimestamp === 0);
-
-  if (!shouldPromote) return trimPeerState(current);
-
-  return trimPeerState(
-    Object.fromEntries([
-      [peer, nextTimestamp],
-      ...Object.entries(current).filter(
-        ([candidate]) => candidate !== peer,
-      ),
-    ]),
-  );
-}
-
-export function peerStateTargets(peers: PeerState): string[] {
-  return sortPeerStateEntries(peers).map(([peer]) => peer);
-}
-
-export function peerStateEquals(a: PeerState, b: PeerState): boolean {
-  const aEntries = sortPeerStateEntries(a);
-  const bEntries = sortPeerStateEntries(b);
-  if (aEntries.length !== bEntries.length) return false;
-  return aEntries.every(
-    ([peer, lastSeen], index) =>
-      bEntries[index]?.[0] === peer && bEntries[index]?.[1] === lastSeen,
-  );
-}
-
-export function appendPathSuffix(
-  filePath: string,
-  suffixNo: number,
-): string {
-  const dir = path.dirname(filePath);
-  const ext = path.extname(filePath);
-  const base = path.basename(filePath, ext);
-  return path.join(dir, `${base} (${suffixNo})${ext}`);
-}
-
 function resolveConfiguredPath(
   baseDir: string,
   value: unknown,
@@ -261,9 +133,7 @@ function resolveConfiguredPath(
 
 function resolveDataDir(
   configPath: string,
-  config: {
-    data_dir?: unknown;
-  },
+  config: DataDirConfig,
 ): string {
   const base = path.dirname(path.resolve(configPath));
   const explicit = resolveConfiguredPath(base, config.data_dir);
@@ -300,11 +170,7 @@ function runtimeGWebCacheUrls(value: unknown): string[] {
   return normalizedGWebCacheUrls(value) || [];
 }
 
-function derivedMaxConnections(config: {
-  nodeMode: "leaf" | "ultrapeer";
-  maxUltrapeerConnections: number;
-  maxLeafConnections: number;
-}): number {
+function derivedMaxConnections(config: ConnectionLimitConfig): number {
   return config.nodeMode === "ultrapeer"
     ? config.maxUltrapeerConnections + config.maxLeafConnections
     : config.maxUltrapeerConnections;
@@ -357,7 +223,7 @@ export function runtimeConfigFor(
     routeTtlSec: ROUTE_TTL_SEC,
     seenTtlSec: SEEN_TTL_SEC,
     maxPayloadBytes: MAX_PAYLOAD_BYTES,
-    maxTtl: MAX_TTL,
+    maxTtl: positiveIntegerOrUndefined(doc.config.maxTtl) || MAX_TTL,
     defaultPingTtl: DEFAULT_PING_TTL,
     defaultQueryTtl: DEFAULT_QUERY_TTL,
     advertisedSpeedKBps: ADVERTISED_SPEED_KBPS,
@@ -420,6 +286,7 @@ export function configDocForRuntime(
     ultrapeer: config.ultrapeer,
     maxUltrapeerConnections: config.maxUltrapeerConnections,
     maxLeafConnections: config.maxLeafConnections,
+    maxTtl: config.maxTtl,
     enableTls: config.enableTls,
     monitorIgnoreEvents: config.monitorIgnoreEvents.length
       ? [...config.monitorIgnoreEvents]
@@ -495,6 +362,7 @@ export function defaultDoc(configPath: string): ConfigDoc {
       ultrapeer: false,
       maxUltrapeerConnections: MAX_ULTRAPEER_CONNECTIONS,
       maxLeafConnections: MAX_LEAF_CONNECTIONS,
+      maxTtl: MAX_TTL,
       dataDir: base,
     },
     state: {
@@ -528,6 +396,8 @@ function applyLoadedPeerLimits(
   );
   if (maxLeafConnections)
     doc.config.maxLeafConnections = maxLeafConnections;
+  const maxTtl = positiveIntegerOrUndefined(config.max_ttl);
+  if (maxTtl) doc.config.maxTtl = maxTtl;
 }
 
 function applyLoadedMonitorConfig(
@@ -587,6 +457,7 @@ function buildLoadedDoc(
       ultrapeer: config.ultrapeer === true,
       maxUltrapeerConnections: defaults.config.maxUltrapeerConnections,
       maxLeafConnections: defaults.config.maxLeafConnections,
+      maxTtl: defaults.config.maxTtl,
       dataDir: resolveDataDir(configPath, config),
     },
     state: {
@@ -620,45 +491,6 @@ export async function loadDoc(configPath: string): Promise<ConfigDoc> {
   return doc;
 }
 
-function persistedConfigForRuntime(
-  runtime: RuntimeConfig,
-): PersistedConfig {
-  const cleanConfig: PersistedConfig = {
-    listen_ip: runtime.listenHost,
-    listen_port: runtime.listenPort,
-    gwebcache_urls: [...runtime.gwebCacheUrls],
-    ultrapeer: runtime.ultrapeer,
-    max_ultrapeer_connections: runtime.maxUltrapeerConnections,
-    max_leaf_connections: runtime.maxLeafConnections,
-    enable_tls: runtime.enableTls,
-    data_dir: runtime.dataDir,
-  };
-  if (runtime.advertisedHost)
-    cleanConfig.advertised_ip = runtime.advertisedHost;
-  if (
-    runtime.advertisedPort != null &&
-    runtime.advertisedPort !== runtime.listenPort
-  ) {
-    cleanConfig.advertised_port = runtime.advertisedPort;
-  }
-  if (runtime.blockedIps.length)
-    cleanConfig.blocked_ips = runtime.blockedIps;
-  if (runtime.monitorIgnoreEvents.length)
-    cleanConfig.log_ignore = runtime.monitorIgnoreEvents;
-  return cleanConfig;
-}
-
-function persistedStateForDoc(doc: ConfigDoc): PersistedState {
-  return {
-    servent_id_hex:
-      typeof doc.state.serventIdHex === "string" &&
-      /^[0-9a-f]{32}$/i.test(doc.state.serventIdHex)
-        ? doc.state.serventIdHex.toLowerCase()
-        : randomDocServentId(),
-    peers: trimPeerState(doc.state.peers),
-  };
-}
-
 export async function writeDoc(
   configPath: string,
   doc: ConfigDoc,
@@ -666,10 +498,7 @@ export async function writeDoc(
   const full = path.resolve(configPath);
   const tmp = `${full}.tmp`;
   const runtime = runtimeConfigFor(full, doc);
-  const clean: PersistedDoc = {
-    config: persistedConfigForRuntime(runtime),
-    state: persistedStateForDoc(doc),
-  };
+  const clean = persistedDocForRuntime(runtime, doc, randomDocServentId());
   await fsp.writeFile(tmp, `${JSON.stringify(clean, null, 2)}\n`, "utf8");
   await fsp.rename(tmp, full);
 }

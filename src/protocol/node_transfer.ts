@@ -5,6 +5,12 @@ import path from "node:path";
 
 import { LOCAL_ROUTE, TYPE } from "../const";
 import { ensureDir, errMsg, fileExists, ts } from "../shared";
+import {
+  buildDownloadRecord,
+  directDownloadAttempts,
+  shouldTryPushFallback,
+  type DirectDownloadAttempt,
+} from "../transfers";
 import type { SearchHit } from "../types";
 import {
   buildGetRequest,
@@ -57,15 +63,29 @@ function recordDownloadSuccess(
     remoteHost: hit.remoteHost,
     remotePort: hit.remotePort,
   });
-  node.downloads.push({
-    at: ts(),
-    fileName: hit.fileName,
-    bytes: hit.fileSize,
-    host: hit.remoteHost,
-    port: hit.remotePort,
-    mode,
-    destPath,
-  });
+  node.downloads.push(buildDownloadRecord(hit, destPath, mode, ts()));
+}
+
+function directDownloadRequest(
+  attempt: DirectDownloadAttempt,
+  host: string,
+  port: number,
+): string {
+  if (attempt.kind === "uri-res") {
+    return buildUriResRequest(
+      attempt.urn,
+      attempt.existingBytes,
+      host,
+      port,
+    );
+  }
+  return buildGetRequest(
+    attempt.fileIndex,
+    attempt.fileName,
+    attempt.existingBytes,
+    host,
+    port,
+  );
 }
 
 export async function handleIncomingGiv(
@@ -174,38 +194,33 @@ export async function directDownload(
     ? (await fsp.stat(destPath)).size
     : 0;
 
-  if (hit.sha1Urn && node.config().serveUriRes) {
+  let lastError: unknown;
+  const attempts = directDownloadAttempts({
+    fileIndex: hit.fileIndex,
+    fileName: hit.fileName,
+    remoteHost: hit.remoteHost,
+    remotePort: hit.remotePort,
+    sha1Urn: hit.sha1Urn,
+    existingBytes: existing,
+    serveUriRes: node.config().serveUriRes,
+  });
+  for (const attempt of attempts) {
     try {
       return await node.directDownloadViaRequest(
         hit.remoteHost,
         hit.remotePort,
-        buildUriResRequest(
-          hit.sha1Urn,
-          existing,
-          hit.remoteHost,
-          hit.remotePort,
-        ),
+        directDownloadRequest(attempt, hit.remoteHost, hit.remotePort),
         destPath,
-        existing,
+        attempt.existingBytes,
       );
-    } catch {
-      // fall through to /get/ path
+    } catch (error) {
+      lastError = error;
+      if (!attempt.fallbackOnFailure) throw error;
     }
   }
-
-  return await node.directDownloadViaRequest(
-    hit.remoteHost,
-    hit.remotePort,
-    buildGetRequest(
-      hit.fileIndex,
-      hit.fileName,
-      existing,
-      hit.remoteHost,
-      hit.remotePort,
-    ),
-    destPath,
-    existing,
-  );
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(errMsg(lastError));
 }
 
 export function initializeHttpDownloadState(
@@ -374,8 +389,10 @@ export async function downloadResult(
       });
     }
 
-    await node.sendPush(hit, destPath);
-    recordDownloadSuccess(node, hit, destPath, "push");
+    if (shouldTryPushFallback(hit)) {
+      await node.sendPush(hit, destPath);
+      recordDownloadSuccess(node, hit, destPath, "push");
+    }
   } finally {
     if (!destOverride) node.activeAutoDownloadPaths.delete(destPath);
   }
