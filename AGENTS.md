@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The public CLI entrypoint is [`bin/gnutonium.ts`](bin/gnutonium.ts). The npm package is named `gnutella`, and the installed CLI command is `gnutonium`. Runtime configuration lives in `gnutella.json`; use `gnutella.json.example` as the template for new setups. The public library facade lives in [`src/protocol.ts`](src/protocol.ts), shared literal constants live in [`src/const.ts`](src/const.ts), shared simple type declarations live in [`src/types.ts`](src/types.ts), and shared helpers live in [`src/shared.ts`](src/shared.ts) and [`src/cli_shared.ts`](src/cli_shared.ts). Build automation is in `scripts/build-all-targets.sh`. Compiled artifacts are written to `dist/` and should not be committed.
+The public CLI entrypoint is [`bin/gnutonium.ts`](bin/gnutonium.ts). The npm package is named `gnutonium`, and the installed CLI command is `gnutonium`. Runtime configuration lives in `gnutella.json`; use `gnutella.json.example` as the template for new setups. The public library facade lives in [`src/protocol.ts`](src/protocol.ts), shared literal constants live in [`src/const.ts`](src/const.ts), shared simple type declarations live in [`src/types.ts`](src/types.ts), and shared helpers live in [`src/shared.ts`](src/shared.ts) and [`src/cli_shared.ts`](src/cli_shared.ts). Build automation is in `scripts/build-all-targets.sh`. Compiled artifacts are written to `dist/` and should not be committed.
 
 Keep module ownership tight. Put protocol-specific helpers with the protocol code, GWebCache-specific helpers with the GWebCache code, and reserve `src/shared.ts` for genuinely generic helpers. Avoid adding unrelated responsibilities to the same file just because it is already large or already imported widely.
 

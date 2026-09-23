@@ -4,9 +4,10 @@ This guide gets you from zero to a working CLI session with sharing, searching, 
 
 ## 1. Get Gnutonium
 
-You can either:
+You can:
 
 - download a prebuilt binary from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases)
+- install with `npm install -g gnutonium` (requires Bun)
 - run from source with Bun
 
 If you are running from source:

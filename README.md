@@ -39,6 +39,16 @@ After downloading a Gnutonium build, run the executable directly:
 ./gnutonium-linux-x64 run --config gnutella.json
 ```
 
+## Install From npm
+
+Gnutonium requires Bun, including when installed through npm.
+
+```bash
+npm install -g gnutonium
+gnutonium init --config gnutella.json
+gnutonium run --config gnutella.json
+```
+
 ## From Source
 
 If you want to run from source:
@@ -51,12 +61,10 @@ bun run bin/gnutonium.ts run --config gnutella.json
 
 ## Library Use
 
-Gnutonium requires Bun, including when installed through npm.
-
-The npm package remains `gnutella`; the installed CLI command is `gnutonium`. The public TypeScript import is:
+Install the library with `npm install gnutonium` and run it with Bun. The npm package and CLI command are both named `gnutonium`. The public TypeScript import is:
 
 ```ts
-import { GnutellaServent, loadDoc } from "gnutella";
+import { GnutellaServent, loadDoc } from "gnutonium";
 
 const configPath = "./gnutella.json";
 const doc = await loadDoc(configPath);

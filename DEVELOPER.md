@@ -2,6 +2,8 @@
 
 Use this guide if you want to run Gnutonium inside your own TypeScript app instead of driving it through the CLI.
 
+Install with `npm install gnutonium` and run your app with Bun.
+
 Most apps only need three things:
 
 - `loadDoc()` to load or create a config file
@@ -11,7 +13,7 @@ Most apps only need three things:
 ## Basic Example
 
 ```ts
-import { GnutellaServent, loadDoc, type GnutellaEvent } from "gnutella";
+import { GnutellaServent, loadDoc, type GnutellaEvent } from "gnutonium";
 
 const configPath = "./gnutella.json";
 const doc = await loadDoc(configPath);
@@ -45,7 +47,7 @@ await node.stop();
 ## Loading And Saving State
 
 ```ts
-import { loadDoc } from "gnutella";
+import { loadDoc } from "gnutonium";
 
 const doc = await loadDoc("./gnutella.json");
 ```
