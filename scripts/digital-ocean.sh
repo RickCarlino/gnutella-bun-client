@@ -8,14 +8,14 @@ set -euo pipefail
 SCRIPT_DIR="$(
   CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
 )"
-if [[ -f "$SCRIPT_DIR/bin/gnutella.ts" ]]; then
+if [[ -f "$SCRIPT_DIR/bin/gnutonium.ts" ]]; then
   REPO_ROOT="$SCRIPT_DIR"
-elif [[ -f "$SCRIPT_DIR/../bin/gnutella.ts" ]]; then
+elif [[ -f "$SCRIPT_DIR/../bin/gnutonium.ts" ]]; then
   REPO_ROOT="$(
     CDPATH= cd -- "$SCRIPT_DIR/.." && pwd
   )"
 else
-  echo "error: expected scripts/digital-ocean.sh inside the repo or next to bin/gnutella.ts" >&2
+  echo "error: expected scripts/digital-ocean.sh inside the repo or next to bin/gnutonium.ts" >&2
   exit 1
 fi
 curl -sSL https://repos.insights.digitalocean.com/install.sh | sudo bash
@@ -79,7 +79,7 @@ PUBLIC_IP="$(resolve_public_ip)"
 echo "==> Using public IP $PUBLIC_IP and port $LISTEN_PORT"
 
 echo "==> Initializing config at $CONFIG_PATH"
-"$BUN_BIN" run bin/gnutella.ts init --config "$CONFIG_PATH"
+"$BUN_BIN" run bin/gnutonium.ts init --config "$CONFIG_PATH"
 
 echo "==> Updating config"
 CONFIG_PATH_ENV="$CONFIG_PATH" \
@@ -139,6 +139,6 @@ for ((i = 0; i < 10; i++)); do
   "$BUN_BIN" run scripts/generate-random-base32-file.ts --dir "$DOWNLOADS_DIR"
 done
 
-echo "==> Starting gnutella"
+echo "==> Starting Gnutonium"
 echo "note: allow inbound TCP ${LISTEN_PORT} in DigitalOcean and any local firewall"
-exec "$BUN_BIN" run bin/gnutella.ts run --config "$CONFIG_PATH"
+exec "$BUN_BIN" run bin/gnutonium.ts run --config "$CONFIG_PATH"

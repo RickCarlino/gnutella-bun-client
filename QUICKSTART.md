@@ -2,7 +2,7 @@
 
 This guide gets you from zero to a working CLI session with sharing, searching, browsing, and downloading.
 
-## 1. Get GnutellaBun
+## 1. Get Gnutonium
 
 You can either:
 
@@ -18,26 +18,26 @@ bun install
 Throughout this guide, commands use the CLI command:
 
 ```bash
-gnutella
+gnutonium
 ```
 
-If you are running from source, replace `gnutella` with:
+If you are running from source, replace `gnutonium` with:
 
 ```bash
-bun run bin/gnutella.ts
+bun run bin/gnutonium.ts
 ```
 
-If you are using a compiled binary, replace `gnutella` with the executable path.
+If you are using a compiled binary, replace `gnutonium` with the executable path.
 
 ## 2. Create A Config
 
 ```bash
-gnutella init --config gnutella.json
+gnutonium init --config gnutella.json
 ```
 
 This creates a config file, a downloads folder, and an incomplete-downloads folder.
 
-By default, GnutellaBun shares files from `./downloads` and moves completed downloads there after any available SHA1 verification. Partial downloads live in `./incomplete` and are resumed across restarts.
+By default, Gnutonium shares files from `./downloads` and moves completed downloads there after any available SHA1 verification. Partial downloads live in `./incomplete` and are resumed across restarts.
 
 ## 3. Put Files In Your Share Folder
 
@@ -48,10 +48,10 @@ If you changed `config.data_dir`, use `<data_dir>/downloads` instead.
 ## 4. Start The Client
 
 ```bash
-gnutella run --config gnutella.json
+gnutonium run --config gnutella.json
 ```
 
-GnutellaBun will try to bootstrap on its own. If you already know a peer and want to connect to it directly, you can still use `connect <ip:port>` after startup.
+Gnutonium will try to bootstrap on its own. If you already know a peer and want to connect to it directly, you can still use `connect <ip:port>` after startup.
 
 Useful first commands:
 
@@ -116,7 +116,7 @@ Or pick an explicit destination:
 download 1 ./my-copy.bin
 ```
 
-If the destination file already exists, GnutellaBun resumes from the current file size when possible.
+If the destination file already exists, Gnutonium resumes from the current file size when possible.
 
 Use `pause <jobId>`, `resume <jobId>`, and `remove <jobId>` to manage jobs shown by `downloads`.
 

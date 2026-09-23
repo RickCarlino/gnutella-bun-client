@@ -31,6 +31,7 @@ export type DownloadSource = Pick<
 > & {
   id: string;
   attempts: number;
+  failuresWithoutProgress: number;
   lastAttemptAt?: string;
   lastError?: string;
   cooldownUntil?: number;

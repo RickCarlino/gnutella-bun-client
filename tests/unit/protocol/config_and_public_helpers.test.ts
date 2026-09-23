@@ -541,7 +541,7 @@ describe("protocol config and public helpers", () => {
     expect(
       buildGetRequest(12, "dir#/file name.txt", 128, "1.2.3.4", 6346),
     ).toBe(
-      "GET /get/12/dir%23/file%20name.txt HTTP/1.1\r\nUser-Agent: Gnutella\r\nHost: 1.2.3.4:6346\r\nConnection: Keep-Alive\r\nRange: bytes=128-\r\n\r\n",
+      "GET /get/12/dir%23/file%20name.txt HTTP/1.1\r\nUser-Agent: Gnutonium/1.3.0\r\nHost: 1.2.3.4:6346\r\nConnection: Keep-Alive\r\nRange: bytes=128-\r\n\r\n",
     );
 
     expect(

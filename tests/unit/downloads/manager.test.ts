@@ -6,6 +6,7 @@ import path from "node:path";
 import { sha1ToUrn } from "../../../src/protocol/content_urn";
 import type { SearchHit } from "../../../src/types";
 import type { TransferOptions } from "../../../src/transfers/types";
+import { DownloadTimeoutError } from "../../../src/transfers/errors";
 import { makeNode, withTempDir } from "../protocol/node/helpers";
 
 function hit(patch: Partial<SearchHit> = {}): SearchHit {
@@ -38,6 +39,86 @@ function sha1UrnFor(content: Buffer): string {
 }
 
 describe("download manager", () => {
+  test("persists consecutive no-progress failures, resets on new bytes, and keeps total attempts", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const initial = makeNode(configPath);
+      initial.lastResults = [hit()];
+      const job = await initial.downloadResult(1);
+      const expectedFailures = [1, 0, 1, 2];
+      for (let step = 0; step < expectedFailures.length; step++) {
+        const node = makeNode(configPath, {
+          runtimeConfig: { downloadRetryLimit: 2 },
+          collaborators: { clock: { now: () => 1_000_000 * (step + 1) } },
+        });
+        node.directDownload = async (_hit, destPath, options) => {
+          if (step === 1) await fs.writeFile(destPath, "he");
+          // Progress notifications alone must not count as saved data.
+          options?.onProgress?.({ bytesCompleted: 4 });
+          throw new DownloadTimeoutError("body", "download body stalled");
+        };
+        try {
+          await node.downloadManager.start();
+          await waitFor(
+            () => node.getDownloadJobs()[0]?.status !== "active",
+          );
+          const failed = node.getDownloadJobs()[0]!;
+          expect(failed.status).toBe(step === 3 ? "failed" : "queued");
+          expect(failed.sources[0]?.attempts).toBe(step + 1);
+          expect(failed.sources[0]?.failuresWithoutProgress).toBe(
+            expectedFailures[step],
+          );
+        } finally {
+          await node.downloadManager.stop();
+        }
+      }
+      const restarted = makeNode(configPath);
+      await restarted.downloadManager.persist();
+      expect(
+        restarted.getDownloadJobs()[0]?.sources[0]
+          ?.failuresWithoutProgress,
+      ).toBe(2);
+      const resumed = await restarted.resumeDownload(job.id);
+      expect(resumed.sources[0]?.failuresWithoutProgress).toBe(0);
+      expect(resumed.sources[0]?.attempts).toBe(4);
+      expect(await fs.readFile(job.incompletePath, "utf8")).toBe("he");
+    });
+  });
+
+  test("a connection timeout skips /get but can still use push", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "config.json"));
+      node.lastResults = [
+        hit({ sha1Urn: sha1UrnFor(Buffer.from("hello")) }),
+      ];
+      const requests: string[] = [];
+      let pushed = false;
+      node.directDownloadViaRequest = async (_host, _port, request) => {
+        requests.push(request);
+        throw new DownloadTimeoutError(
+          "connect",
+          "download connect timeout",
+        );
+      };
+      node.sendPush = async (_hit, destPath) => {
+        pushed = true;
+        await fs.writeFile(destPath, "hello");
+      };
+      await node.downloadResult(1);
+      try {
+        await node.downloadManager.start();
+        await waitFor(
+          () => node.getDownloadJobs()[0]?.status === "complete",
+        );
+        expect(requests).toHaveLength(1);
+        expect(requests[0]).toContain("/uri-res/");
+        expect(pushed).toBe(true);
+      } finally {
+        await node.downloadManager.stop();
+      }
+    });
+  });
+
   test("persists queued jobs across manager instances", async () => {
     await withTempDir(async (dir) => {
       const configPath = path.join(dir, "protocol.json");
@@ -184,6 +265,81 @@ describe("download manager", () => {
 
       expect(node.getDownloadJobs()).toEqual([]);
       await expect(fs.stat(job.incompletePath)).rejects.toThrow();
+    });
+  });
+
+  test("retains both direct request errors when push fallback also fails", async () => {
+    await withTempDir(async (dir) => {
+      const configPath = path.join(dir, "protocol.json");
+      const node = makeNode(configPath, {
+        runtimeConfig: { downloadRetryLimit: 1 },
+      });
+      node.lastResults = [
+        hit({ sha1Urn: "urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }),
+      ];
+      node.directDownloadViaRequest = async (_host, _port, request) => {
+        throw new Error(
+          request.includes("/uri-res/") ? "HTTP 503" : "download timeout",
+        );
+      };
+      node.sendPush = async () => {
+        throw new Error("push timed out");
+      };
+      const job = await node.downloadResult(1);
+      await fs.mkdir(path.dirname(job.incompletePath), {
+        recursive: true,
+      });
+      await fs.writeFile(job.incompletePath, "he");
+      try {
+        await node.downloadManager.start();
+        await waitFor(
+          () => node.getDownloadJobs()[0]?.status === "failed",
+        );
+        await node.downloadManager.persist();
+        const restored = makeNode(configPath);
+        await restored.downloadManager.persist();
+        const failed = restored.getDownloadJobs()[0]!;
+        expect(failed.error).toBe(
+          "direct: uri-res: HTTP 503; /get: download timeout; push: push timed out",
+        );
+        expect(failed.sources[0]?.lastError).toBe(failed.error);
+        expect(failed.bytesCompleted).toBe(2);
+        expect(await fs.readFile(job.incompletePath, "utf8")).toBe("he");
+      } finally {
+        await node.downloadManager.stop();
+      }
+    });
+  });
+
+  test("pausing a direct transfer does not attempt push fallback", async () => {
+    await withTempDir(async (dir) => {
+      const node = makeNode(path.join(dir, "protocol.json"));
+      node.lastResults = [hit()];
+      let started = false;
+      let pushed = false;
+      node.directDownload = async (_hit, _path, options) => {
+        await new Promise<void>((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(new Error("download aborted")),
+            { once: true },
+          );
+          started = true;
+        });
+      };
+      node.sendPush = async () => {
+        pushed = true;
+      };
+      const job = await node.downloadResult(1);
+      try {
+        await node.downloadManager.start();
+        await waitFor(() => started);
+        await node.pauseDownload(job.id);
+        expect(node.getDownloadJobs()[0]?.status).toBe("paused");
+        expect(pushed).toBe(false);
+      } finally {
+        await node.downloadManager.stop();
+      }
     });
   });
 });

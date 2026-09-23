@@ -421,6 +421,7 @@ describe("Integration suite (0.6)", () => {
       expect(routedHit).toEqual(
         expect.objectContaining({
           fileName: "late-route-c.txt",
+          vendorCode: "NIUM",
           remoteHost: "127.0.0.1",
           remotePort: C.advertisedPort,
           queryHops: 1,
@@ -498,6 +499,7 @@ describe("Integration suite (0.6)", () => {
         `GET /get/${resumeShare!.index}/${resumeShare!.name}/ HTTP/1.0\r\nConnection: close\r\nRange: bytes=7-\r\n\r\n`,
       );
       expect(ranged).toContain("HTTP/1.0 206 Partial Content\r\n");
+      expect(ranged).toContain("Server: Gnutonium/1.3.0\r\n");
       expect(ranged).toContain("Content-Length: 6\r\n");
       expect(ranged).toContain("Content-Range: bytes 7-12/13\r\n");
       expect(ranged.endsWith("from-b")).toBe(true);

@@ -2,7 +2,12 @@ import net from "node:net";
 import zlib from "node:zlib";
 
 import { errMsg, parsePeer } from "../shared";
-import { HEADER_LEN, LOCAL_ROUTE, TYPE } from "../const";
+import {
+  DEFAULT_USER_AGENT,
+  HEADER_LEN,
+  LOCAL_ROUTE,
+  TYPE,
+} from "../const";
 import { buildHeader, encodeQueryHit, parseHeader } from "./codec";
 import {
   findHeaderEnd,
@@ -40,7 +45,7 @@ function buildBrowseHostResponse(
 ): string {
   return [
     statusLine,
-    "Server: Gnutella",
+    `Server: ${DEFAULT_USER_AGENT}`,
     ...extraHeaders,
     "X-Features: browse/1.0",
     "Connection: close",

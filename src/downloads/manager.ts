@@ -12,6 +12,7 @@ import {
 } from "../shared";
 import { downloadPathCandidate } from "../transfers";
 import { buildDownloadRecord } from "../transfers/results";
+import { DownloadTimeoutError } from "../transfers/errors";
 import type { TransferOptions } from "../transfers/types";
 import type { SearchHit } from "../types";
 import type { GnutellaServent } from "../protocol/node";
@@ -77,6 +78,7 @@ function sourceFromHit(hit: SearchHit, id: string): DownloadSource {
     urns: hit.urns ? [...hit.urns] : [],
     metadata: hit.metadata ? [...hit.metadata] : [],
     attempts: 0,
+    failuresWithoutProgress: 0,
     ...(hit.sha1Urn ? { sha1Urn: hit.sha1Urn } : {}),
     ...(hit.vendorCode ? { vendorCode: hit.vendorCode } : {}),
     ...(hit.needsPush != null ? { needsPush: hit.needsPush } : {}),
@@ -283,7 +285,7 @@ export class DownloadManager {
       job.bytesCompleted = 0;
     }
     for (const source of job.sources) {
-      source.attempts = 0;
+      source.failuresWithoutProgress = 0;
       source.cooldownUntil = undefined;
       source.lastError = undefined;
     }
@@ -418,7 +420,10 @@ export class DownloadManager {
     nowMs: number,
   ): DownloadSource | undefined {
     return job.sources.find((source) => {
-      if (source.attempts >= this.node.config().downloadRetryLimit)
+      if (
+        source.failuresWithoutProgress >=
+        this.node.config().downloadRetryLimit
+      )
         return false;
       if (source.cooldownUntil && source.cooldownUntil > nowMs)
         return false;
@@ -500,6 +505,7 @@ export class DownloadManager {
     job.error = undefined;
     job.updatedAt = ts();
     source.attempts++;
+    source.cooldownUntil = undefined;
     source.lastAttemptAt = job.updatedAt;
     source.lastError = undefined;
     void this.save();
@@ -538,14 +544,16 @@ export class DownloadManager {
     const transfer = this.transferState(jobId, sourceId);
     if (!transfer) return;
     const { job, source } = transfer;
+    let startBytes = job.bytesCompleted;
     try {
       await ensureDir(path.dirname(job.incompletePath));
+      startBytes = (await fileSize(job.incompletePath)) ?? 0;
       const mode = await this.transferFromSource(job, source, signal);
       if (this.removing.has(job.id) || job.status === "paused") return;
       await this.completeJob(job, source, mode);
     } catch (error) {
       if (this.shouldIgnoreTransferFailure(job)) return;
-      await this.failSource(job, source, error);
+      await this.failSource(job, source, error, startBytes);
     }
   }
 
@@ -585,6 +593,7 @@ export class DownloadManager {
       await this.node.directDownload(hit, job.incompletePath, options);
       return "direct";
     } catch (error) {
+      if (signal.aborted) throw error;
       this.node.emitEvent({
         type: "DOWNLOAD_DIRECT_FAILED",
         at: ts(),
@@ -595,8 +604,21 @@ export class DownloadManager {
         remotePort: source.remotePort,
         message: errMsg(error),
       });
-      await this.node.sendPush(hit, job.incompletePath, options);
-      return "push";
+      if (
+        error instanceof DownloadTimeoutError &&
+        error.phase !== "connect"
+      ) {
+        throw error;
+      }
+      try {
+        await this.node.sendPush(hit, job.incompletePath, options);
+        return "push";
+      } catch (pushError) {
+        if (signal.aborted) throw pushError;
+        throw new Error(
+          `direct: ${errMsg(error)}; push: ${errMsg(pushError)}`,
+        );
+      }
     }
   }
 
@@ -636,6 +658,7 @@ export class DownloadManager {
     job.destPath = finalPath;
     job.bytesCompleted = (await fileSize(finalPath)) ?? job.fileSize;
     job.status = "complete";
+    source.failuresWithoutProgress = 0;
     job.completedAt = ts();
     job.updatedAt = job.completedAt;
     await this.save();
@@ -663,7 +686,7 @@ export class DownloadManager {
     const actualBytes = (await fileSize(job.incompletePath)) ?? 0;
     job.bytesCompleted = actualBytes;
     if (actualBytes === job.fileSize) return false;
-    source.attempts = this.node.config().downloadRetryLimit;
+    source.failuresWithoutProgress = this.node.config().downloadRetryLimit;
     if (path.resolve(job.incompletePath) !== path.resolve(job.destPath)) {
       await fsp.rm(job.incompletePath, { force: true });
       job.bytesCompleted = 0;
@@ -690,17 +713,24 @@ export class DownloadManager {
     job: DownloadJob,
     source: DownloadSource,
     error: unknown,
+    startBytes?: number,
   ): Promise<void> {
     const message = errMsg(error);
     source.lastError = message;
     source.cooldownUntil =
       this.node.now() + this.node.config().downloadRetryBackoffSec * 1000;
     job.activeSourceId = undefined;
-    job.bytesCompleted =
-      (await fileSize(job.incompletePath)) ?? job.bytesCompleted;
+    job.bytesCompleted = (await fileSize(job.incompletePath)) ?? 0;
+    if (startBytes !== undefined) {
+      source.failuresWithoutProgress =
+        job.bytesCompleted > startBytes
+          ? 0
+          : source.failuresWithoutProgress + 1;
+    }
     const canRetry = job.sources.some(
       (candidate) =>
-        candidate.attempts < this.node.config().downloadRetryLimit,
+        candidate.failuresWithoutProgress <
+        this.node.config().downloadRetryLimit,
     );
     job.status = canRetry ? "queued" : "failed";
     job.error = canRetry ? undefined : message;

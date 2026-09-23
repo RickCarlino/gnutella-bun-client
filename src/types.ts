@@ -199,6 +199,7 @@ export type ConfigDoc = {
     downloadMaxActivePerHost?: number;
     downloadRetryLimit?: number;
     downloadRetryBackoffSec?: number;
+    downloadIdleTimeoutMs?: number;
     verifyDownloads?: boolean;
   };
   state: {
@@ -224,6 +225,7 @@ export type RuntimeConfig = {
   downloadMaxActivePerHost: number;
   downloadRetryLimit: number;
   downloadRetryBackoffSec: number;
+  downloadIdleTimeoutMs: number;
   verifyDownloads: boolean;
   peerSeenThresholdSec: number;
   maxConnections: number;

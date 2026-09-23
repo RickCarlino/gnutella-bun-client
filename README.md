@@ -1,8 +1,10 @@
-# GnutellaBun
+# Gnutonium
 
-GnutellaBun is a small Bun-based Gnutella client you can run from the terminal or embed in a TypeScript app.
+<img src="logo.png" alt="Gnutonium logo" width="720">
 
-GnutellaBun is compatible with major clients like GTK-Gnutella, Phex, Shareaza and others.
+Gnutonium is a small Bun-based Gnutella client you can run from the terminal or embed in a TypeScript app.
+
+Gnutonium is compatible with major clients like GTK-Gnutella, Phex, Shareaza and others.
 
 It allows you to:
 
@@ -19,20 +21,22 @@ It can be used in three ways:
 
 ## Prebuilt Binaries
 
-- [Windows](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-windows-x64.exe)
-- [Windows (older CPUs)](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-windows-x64-baseline.exe)
-- [macOS Intel](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-darwin-x64)
-- [macOS Apple Silicon](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutella-bun-darwin-arm64)
+- [Windows](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutonium-windows-x64.exe)
+- [Windows (older CPUs)](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutonium-windows-x64-baseline.exe)
+- [macOS Intel](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutonium-darwin-x64)
+- [macOS Apple Silicon](https://github.com/RickCarlino/gnutella-bun-client/releases/latest/download/gnutonium-darwin-arm64)
 - [Linux builds](https://github.com/RickCarlino/gnutella-bun-client/releases)
 - [All releases](https://github.com/RickCarlino/gnutella-bun-client/releases)
 
 Download a prebuilt executable from the [releases page](https://github.com/RickCarlino/gnutella-bun-client/releases).
 
-After downloading, run the executable directly:
+Older releases use the GnutellaBun name and `gnutella-bun-*` filenames.
+
+After downloading a Gnutonium build, run the executable directly:
 
 ```bash
-./gnutella-bun-linux-x64 init --config gnutella.json
-./gnutella-bun-linux-x64 run --config gnutella.json
+./gnutonium-linux-x64 init --config gnutella.json
+./gnutonium-linux-x64 run --config gnutella.json
 ```
 
 ## From Source
@@ -41,15 +45,15 @@ If you want to run from source:
 
 ```bash
 bun install
-bun run bin/gnutella.ts init --config gnutella.json
-bun run bin/gnutella.ts run --config gnutella.json
+bun run bin/gnutonium.ts init --config gnutella.json
+bun run bin/gnutonium.ts run --config gnutella.json
 ```
 
 ## Library Use
 
-**NOTE:** This is GnutellaBun, not GnutellaNode. Although you can install it via NPM, it requires Bun. If you truly need Node support, raise an issue.
+Gnutonium requires Bun, including when installed through npm.
 
-When used from this repository, the public TypeScript import is:
+The npm package remains `gnutella`; the installed CLI command is `gnutonium`. The public TypeScript import is:
 
 ```ts
 import { GnutellaServent, loadDoc } from "gnutella";
@@ -62,12 +66,14 @@ await node.start();
 node.sendQuery("hello world");
 ```
 
+The default config filename remains `gnutella.json` so existing settings and saved state continue to work. Gnutonium identifies itself on the network with vendor code `NIUM`.
+
 ## Guides
 
 - [Quickstart](QUICKSTART.md): get the CLI working in a few minutes
 - [CLI Guide](CLI.md): full command and config reference
-- [Developer Guide](DEVELOPER.md): embed GnutellaBun in your own TypeScript app
+- [Developer Guide](DEVELOPER.md): embed Gnutonium in your own TypeScript app
 
 ## License
 
-GnutellaBun is released under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+Gnutonium is released under the GNU General Public License v3.0. See [LICENSE](LICENSE).

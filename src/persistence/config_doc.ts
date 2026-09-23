@@ -25,6 +25,7 @@ export function persistedConfigForRuntime(
     download_max_active_per_host: runtime.downloadMaxActivePerHost,
     download_retry_limit: runtime.downloadRetryLimit,
     download_retry_backoff_sec: runtime.downloadRetryBackoffSec,
+    download_idle_timeout_ms: runtime.downloadIdleTimeoutMs,
     verify_downloads: runtime.verifyDownloads,
   };
   if (runtime.advertisedHost)

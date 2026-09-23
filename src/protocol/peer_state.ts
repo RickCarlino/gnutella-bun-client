@@ -17,6 +17,7 @@ import {
   DEFAULT_USER_AGENT,
   DEFAULT_VENDOR_CODE,
   DOWNLOAD_TIMEOUT_MS,
+  DOWNLOAD_IDLE_TIMEOUT_MS,
   DOWNLOAD_MAX_ACTIVE_PER_HOST,
   DOWNLOAD_QUEUE_SIZE,
   DOWNLOAD_RETRY_BACKOFF_SEC,
@@ -89,6 +90,7 @@ type RuntimeDownloadConfig = Pick<
   | "downloadMaxActivePerHost"
   | "downloadRetryLimit"
   | "downloadRetryBackoffSec"
+  | "downloadIdleTimeoutMs"
   | "verifyDownloads"
 >;
 
@@ -230,6 +232,11 @@ function runtimeDownloadConfig(
     downloadRetryBackoffSec:
       positiveIntegerOrUndefined(config.downloadRetryBackoffSec) ||
       DOWNLOAD_RETRY_BACKOFF_SEC,
+    downloadIdleTimeoutMs: Math.min(
+      2_147_483_647,
+      positiveIntegerOrUndefined(config.downloadIdleTimeoutMs) ||
+        DOWNLOAD_IDLE_TIMEOUT_MS,
+    ),
     verifyDownloads:
       typeof config.verifyDownloads === "boolean"
         ? config.verifyDownloads
@@ -359,6 +366,7 @@ export function configDocForRuntime(
     downloadMaxActivePerHost: config.downloadMaxActivePerHost,
     downloadRetryLimit: config.downloadRetryLimit,
     downloadRetryBackoffSec: config.downloadRetryBackoffSec,
+    downloadIdleTimeoutMs: config.downloadIdleTimeoutMs,
     verifyDownloads: config.verifyDownloads,
   };
 }
@@ -441,6 +449,7 @@ export function defaultDoc(configPath: string): ConfigDoc {
       downloadMaxActivePerHost: DOWNLOAD_MAX_ACTIVE_PER_HOST,
       downloadRetryLimit: DOWNLOAD_RETRY_LIMIT,
       downloadRetryBackoffSec: DOWNLOAD_RETRY_BACKOFF_SEC,
+      downloadIdleTimeoutMs: DOWNLOAD_IDLE_TIMEOUT_MS,
       verifyDownloads: VERIFY_DOWNLOADS,
     },
     state: {
@@ -533,6 +542,11 @@ function applyLoadedDownloadLimits(
   );
   if (downloadRetryBackoffSec)
     doc.config.downloadRetryBackoffSec = downloadRetryBackoffSec;
+  const downloadIdleTimeoutMs = positiveIntegerOrUndefined(
+    config.download_idle_timeout_ms,
+  );
+  if (downloadIdleTimeoutMs)
+    doc.config.downloadIdleTimeoutMs = downloadIdleTimeoutMs;
 }
 
 function applyLoadedDownloadConfig(

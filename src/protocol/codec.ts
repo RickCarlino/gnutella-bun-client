@@ -1,4 +1,4 @@
-import { HEADER_LEN } from "../const";
+import { DEFAULT_USER_AGENT, HEADER_LEN } from "../const";
 import { bytesToIpBE, ipToBytesBE } from "../shared";
 export { parseByteRange } from "../transfers/ranges";
 import type {
@@ -13,7 +13,7 @@ import type {
   QueryHitResult,
 } from "./node_types";
 import { DEFAULT_VENDOR_CODE } from "../const";
-import { parseHttpHeaders } from "./handshake";
+export { parseHttpDownloadHeader } from "./http_download_header";
 import { parseGgep, encodeGgep, type GgepItem } from "./ggep";
 import {
   bitprintUrnFromGgepHash,
@@ -46,11 +46,6 @@ type QueryHitDescriptorBlockOptions = {
   measuredSpeed?: boolean;
   ggep?: boolean;
   privateArea?: Buffer;
-};
-
-type HttpDownloadHeader = {
-  remaining: number;
-  finalStart: number;
 };
 
 function normalizedModernQueryMaxHits(
@@ -636,7 +631,7 @@ export function buildGetRequest(
 ): string {
   const rawName = encodeURI(fileName).replace(/#/g, "%23");
   const hostHeader = host && port ? `Host: ${host}:${port}\r\n` : "";
-  return `GET /get/${fileIndex}/${rawName} HTTP/1.1\r\nUser-Agent: Gnutella\r\n${hostHeader}Connection: Keep-Alive\r\nRange: bytes=${start}-\r\n\r\n`;
+  return `GET /get/${fileIndex}/${rawName} HTTP/1.1\r\nUser-Agent: ${DEFAULT_USER_AGENT}\r\n${hostHeader}Connection: Keep-Alive\r\nRange: bytes=${start}-\r\n\r\n`;
 }
 
 export function buildUriResRequest(
@@ -646,30 +641,5 @@ export function buildUriResRequest(
   port?: number,
 ): string {
   const hostHeader = host && port ? `Host: ${host}:${port}\r\n` : "";
-  return `GET /uri-res/N2R?${urn} HTTP/1.1\r\nUser-Agent: Gnutella\r\n${hostHeader}Connection: Keep-Alive\r\nRange: bytes=${start}-\r\n\r\n`;
-}
-
-export function parseHttpDownloadHeader(
-  head: string,
-  requestedStart: number,
-): HttpDownloadHeader {
-  const first = head.replace(/\r\n/g, "\n").split("\n", 1)[0];
-  const match = /^HTTP\/(\d+\.\d+)\s+(\d+)/i.exec(first);
-  if (!match) throw new Error("invalid HTTP response");
-  const status = Number(match[2]);
-  const headers = parseHttpHeaders(head);
-  const remaining = Number(headers["content-length"] || NaN);
-  if (!Number.isFinite(remaining) || remaining < 0)
-    throw new Error("missing Content-length");
-  if (status === 206) {
-    const rangeMatch = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(
-      headers["content-range"] || "",
-    );
-    return {
-      remaining,
-      finalStart: rangeMatch ? Number(rangeMatch[1]) : requestedStart,
-    };
-  }
-  if (status === 200) return { remaining, finalStart: 0 };
-  throw new Error(`unexpected HTTP status ${status}`);
+  return `GET /uri-res/N2R?${urn} HTTP/1.1\r\nUser-Agent: ${DEFAULT_USER_AGENT}\r\n${hostHeader}Connection: Keep-Alive\r\nRange: bytes=${start}-\r\n\r\n`;
 }

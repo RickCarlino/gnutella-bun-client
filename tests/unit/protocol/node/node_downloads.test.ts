@@ -441,16 +441,16 @@ describe("protocol node", () => {
         existing: number,
       ) => {
         captured = { destPath: passedDestPath, label, existing };
-        return { ok: true };
+        return { destPath: passedDestPath, bytes: existing, label };
       };
 
       await expect(
         node.downloadOverSocket(socket as never, 7, "alpha.txt", destPath),
-      ).resolves.toEqual({ ok: true });
+      ).resolves.toMatchObject({ destPath, bytes: 5 });
 
       expect(socket.writes).toHaveLength(1);
       expect(socket.writes[0]?.toString("latin1")).toBe(
-        "GET /get/7/alpha.txt HTTP/1.1\r\nUser-Agent: Gnutella\r\nHost: 9.8.7.6:4321\r\nConnection: Keep-Alive\r\nRange: bytes=5-\r\n\r\n",
+        "GET /get/7/alpha.txt HTTP/1.1\r\nUser-Agent: Gnutonium/1.3.0\r\nHost: 9.8.7.6:4321\r\nConnection: Keep-Alive\r\nRange: bytes=5-\r\n\r\n",
       );
       expect(captured!).toEqual({
         destPath,
@@ -478,7 +478,7 @@ describe("protocol node", () => {
       resumedSocket.emit(
         "data",
         Buffer.from(
-          "HTTP/1.0 206 Partial Content\r\nContent-length: 3\r\n\r\nXYZ",
+          "HTTP/1.0 206 Partial Content\r\nContent-length: 3\r\nContent-Range: bytes 5-7/8\r\n\r\nXYZ",
           "latin1",
         ),
       );
@@ -486,6 +486,8 @@ describe("protocol node", () => {
       await expect(resumed).resolves.toEqual({
         destPath: resumedPath,
         bytes: 8,
+        range: { start: 5, end: 7, total: 8 },
+        connectionClose: true,
         label: "9.8.7.6:4321",
       });
       await expect(fs.readFile(resumedPath, "utf8")).resolves.toBe(
@@ -512,6 +514,7 @@ describe("protocol node", () => {
       await expect(zeroStart).resolves.toEqual({
         destPath: zeroStartPath,
         bytes: 5,
+        range: { start: 0, end: 4, total: 5 },
         label: "9.8.7.6:4321",
       });
       await expect(fs.readFile(zeroStartPath, "utf8")).resolves.toBe(
@@ -575,7 +578,10 @@ describe("protocol node", () => {
       ) => {
         requests.push(request);
         existingSizes.push(existing);
-        if (requests.length === 1) throw new Error("uri-res failed");
+        if (requests.length === 1) {
+          await fs.appendFile(destPath, "XYZ");
+          throw new Error("uri-res failed");
+        }
         return { ok: true };
       };
 
@@ -588,7 +594,8 @@ describe("protocol node", () => {
         "GET /uri-res/N2R?urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA HTTP/1.1",
       );
       expect(requests[1]).toContain("GET /get/5/alpha.txt HTTP/1.1");
-      expect(existingSizes).toEqual([5, 5]);
+      expect(existingSizes).toEqual([5, 8]);
+      expect(requests[1]).toContain("Range: bytes=8-");
     });
   });
 

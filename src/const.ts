@@ -3,8 +3,8 @@ export const LOCAL_ROUTE = "__local__";
 export const DEFAULT_LISTEN_HOST = "0.0.0.0";
 export const DEFAULT_LISTEN_PORT_MIN = 20000;
 export const DEFAULT_LISTEN_PORT_MAX = 29999;
-export const DEFAULT_USER_AGENT = "GnutellaBun/1.0.0";
-export const DEFAULT_VENDOR_CODE = "GBUN";
+export const DEFAULT_USER_AGENT = "Gnutonium/1.3.0";
+export const DEFAULT_VENDOR_CODE = "NIUM";
 export const DATA_DOWNLOADS_DIRNAME = "downloads";
 export const DATA_INCOMPLETE_DOWNLOADS_DIRNAME = "incomplete";
 export const DATA_DOWNLOADS_STATE_FILENAME = "downloads.json";
@@ -27,6 +27,7 @@ export const DEFAULT_PING_TTL = 1;
 export const DEFAULT_QUERY_TTL = 4;
 export const ADVERTISED_SPEED_KBPS = 512;
 export const DOWNLOAD_TIMEOUT_MS = 15000;
+export const DOWNLOAD_IDLE_TIMEOUT_MS = 60000;
 export const PUSH_WAIT_MS = 15000;
 export const MAX_RESULTS_PER_QUERY = 50;
 export const MAX_TRACKED_PEERS = 40;
@@ -114,7 +115,7 @@ export const CLI_SHUTDOWN_TIMEOUT_MS = 3000;
 
 export const CLI_HELP_LINES = [
   "help",
-  "monitor",
+  "monitor [on|off|all|downloads]",
   "status",
   "peers",
   "blocked",
@@ -127,7 +128,7 @@ export const CLI_HELP_LINES = [
   "ping [ttl]",
   "query <search terms...>",
   "browse <peerKey|ip:port>",
-  "info <resultNo>",
+  "info <resultNo|jobId>",
   "magnet <resultNo>",
   "download <resultNo> [destPath]",
   "downloads",

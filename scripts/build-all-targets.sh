@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENTRYPOINT="$REPO_ROOT/bin/gnutella.ts"
+ENTRYPOINT="$REPO_ROOT/bin/gnutonium.ts"
 OUTDIR="$REPO_ROOT/dist"
 
 TARGETS=(
@@ -24,7 +24,7 @@ TARGETS=(
 mkdir -p "$OUTDIR"
 
 for target in "${TARGETS[@]}"; do
-  outfile="$OUTDIR/gnutella-$target"
+  outfile="$OUTDIR/gnutonium-${target#bun-}"
   if [[ "$target" == bun-windows-* ]]; then
     outfile="${outfile}.exe"
   fi

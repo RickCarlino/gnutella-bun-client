@@ -158,6 +158,9 @@ function normalizeSource(
     urns: stringArray(input.urns),
     metadata: stringArray(input.metadata),
     attempts: nonNegativeNumber(input.attempts),
+    failuresWithoutProgress: nonNegativeNumber(
+      input.failuresWithoutProgress,
+    ),
   };
   applyOptionalSourceFields(source, input);
   return source;

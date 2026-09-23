@@ -147,7 +147,7 @@ describe("browse host", () => {
       expect(response).toBe(
         [
           "HTTP/1.0 200 OK",
-          "Server: Gnutella",
+          "Server: Gnutonium/1.3.0",
           "Content-Type: application/x-gnutella-packets",
           "X-Features: browse/1.0",
           "Connection: close",
@@ -187,6 +187,8 @@ describe("browse host", () => {
       );
 
       expect(head).toContain("HTTP/1.1 200 OK\r\n");
+      expect(head).toContain("Server: Gnutonium/1.3.0\r\n");
+      expect(queryHit.vendorCode).toBe("NIUM");
       expect(descriptor).toMatchObject({
         payloadType: TYPE.QUERY_HIT,
         ttl: 0,

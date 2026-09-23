@@ -10,7 +10,11 @@ import {
   type DirectDownloadAttempt,
 } from "../transfers";
 import type { DownloadJob } from "../downloads/types";
-import type { TransferOptions } from "../transfers/types";
+import { DownloadTimeoutError } from "../transfers/errors";
+import type {
+  HttpDownloadResult,
+  TransferOptions,
+} from "../transfers/types";
 import type { PendingPush, SearchHit } from "../types";
 import {
   buildGetRequest,
@@ -19,8 +23,12 @@ import {
   encodeQuery,
   parseHttpDownloadHeader,
 } from "./codec";
-import { findHeaderEnd, socketCanEnd } from "./handshake";
+import { findHeaderEnd } from "./handshake";
 import { readHttpDownloadSource } from "./http_download_reader";
+import {
+  connectDownloadSocket,
+  downloadHttpSession,
+} from "./http_download_session";
 import { browsePeer as browsePeerImpl } from "./browse_host";
 import { parseMagnetUri } from "./magnet";
 import type { GnutellaServent } from "./node";
@@ -32,16 +40,19 @@ type OutgoingQueryParts = {
   urns: string[];
 };
 
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(errMsg(error));
-}
-
 function abortError(): Error {
   return new Error("download aborted");
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw abortError();
+}
+
+function downloadOptions(
+  hit: SearchHit,
+  options: TransferOptions = {},
+): TransferOptions {
+  return { ...options, expectedSize: hit.fileSize || undefined };
 }
 
 async function existingDownloadBytes(destPath: string): Promise<number> {
@@ -107,7 +118,7 @@ export async function handleIncomingGiv(
       pending.result.fileIndex,
       pending.result.fileName,
       pending.destPath,
-      pending.transferOptions,
+      downloadOptions(pending.result, pending.transferOptions),
     );
     pending.resolve(result);
   } catch (error) {
@@ -125,24 +136,22 @@ export async function downloadOverSocket(
 ): Promise<unknown> {
   throwIfAborted(options.signal);
   const existing = await existingDownloadBytes(destPath);
-  socket.write(
-    buildGetRequest(
-      fileIndex,
-      fileName,
-      existing,
-      socket.remoteAddress || undefined,
-      socket.remotePort || undefined,
-    ),
-  );
-  const result = await node.readHttpDownload(
+  return await downloadHttpSession({
+    node,
     socket,
     destPath,
-    `${socket.remoteAddress || "?"}:${socket.remotePort || "?"}`,
-    existing,
     options,
-  );
-  if (socketCanEnd(socket)) socket.end();
-  return result;
+    label: `${socket.remoteAddress || "?"}:${socket.remotePort || "?"}`,
+    start: existing,
+    request: (start) =>
+      buildGetRequest(
+        fileIndex,
+        fileName,
+        start,
+        socket.remoteAddress || undefined,
+        socket.remotePort || undefined,
+      ),
+  });
 }
 
 export async function directDownloadViaRequest(
@@ -154,47 +163,21 @@ export async function directDownloadViaRequest(
   existing: number,
   options: TransferOptions = {},
 ): Promise<unknown> {
-  throwIfAborted(options.signal);
-  const socket = node.createConnection({ host, port });
-  socket.setNoDelay(true);
-  socket.setTimeout(node.config().downloadTimeoutMs, () =>
-    socket.destroy(new Error("download timeout")),
-  );
-  await new Promise<void>((resolve, reject) => {
-    const cleanup = () => {
-      socket.removeListener("connect", onConnect);
-      socket.removeListener("error", onError);
-      options.signal?.removeEventListener("abort", onAbort);
-    };
-    const onError = (error: unknown) => {
-      cleanup();
-      reject(toError(error));
-    };
-    const onConnect = () => {
-      cleanup();
-      socket.write(request);
-      resolve();
-    };
-    const onAbort = () => {
-      cleanup();
-      socket.destroy(abortError());
-      reject(abortError());
-    };
-    socket.once("error", onError);
-    socket.once("connect", onConnect);
-    if (options.signal?.aborted) onAbort();
-    else
-      options.signal?.addEventListener("abort", onAbort, { once: true });
-  });
-  const result = await node.readHttpDownload(
-    socket,
+  const reconnect = () => connectDownloadSocket(node, host, port, options);
+  return await downloadHttpSession({
+    node,
+    socket: await reconnect(),
+    reconnect,
     destPath,
-    `${host}:${port}`,
-    existing,
     options,
-  );
-  if (socketCanEnd(socket)) socket.end();
-  return result;
+    label: `${host}:${port}`,
+    start: existing,
+    request: (start) =>
+      request.replace(
+        /^Range: bytes=\d+-\r$/m,
+        `Range: bytes=${start}-\r`,
+      ),
+  });
 }
 
 export async function directDownload(
@@ -206,7 +189,7 @@ export async function directDownload(
   throwIfAborted(options.signal);
   const existing = await existingDownloadBytes(destPath);
 
-  let lastError: unknown;
+  const errors: string[] = [];
   const attempts = directDownloadAttempts({
     fileIndex: hit.fileIndex,
     fileName: hit.fileName,
@@ -216,7 +199,11 @@ export async function directDownload(
     existingBytes: existing,
     serveUriRes: node.config().serveUriRes,
   });
-  for (const attempt of attempts) {
+  for (const planned of attempts) {
+    const attempt = {
+      ...planned,
+      existingBytes: await existingDownloadBytes(destPath),
+    };
     try {
       return await node.directDownloadViaRequest(
         hit.remoteHost,
@@ -224,16 +211,19 @@ export async function directDownload(
         directDownloadRequest(attempt, hit.remoteHost, hit.remotePort),
         destPath,
         attempt.existingBytes,
-        options,
+        downloadOptions(hit, options),
       );
     } catch (error) {
-      lastError = error;
-      if (!attempt.fallbackOnFailure) throw error;
+      if (options.signal?.aborted) throw error;
+      const method = attempt.kind === "uri-res" ? "uri-res" : "/get";
+      errors.push(`${method}: ${errMsg(error)}`);
+      if (error instanceof DownloadTimeoutError) {
+        throw new DownloadTimeoutError(error.phase, errors.join("; "));
+      }
+      if (!attempt.fallbackOnFailure) break;
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(errMsg(lastError));
+  throw new Error(errors.join("; "));
 }
 
 export function initializeHttpDownloadState(
@@ -254,6 +244,8 @@ export function initializeHttpDownloadState(
   );
   state.remaining = parsed.remaining;
   state.finalStart = parsed.finalStart;
+  state.range = parsed.range;
+  state.connectionClose = parsed.connectionClose;
   state.ws = fs.createWriteStream(destPath, {
     flags: state.finalStart > 0 ? "r+" : "w",
     start: state.finalStart,
@@ -303,34 +295,47 @@ export async function readHttpDownload(
   label: string,
   requestedStart: number,
   options: TransferOptions = {},
-): Promise<unknown> {
+): Promise<HttpDownloadResult> {
   return await readHttpDownloadSource({
-    attach: ({ onChunk, onEnd, onError }) => {
+    attach: ({ onChunk, onEnd, onError, onTimeout }) => {
       const onData = (chunk: string | Buffer) =>
         onChunk(Buffer.from(chunk));
       socket.on("error", onError);
       socket.on("data", onData);
       socket.on("end", onEnd);
+      socket.on("close", onEnd);
+      socket.on("timeout", onTimeout);
+      socket.setTimeout(node.config().downloadTimeoutMs);
       return () => {
+        socket.off("timeout", onTimeout);
+        socket.setTimeout(0);
         socket.off("error", onError);
         socket.off("data", onData);
         socket.off("end", onEnd);
+        socket.off("close", onEnd);
       };
     },
-    consumeChunk: (state, targetPath, start, onWriteError, chunk) =>
+    consumeChunk: (state, targetPath, start, onWriteError, chunk) => {
+      const wasReadingHeaders = !state.headerDone;
       node.consumeHttpDownloadChunk(
         state,
         targetPath,
         start,
         onWriteError,
         chunk,
-      ),
+      );
+      if (wasReadingHeaders && state.headerDone) {
+        socket.setTimeout(node.config().downloadIdleTimeoutMs);
+      }
+    },
     destPath,
     destroyOnFailure: () => socket.destroy(),
     incompleteMessage: "connection closed before full body received",
     label,
     options,
     requestedStart,
+    timeoutMs: node.config().downloadTimeoutMs,
+    bodyTimeoutMs: node.config().downloadIdleTimeoutMs,
   });
 }
 

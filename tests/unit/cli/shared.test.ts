@@ -4,6 +4,7 @@ import {
   displayResultCount,
   errMsg,
   parseCli,
+  printDownloadInfo,
   printDownloads,
   printPeers,
   printResultInfo,
@@ -266,6 +267,62 @@ describe("cli_shared", () => {
     );
     expect(() => printResultMagnet(node, 99, () => void 0)).toThrow(
       "no such result 99",
+    );
+  });
+
+  test("shows download details independently of cleared search results", () => {
+    const logs: string[] = [];
+    const node = {
+      ...makeNode(),
+      getDownloadJobs: () => [
+        {
+          id: "d5",
+          status: "active" as const,
+          fileName: "alpha.bin",
+          fileSize: 10,
+          bytesCompleted: 4,
+          urns: [],
+          destPath: "/downloads/alpha.bin",
+          incompletePath: "/incomplete/d5.part",
+          createdAt: "2026-09-22T12:00:00Z",
+          updatedAt: "2026-09-22T12:01:00Z",
+          activeSourceId: "s1",
+          sources: [
+            {
+              id: "s1",
+              resultNo: 740,
+              queryIdHex: "aa".repeat(16),
+              queryHops: 1,
+              remoteHost: "127.0.0.1",
+              remotePort: 6346,
+              speedKBps: 256,
+              fileIndex: 1,
+              fileName: "alpha.bin",
+              fileSize: 10,
+              serventIdHex: "bb".repeat(16),
+              viaPeerKey: "p1",
+              attempts: 2,
+              failuresWithoutProgress: 1,
+              lastError: "download timeout",
+              vendorCode: "GTKG",
+              needsPush: false,
+            },
+          ],
+        },
+      ],
+    };
+    printDownloadInfo(node, "d5", (message) => logs.push(message));
+    expect(logs[0]).toContain("download: d5\nstatus: active");
+    expect(logs[0]).toContain("progress: 40% (4/10B)");
+    expect(logs[0]).toContain("active source: s1");
+    expect(logs[0]).toContain("s1: 127.0.0.1:6346");
+    expect(logs[0]).toContain("original result: #740");
+    expect(logs[0]).toContain("attempts: 2");
+    expect(logs[0]).toContain("consecutive attempts without progress: 1");
+    expect(logs[0]).toContain('last error: "download timeout"');
+    expect(logs[0]).toContain('partial file: "/incomplete/d5.part"');
+    expect(() => printDownloadInfo(node, "d9", () => {})).toThrow(
+      "no such download d9",
     );
   });
 

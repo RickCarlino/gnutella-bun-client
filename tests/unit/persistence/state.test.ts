@@ -30,6 +30,7 @@ function runtime(patch: Partial<RuntimeConfig> = {}): RuntimeConfig {
     downloadMaxActivePerHost: 2,
     downloadRetryLimit: 10,
     downloadRetryBackoffSec: 60,
+    downloadIdleTimeoutMs: 60000,
     verifyDownloads: true,
     peerSeenThresholdSec: 60,
     maxConnections: 12,
@@ -177,6 +178,7 @@ describe("persistence document builders", () => {
       download_max_active_per_host: 2,
       download_retry_limit: 10,
       download_retry_backoff_sec: 60,
+      download_idle_timeout_ms: 60000,
       verify_downloads: true,
     });
   });
@@ -230,6 +232,7 @@ describe("persistence document builders", () => {
         download_max_active_per_host: 2,
         download_retry_limit: 10,
         download_retry_backoff_sec: 60,
+        download_idle_timeout_ms: 60000,
         verify_downloads: true,
       },
       state: {

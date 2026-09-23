@@ -21,7 +21,7 @@ describe("gwebcache client", () => {
       buildGWebCacheUrl(KNOWN_CACHES[0], {
         mode: "get",
         network: "gnutella",
-        client: "gbun",
+        client: "nium",
         version: "0.6-test",
         ip: "66.132.55.12:6346",
         url: "https://cache.example.net/gcache.php",
@@ -39,7 +39,7 @@ describe("gwebcache client", () => {
 
     expect(built.searchParams.get("get")).toBe("1");
     expect(built.searchParams.get("net")).toBe("gnutella");
-    expect(built.searchParams.get("client")).toBe("GBUN");
+    expect(built.searchParams.get("client")).toBe("NIUM");
     expect(built.searchParams.get("version")).toBe("0.6-test");
     expect(built.searchParams.get("ping")).toBe("1");
     expect(built.searchParams.get("update")).toBe("1");
@@ -309,8 +309,8 @@ describe("gwebcache client", () => {
     expect(first.searchParams.get("get")).toBe("1");
     expect(first.searchParams.get("net")).toBe("gnutella");
     expect(first.searchParams.get("ping")).toBe("1");
-    expect(first.searchParams.get("client")).toBe("GBUN");
-    expect(first.searchParams.get("version")).toBe("GnutellaBun/1.0.0");
+    expect(first.searchParams.get("client")).toBe("NIUM");
+    expect(first.searchParams.get("version")).toBe("Gnutonium/1.3.0");
   });
 
   test("fetchBootstrapData records thrown cache request errors", async () => {

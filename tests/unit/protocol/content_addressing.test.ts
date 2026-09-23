@@ -88,6 +88,7 @@ describe("protocol content addressing", () => {
 
     const parsed = parseQueryHit(payload);
 
+    expect(parsed.vendorCode).toBe("NIUM");
     expect(parsed.flagGgep).toBe(true);
     expect(parsed.results).toHaveLength(1);
     expect(parsed.results[0]?.urns).toEqual([share.sha1Urn!]);

@@ -33,11 +33,14 @@ export function httpDownloadEndDecision(
 }
 
 export function buildHttpDownloadResult(
-  progress: Pick<HttpDownloadProgress, "finalStart" | "bodyBytes">,
+  progress: Pick<HttpDownloadProgress, "finalStart" | "bodyBytes"> &
+    Pick<HttpDownloadResult, "range" | "connectionClose">,
   destPath: string,
   label: string,
 ): HttpDownloadResult {
   return {
+    ...(progress.range ? { range: progress.range } : {}),
+    ...(progress.connectionClose ? { connectionClose: true } : {}),
     destPath,
     bytes: progress.finalStart + progress.bodyBytes,
     label,

@@ -1,15 +1,21 @@
+import { finished } from "node:stream/promises";
 import { errMsg } from "../shared";
 import {
   buildHttpDownloadResult,
   httpDownloadEndDecision,
 } from "../transfers";
-import type { TransferOptions } from "../transfers/types";
+import type {
+  HttpDownloadResult,
+  TransferOptions,
+} from "../transfers/types";
 import type { HttpDownloadState } from "./node_types";
+import { DownloadTimeoutError } from "../transfers/errors";
 
 type HttpDownloadSourceHandlers = {
   onChunk: (chunk: Buffer) => void;
   onEnd: () => void;
   onError: (error: unknown) => void;
+  onTimeout: () => void;
 };
 
 type ReadHttpDownloadSourceArgs = {
@@ -27,10 +33,30 @@ type ReadHttpDownloadSourceArgs = {
   label: string;
   options?: TransferOptions;
   requestedStart: number;
+  timeoutMs: number;
+  bodyTimeoutMs: number;
 };
 
 function toReadError(error: unknown): Error {
   return error instanceof Error ? error : new Error(errMsg(error));
+}
+
+function readTimeout(
+  state: HttpDownloadState,
+  label: string,
+  requestedStart: number,
+  timeoutMs: number,
+): DownloadTimeoutError {
+  if (!state.headerDone) {
+    return new DownloadTimeoutError(
+      "headers",
+      `download timeout waiting for HTTP headers from ${label} after ${timeoutMs}ms idle (range start=${requestedStart}, header bytes=${state.buf.length})`,
+    );
+  }
+  return new DownloadTimeoutError(
+    "body",
+    `download body stalled from ${label} after ${timeoutMs}ms idle (offset=${state.finalStart + state.bodyBytes}, response bytes=${state.bodyBytes}, remaining=${state.remaining})`,
+  );
 }
 
 export async function readHttpDownloadSource({
@@ -42,7 +68,9 @@ export async function readHttpDownloadSource({
   label,
   options,
   requestedStart,
-}: ReadHttpDownloadSourceArgs): Promise<unknown> {
+  timeoutMs,
+  bodyTimeoutMs,
+}: ReadHttpDownloadSourceArgs): Promise<HttpDownloadResult> {
   return await new Promise((resolve, reject) => {
     const state: HttpDownloadState = {
       buf: Buffer.alloc(0),
@@ -84,40 +112,46 @@ export async function readHttpDownloadSource({
         else fail(new Error(decision.message));
       },
       onError: (error) => fail(error),
+      onTimeout: () =>
+        fail(
+          readTimeout(
+            state,
+            label,
+            requestedStart,
+            state.headerDone ? bodyTimeoutMs : timeoutMs,
+          ),
+        ),
     });
     const cleanup = () => {
       detach();
-      state.ws?.off("error", onWriteError);
       options?.signal?.removeEventListener("abort", onAbort);
     };
 
-    const fail = (error: unknown) => {
+    const settle = async (error?: Error) => {
       if (done) return;
       done = true;
       cleanup();
+      if (error) destroyOnFailure?.();
       try {
-        state.ws?.destroy();
-      } catch {
-        // ignore
-      }
-      try {
+        if (state.ws) {
+          const flushed = finished(state.ws);
+          state.ws.end();
+          await flushed;
+        }
+        if (error) reject(error);
+        else resolve(buildHttpDownloadResult(state, destPath, label));
+      } catch (writeError) {
         destroyOnFailure?.();
-      } catch {
-        // ignore
+        reject(toReadError(writeError));
+      } finally {
+        state.ws?.off("error", onWriteError);
       }
-      reject(toReadError(error));
     };
-
+    const fail = (error: unknown) => {
+      void settle(toReadError(error));
+    };
     const finish = () => {
-      if (done) return;
-      done = true;
-      cleanup();
-      const meta = buildHttpDownloadResult(state, destPath, label);
-      if (!state.ws) {
-        resolve(meta);
-        return;
-      }
-      state.ws.end(() => resolve(meta));
+      void settle();
     };
     if (options?.signal?.aborted) {
       onAbort();

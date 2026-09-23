@@ -1,3 +1,4 @@
+import type { HttpDownloadResult } from "../transfers/types";
 import fs from "node:fs";
 import net from "node:net";
 import zlib from "node:zlib";
@@ -38,7 +39,10 @@ export type ExistingGetRequest = {
   keepAlive: boolean;
 };
 
-export type HttpDownloadState = {
+export type HttpDownloadState = Pick<
+  HttpDownloadResult,
+  "range" | "connectionClose"
+> & {
   buf: Buffer;
   headerDone: boolean;
   remaining: number;

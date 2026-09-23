@@ -1,6 +1,6 @@
 # Developer Guide
 
-Use this guide if you want to run GnutellaBun inside your own TypeScript app instead of driving it through the CLI.
+Use this guide if you want to run Gnutonium inside your own TypeScript app instead of driving it through the CLI.
 
 Most apps only need three things:
 

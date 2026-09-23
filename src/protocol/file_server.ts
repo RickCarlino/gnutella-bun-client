@@ -2,6 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import net from "node:net";
 
+import { DEFAULT_USER_AGENT } from "../const";
 import { errMsg } from "../shared";
 import { parseByteRange } from "../transfers";
 import type { ShareFile } from "../types";
@@ -105,7 +106,7 @@ export function writeInvalidRangeResponse(
   socket.write(
     [
       `${request.responseVersion} 416 Range Not Satisfiable`,
-      "Server: Gnutella",
+      `Server: ${DEFAULT_USER_AGENT}`,
       "Content-Type: application/binary",
       "Content-Length: 0",
       `Content-Range: bytes */${size}`,
@@ -137,7 +138,7 @@ export function buildExistingGetResponseHeaders(
     range.partial
       ? `${request.responseVersion} 206 Partial Content`
       : `${request.responseVersion} 200 OK`,
-    "Server: Gnutella",
+    `Server: ${DEFAULT_USER_AGENT}`,
     "Content-Type: application/binary",
     `Content-Length: ${remaining}`,
     ...(range.partial

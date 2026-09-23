@@ -369,6 +369,46 @@ export function printResultInfo(
   log(formatResultInfoLines(result).join("\n"));
 }
 
+export function printDownloadInfo(
+  node: DownloadCliNode,
+  jobId: string,
+  log: (msg: string) => void,
+): void {
+  const job = node
+    .getDownloadJobs()
+    .find((candidate) => candidate.id === jobId);
+  if (!job) throw new Error(`no such download ${jobId}`);
+  const lines = [
+    `download: ${job.id}`,
+    `status: ${job.status}`,
+    `file: ${JSON.stringify(job.fileName)}`,
+    `progress: ${downloadProgress(job)} (${job.bytesCompleted}/${job.fileSize}B)`,
+    `destination: ${JSON.stringify(job.destPath)}`,
+    `partial file: ${JSON.stringify(job.incompletePath)}`,
+    `sha1 urn: ${valueOrDash(job.sha1Urn)}`,
+    `active source: ${valueOrDash(job.activeSourceId)}`,
+    `error: ${JSON.stringify(job.error || "-")}`,
+    `created: ${job.createdAt}`,
+    `updated: ${job.updatedAt}`,
+    `completed: ${valueOrDash(job.completedAt)}`,
+    `sources: ${job.sources.length}`,
+  ];
+  for (const source of job.sources) {
+    lines.push(
+      `  ${source.id}: ${source.remoteHost}:${source.remotePort}`,
+      `    original result: #${source.resultNo}`,
+      `    vendor: ${valueOrDash(source.vendorCode)}`,
+      `    needs push: ${boolOrDash(source.needsPush)}`,
+      `    attempts: ${source.attempts}`,
+      `    consecutive attempts without progress: ${source.failuresWithoutProgress}`,
+      `    last attempt: ${valueOrDash(source.lastAttemptAt)}`,
+      `    cooldown until: ${source.cooldownUntil ? new Date(source.cooldownUntil).toJSON() : "-"}`,
+      `    last error: ${JSON.stringify(source.lastError || "-")}`,
+    );
+  }
+  log(lines.join("\n"));
+}
+
 export function printResultMagnet(
   node: CliNode,
   resultNo: number,

@@ -15,6 +15,7 @@
     "download_max_active_per_host": 2,
     "download_retry_limit": 10,
     "download_retry_backoff_sec": 60,
+    "download_idle_timeout_ms": 60000,
     "verify_downloads": true
   },
   "state": {

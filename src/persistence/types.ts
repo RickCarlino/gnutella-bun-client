@@ -21,6 +21,7 @@ export type PersistedConfig = {
   download_max_active_per_host?: unknown;
   download_retry_limit?: unknown;
   download_retry_backoff_sec?: unknown;
+  download_idle_timeout_ms?: unknown;
   verify_downloads?: unknown;
 };
 

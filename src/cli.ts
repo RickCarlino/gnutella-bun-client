@@ -12,6 +12,7 @@ import {
   displayResultCount,
   errMsg,
   parseCli,
+  printDownloadInfo,
   printDownloads,
   printPeers,
   printResultInfo,
@@ -24,6 +25,11 @@ import {
 import { GnutellaServent, loadDoc, writeDoc } from "./protocol";
 import { sleep, splitArgs } from "./shared";
 import type { ConnectPeerResult, GnutellaEvent } from "./types";
+import {
+  monitorAllowsEvent,
+  selectMonitorMode,
+  type MonitorMode,
+} from "./cli_monitor";
 
 type MonitorLogEntry = {
   line: string;
@@ -33,7 +39,7 @@ type MonitorLogEntry = {
 type CliSession = {
   rl: readline.Interface | null;
   node: GnutellaServent;
-  monitorEnabled: boolean;
+  monitorMode: MonitorMode;
   monitorIgnoreTokens: Set<string>;
   promptFrame: number;
   promptTimer: ReturnType<typeof setTimeout> | null;
@@ -45,7 +51,7 @@ function createCliSession(node: GnutellaServent): CliSession {
   return {
     rl: null,
     node,
-    monitorEnabled: false,
+    monitorMode: "off",
     monitorIgnoreTokens: new Set<string>(),
     promptFrame: PROMPT_THROBBER_FRAMES.length - 1,
     promptTimer: null,
@@ -374,7 +380,7 @@ function formatMonitorEvent(
 }
 
 function handleNodeEvent(session: CliSession, event: GnutellaEvent): void {
-  if (!session.monitorEnabled) {
+  if (!monitorAllowsEvent(session.monitorMode, event)) {
     if (event.type === "PEER_MESSAGE_RECEIVED") {
       throbPrompt(session);
       return;
@@ -546,10 +552,16 @@ async function handleInfoCommand(
   session: CliSession,
   args: string[],
 ): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: info <resultNo>");
+  if (args.length !== 2) throw new Error("usage: info <resultNo|jobId>");
+  if (/^d[1-9]\d*$/i.test(args[1])) {
+    printDownloadInfo(session.node, args[1].toLowerCase(), (msg) =>
+      log(session, msg),
+    );
+    return true;
+  }
   const resultNo = Number(args[1]);
   if (!Number.isInteger(resultNo) || resultNo < 1)
-    throw new Error("usage: info <resultNo>");
+    throw new Error("usage: info <resultNo|jobId>");
   printResultInfo(session.node, resultNo, (msg) => log(session, msg));
   return true;
 }
@@ -582,9 +594,14 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
   monitor: async (session, args) => {
-    if (args.length !== 1) throw new Error("usage: monitor");
-    session.monitorEnabled = !session.monitorEnabled;
-    log(session, `monitor ${session.monitorEnabled ? "on" : "off"}`);
+    session.monitorMode = selectMonitorMode(
+      args.slice(1),
+      session.monitorMode,
+    );
+    log(
+      session,
+      `monitor ${session.monitorMode === "all" ? "on" : session.monitorMode}`,
+    );
     return true;
   },
   status: async (session) => {

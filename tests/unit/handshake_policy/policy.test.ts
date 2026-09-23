@@ -21,7 +21,7 @@ function localPolicy(
   patch: Partial<LocalHandshakePolicy> = {},
 ): LocalHandshakePolicy {
   return {
-    userAgent: "GnutellaBun/1.0.0",
+    userAgent: "Gnutonium/1.3.0",
     advertisedHost: "7.7.7.7",
     advertisedPort: 7777,
     maxTtl: 7,
@@ -84,7 +84,7 @@ describe("handshake policy", () => {
 
   test("builds leaf and ultrapeer local headers from structural state", () => {
     expect(buildBaseHandshakeHeaders(localPolicy())).toMatchObject({
-      "user-agent": "GnutellaBun/1.0.0",
+      "user-agent": "Gnutonium/1.3.0",
       "listen-ip": "7.7.7.7:7777",
       "x-max-ttl": "7",
       "x-ultrapeer": "False",

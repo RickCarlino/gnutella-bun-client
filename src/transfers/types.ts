@@ -36,7 +36,15 @@ export type HttpDownloadEndDecision =
   | { kind: "complete" }
   | { kind: "incomplete"; message: string };
 
+export type HttpDownloadRange = {
+  start: number;
+  end: number;
+  total?: number;
+};
+
 export type HttpDownloadResult = {
+  range?: HttpDownloadRange;
+  connectionClose?: true;
   destPath: string;
   bytes: number;
   label: string;
@@ -47,6 +55,7 @@ type TransferProgress = {
 };
 
 export type TransferOptions = {
+  expectedSize?: number;
   signal?: AbortSignal;
   onProgress?: (progress: TransferProgress) => void;
 };
