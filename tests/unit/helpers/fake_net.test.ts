@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { once } from "node:events";
 import net from "node:net";
-
 import { withFakeNet } from "../../helpers/fake_net";
 
 describe("fake net helper", () => {

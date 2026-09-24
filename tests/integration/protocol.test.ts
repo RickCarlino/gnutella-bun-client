@@ -3,16 +3,11 @@ import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-
-import {
-  defaultDoc,
-  GnutellaServent,
-  loadDoc,
-  writeDoc,
-} from "../../src/protocol";
-import { withFakeNet } from "../helpers/fake_net";
+import { defaultDoc, loadDoc, writeDoc } from "../../src/protocol";
 import { sleep } from "../../src/shared";
 import type { GnutellaEvent, RuntimeConfig } from "../../src/types";
+import { withFakeNet } from "../helpers/fake_net";
+import { TestServent as GnutellaServent } from "../helpers/servent";
 
 async function withTempDir<T>(
   fn: (dir: string) => Promise<T>,
@@ -270,9 +265,9 @@ async function withMesh<T>(fn: (mesh: Mesh) => Promise<T>): Promise<T> {
 
       await waitFor(
         () =>
-          A.node.peerCount() === 1 &&
-          B.node.peerCount() === 2 &&
-          C.node.peerCount() === 1,
+          A.node.connections.peerCount() === 1 &&
+          B.node.connections.peerCount() === 2 &&
+          C.node.connections.peerCount() === 1,
         "A-B-C 0.6 mesh to come online",
       );
 
@@ -322,7 +317,7 @@ describe("Integration suite (0.6)", () => {
         try {
           await b.node.start();
           await a.node.start();
-          expect(a.node.peerCount()).toBe(0);
+          expect(a.node.connections.peerCount()).toBe(0);
 
           await expect(
             a.node.connectToPeer(`127.0.0.1:${bPort}`),
@@ -332,7 +327,9 @@ describe("Integration suite (0.6)", () => {
           });
 
           await waitFor(
-            () => a.node.peerCount() === 1 && b.node.peerCount() === 1,
+            () =>
+              a.node.connections.peerCount() === 1 &&
+              b.node.connections.peerCount() === 1,
             "runtime 0.6 peer connection to come online",
           );
 
@@ -379,11 +376,11 @@ describe("Integration suite (0.6)", () => {
             knownPeers: A.node.getKnownPeers(),
             bKnownPeers: B.node.getKnownPeers(),
             cKnownPeers: C.node.getKnownPeers(),
-            aSeenPong: A.node.seen.has(`1:${pingId}`),
-            bPingRoute: B.node.pingRoutes.get(pingId),
-            bSeenPong: B.node.seen.has(`1:${pingId}`),
-            cSeenPing: C.node.seen.has(`0:${pingId}`),
-            cSeenPong: C.node.seen.has(`1:${pingId}`),
+            aSeenPong: A.node.router.seen.has(`1:${pingId}`),
+            bPingRoute: B.node.router.pingRoutes.get(pingId),
+            bSeenPong: B.node.router.seen.has(`1:${pingId}`),
+            cSeenPing: C.node.router.seen.has(`0:${pingId}`),
+            cSeenPong: C.node.router.seen.has(`1:${pingId}`),
             aPeers: A.node.getPeers(),
             bPeers: B.node.getPeers(),
             cPeers: C.node.getPeers(),
@@ -499,7 +496,7 @@ describe("Integration suite (0.6)", () => {
         `GET /get/${resumeShare!.index}/${resumeShare!.name}/ HTTP/1.0\r\nConnection: close\r\nRange: bytes=7-\r\n\r\n`,
       );
       expect(ranged).toContain("HTTP/1.0 206 Partial Content\r\n");
-      expect(ranged).toContain("Server: Gnutonium/1.3.0\r\n");
+      expect(ranged).toContain("Server: Gnutonium/2.0.0\r\n");
       expect(ranged).toContain("Content-Length: 6\r\n");
       expect(ranged).toContain("Content-Range: bytes 7-12/13\r\n");
       expect(ranged.endsWith("from-b")).toBe(true);
@@ -694,10 +691,10 @@ describe("Integration suite (0.6)", () => {
 
           await waitFor(
             () =>
-              leafA.node.peerCount() === 1 &&
-              leafC.node.peerCount() === 1 &&
-              ultra.node.connectedLeafCount() === 2 &&
-              ultra.node.connectedMeshPeerCount() === 0,
+              leafA.node.connections.peerCount() === 1 &&
+              leafC.node.connections.peerCount() === 1 &&
+              ultra.node.connections.connectedLeafCount() === 2 &&
+              ultra.node.connections.connectedMeshPeerCount() === 0,
             "leaf/ultrapeer topology to come online",
           );
 
@@ -718,7 +715,7 @@ describe("Integration suite (0.6)", () => {
                 ultraPeers: ultra.node.getPeers(),
                 cPeers: leafC.node.getPeers(),
                 aResults: leafA.node.getResults(),
-                ultraRoutes: [...ultra.node.queryRoutes.entries()],
+                ultraRoutes: [...ultra.node.router.queryRoutes.entries()],
               }),
           );
 

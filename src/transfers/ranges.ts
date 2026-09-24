@@ -41,6 +41,7 @@ function parseByteRangeExplicit(
   return { start, end, partial: size > 0 && (start > 0 || end < last) };
 }
 
+/** Parse a single HTTP byte range for a file. */
 export function parseByteRange(
   rangeHeader: string | undefined,
   size: number,

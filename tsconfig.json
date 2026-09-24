@@ -15,7 +15,8 @@
     "bin/**/*.ts",
     "src/**/*.ts",
     "src/**/*.d.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "scripts/**/*.ts"
   ],
   "exclude": ["dist", "node_modules"]
 }

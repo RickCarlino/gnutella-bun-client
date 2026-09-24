@@ -1,6 +1,5 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-
 import { ensureDir, fileExists } from "../shared";
 import type {
   DownloadJob,
@@ -255,6 +254,7 @@ function normalizeDoc(value: unknown): DownloadStoreDoc {
   };
 }
 
+/** Load normalized jobs or return an empty store. */
 export async function readDownloadStore(
   filePath: string,
 ): Promise<DownloadStoreDoc> {
@@ -264,6 +264,7 @@ export async function readDownloadStore(
   return normalizeDoc(JSON.parse(raw) as unknown);
 }
 
+/** Save normalized download jobs by atomic replacement. */
 export async function writeDownloadStore(
   filePath: string,
   doc: DownloadStoreDoc,

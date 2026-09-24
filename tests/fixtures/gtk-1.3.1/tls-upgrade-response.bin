@@ -1,0 +1,25 @@
+GNUTELLA/0.6 200 OK
+User-Agent: gtk-gnutella/1.3.1 (2026-03-09; GTK2; Linux x86_64)
+Pong-Caching: 0.1
+Bye-Packet: 0.1
+GGEP: 0.5
+GUID: 06da2103d65876e0ef2fc0105f86a142
+Vendor-Message: 0.2
+Remote-IP: 10.44.0.2
+X-Ultrapeer: True
+X-Requeries: False
+Upgrade: TLS/1.0
+Connection: Upgrade
+Accept-Encoding: deflate
+Content-Encoding: deflate
+X-Ultrapeer-Needed: True
+X-Query-Routing: 0.2
+X-Ultrapeer-Query-Routing: 0.1
+X-Degree: 46
+X-Max-TTL: 4
+X-Dynamic-Querying: 0.1
+X-Ext-Probes: 0.1
+X-Guess: 0.2
+X-Live-Since: Wed, 23 Sep 2026 19:34:33 -0500
+X-Features: tls/1.0, browse/1.0, sflag/0.1, HSEP/0.2
+

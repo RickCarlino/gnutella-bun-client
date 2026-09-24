@@ -1,12 +1,11 @@
 import type { NetConnectOpts, Server, Socket } from "node:net";
-
 import type {
   ConnectBootstrapOptions,
   ConnectBootstrapResult,
   ReportSelfOptions,
   ReportSelfResult,
-} from "./gwebcache/types";
-import type { RemoteQrpState as StandaloneRemoteQrpState } from "./query_routing/qrp";
+} from "./discovery/gwebcache/types";
+import type { RemoteQrpState as StandaloneRemoteQrpState } from "./routing/qrp";
 
 type EventBase<T extends string> = { type: T; at: string };
 
@@ -494,3 +493,10 @@ export type UnblockIpResult = {
   ip: string;
   status: "unblocked" | "not-blocked";
 };
+
+export type OwnerArguments<T extends unknown[]> = T extends [
+  unknown,
+  ...infer R,
+]
+  ? R
+  : never;

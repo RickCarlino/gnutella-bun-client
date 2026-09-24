@@ -299,6 +299,7 @@ class FakeNet {
   }
 }
 
+/** Run a test with fake sockets and restore network functions. */
 export async function withFakeNet<T>(fn: () => Promise<T>): Promise<T> {
   const fake = new FakeNet();
   const original = {

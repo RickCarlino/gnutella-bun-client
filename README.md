@@ -41,7 +41,7 @@ After downloading a Gnutonium build, run the executable directly:
 
 ## Install From npm
 
-Gnutonium requires Bun, including when installed through npm.
+Gnutonium requires Bun 1.4.2 or newer for inbound TLS upgrades, including when installed through npm.
 
 ```bash
 npm install -g gnutonium
@@ -80,7 +80,7 @@ The default config filename remains `gnutella.json` so existing settings and sav
 
 - [Quickstart](QUICKSTART.md): get the CLI working in a few minutes
 - [CLI Guide](CLI.md): full command and config reference
-- [Developer Guide](DEVELOPER.md): embed Gnutonium in your own TypeScript app
+- [Developer Guide](DEVELOPER.md): embed Gnutonium and follow the source reading guide
 
 ## License
 

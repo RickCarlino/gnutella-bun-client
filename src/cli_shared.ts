@@ -1,7 +1,7 @@
+import type { DownloadJob } from "./downloads";
 import { errMsg } from "./shared";
 import type { CliNode, ParsedCli } from "./types";
-import { buildMagnetUri } from "./protocol/magnet";
-import type { DownloadJob } from "./downloads";
+import { buildMagnetUri } from "./wire/magnet";
 
 const SIZE_FORMAT = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
@@ -45,6 +45,7 @@ function formatResultSize(bytes: number): string {
   return `${size.value.padStart(SIZE_VALUE_WIDTH, " ")} ${size.unit.padEnd(SIZE_UNIT_WIDTH, " ")}`;
 }
 
+/** Count results included by the display limit. */
 export function displayResultCount(count: number): number {
   const safeCount =
     Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
@@ -140,6 +141,7 @@ function findResult(node: CliNode, resultNo: number): ResultInfo {
   return result;
 }
 
+/** Print the node's current status summary. */
 export function printStatus(
   node: CliNode,
   log: (msg: string) => void,
@@ -150,6 +152,7 @@ export function printStatus(
   );
 }
 
+/** Print connected peers and their capabilities. */
 export function printPeers(
   node: CliNode,
   log: (msg: string) => void,
@@ -230,6 +233,7 @@ export function printPeers(
   );
 }
 
+/** Print the local shared-file listing. */
 export function printShares(
   node: CliNode,
   log: (msg: string) => void,
@@ -243,6 +247,7 @@ export function printShares(
     log(`#${f.index} ${f.size}B ${JSON.stringify(f.rel)}`);
 }
 
+/** Print numbered search results. */
 export function printResults(
   node: CliNode,
   log: (msg: string) => void,
@@ -303,6 +308,7 @@ function downloadProgress(job: DownloadJob): string {
   return `${percent}%`;
 }
 
+/** Print download jobs and their progress. */
 export function printDownloads(
   node: DownloadCliNode,
   log: (msg: string) => void,
@@ -360,6 +366,7 @@ export function printDownloads(
   );
 }
 
+/** Print details for a selected search result. */
 export function printResultInfo(
   node: CliNode,
   resultNo: number,
@@ -369,6 +376,7 @@ export function printResultInfo(
   log(formatResultInfoLines(result).join("\n"));
 }
 
+/** Print details for a selected download job. */
 export function printDownloadInfo(
   node: DownloadCliNode,
   jobId: string,
@@ -409,6 +417,7 @@ export function printDownloadInfo(
   log(lines.join("\n"));
 }
 
+/** Print a magnet link for a selected result. */
 export function printResultMagnet(
   node: CliNode,
   resultNo: number,
@@ -417,6 +426,7 @@ export function printResultMagnet(
   log(resultMagnetUri(findResult(node, resultNo)));
 }
 
+/** Parse CLI options, commands, and defaults. */
 export function parseCli(
   argv: string[],
   defaultConfig: string,
@@ -433,6 +443,7 @@ export function parseCli(
   return { config, exec, command };
 }
 
+/** Execute scripted CLI commands in order. */
 export function runExecCommands(
   execCmds: string[],
   log: (msg: string) => void,

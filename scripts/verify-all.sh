@@ -13,6 +13,7 @@ run_step() {
 
 cd "$REPO_ROOT"
 
+run_step "Import organization" bun run imports:check
 run_step "Type checker" bun run typecheck
 run_step "jscpd" bun run dupcheck
 run_step "ESLint" bun run lint

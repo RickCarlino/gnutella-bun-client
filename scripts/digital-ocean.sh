@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-# I use this file for load testing ultra peers on tiny digital ocean droplets.
-# It may be useful for provisioning Ubuntu Ultrapeers after a fresh clone of the repo.
+# Provision an Ubuntu ultrapeer with synthetic shares for load testing.
 
 set -euo pipefail
 

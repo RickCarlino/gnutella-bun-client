@@ -8,28 +8,34 @@ export {
   normalizeIpv4,
   normalizePeer,
   parsePeer,
-} from "./peer_address";
+} from "./discovery/addresses";
 
+/** Return the current time as an ISO timestamp. */
 export function ts(): string {
   return new Date().toISOString();
 }
 
+/** Extract a message from an unknown error value. */
 export function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** Convert Latin-1 strings to bytes, preserving buffers. */
 export function toBuffer(chunk: string | Buffer): Buffer {
   return typeof chunk === "string" ? Buffer.from(chunk, "latin1") : chunk;
 }
 
+/** Wait for the requested number of milliseconds. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Remove duplicates while preserving encounter order. */
 export function unique<T>(xs: T[]): T[] {
   return [...new Set(xs)];
 }
 
+/** Check whether a path is accessible. */
 export async function fileExists(p: string): Promise<boolean> {
   try {
     await fsp.access(p);
@@ -39,6 +45,7 @@ export async function fileExists(p: string): Promise<boolean> {
   }
 }
 
+/** Create a directory and any missing parents. */
 export async function ensureDir(p: string): Promise<void> {
   try {
     await fsp.mkdir(p, { recursive: true });
@@ -63,6 +70,7 @@ async function* walkFilesRecursive(
   }
 }
 
+/** Yield file paths recursively beneath a directory. */
 export async function* walkFilesIter(
   root: string,
 ): AsyncGenerator<string, void, void> {
@@ -70,6 +78,7 @@ export async function* walkFilesIter(
   yield* walkFilesRecursive(root);
 }
 
+/** Encode an IPv4 address in network byte order. */
 export function ipToBytesBE(ip: string): Buffer {
   const parts = ip.split(".").map((x) => Number(x));
   if (
@@ -81,22 +90,26 @@ export function ipToBytesBE(ip: string): Buffer {
   return Buffer.from(parts);
 }
 
+/** Encode an IPv4 address in little-endian order. */
 export function ipToBytesLE(ip: string): Buffer {
   return Buffer.from([...ipToBytesBE(ip)].reverse());
 }
 
+/** Decode four network-order bytes as IPv4. */
 export function bytesToIpBE(buf: Buffer): string {
   if (buf.length !== 4)
     throw new Error(`expected 4 bytes for IPv4, got ${buf.length}`);
   return `${buf[0]}.${buf[1]}.${buf[2]}.${buf[3]}`;
 }
 
+/** Decode four little-endian bytes as IPv4. */
 export function bytesToIpLE(buf: Buffer): string {
   if (buf.length !== 4)
     throw new Error(`expected 4 bytes for IPv4, got ${buf.length}`);
   return `${buf[3]}.${buf[2]}.${buf[1]}.${buf[0]}`;
 }
 
+/** Replace path separators and unsafe dot-only names. */
 export function safeFileName(name: string): string {
   return name.replace(/[\\/\0]/g, "_").replace(/^\.+$/, "_");
 }
@@ -154,6 +167,7 @@ function consumeArgWhitespace(state: SplitArgsState, ch: string): boolean {
   return true;
 }
 
+/** Split CLI arguments with quotes and backslash escapes. */
 export function splitArgs(line: string): string[] {
   const state: SplitArgsState = {
     out: [],

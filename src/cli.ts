@@ -1,13 +1,11 @@
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
-
 import {
-  CLI_SHUTDOWN_TIMEOUT_MS,
-  CLI_HELP_LINES,
-  PROMPT_THROBBER_FRAMES,
-  PROMPT_THROBBER_INTERVAL_MS,
-} from "./const";
+  monitorAllowsEvent,
+  selectMonitorMode,
+  type MonitorMode,
+} from "./cli_monitor";
 import {
   displayResultCount,
   errMsg,
@@ -22,14 +20,15 @@ import {
   printStatus,
   runExecCommands,
 } from "./cli_shared";
+import {
+  CLI_HELP_LINES,
+  CLI_SHUTDOWN_TIMEOUT_MS,
+  PROMPT_THROBBER_FRAMES,
+  PROMPT_THROBBER_INTERVAL_MS,
+} from "./const";
 import { GnutellaServent, loadDoc, writeDoc } from "./protocol";
 import { sleep, splitArgs } from "./shared";
 import type { ConnectPeerResult, GnutellaEvent } from "./types";
-import {
-  monitorAllowsEvent,
-  selectMonitorMode,
-  type MonitorMode,
-} from "./cli_monitor";
 
 type MonitorLogEntry = {
   line: string;
@@ -733,6 +732,7 @@ function startRepl(
   return rl;
 }
 
+/** Run CLI initialization, scripted commands, or interactive mode. */
 export async function main(argv = process.argv.slice(2)) {
   const cli = parseCli(argv, "gnutella.json");
   if (cli.command === "init") {

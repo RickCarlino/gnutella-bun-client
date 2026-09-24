@@ -4,6 +4,8 @@
 
 The public CLI entrypoint is [`bin/gnutonium.ts`](bin/gnutonium.ts). The npm package is named `gnutonium`, and the installed CLI command is `gnutonium`. Runtime configuration lives in `gnutella.json`; use `gnutella.json.example` as the template for new setups. The public library facade lives in [`src/protocol.ts`](src/protocol.ts), shared literal constants live in [`src/const.ts`](src/const.ts), shared simple type declarations live in [`src/types.ts`](src/types.ts), and shared helpers live in [`src/shared.ts`](src/shared.ts) and [`src/cli_shared.ts`](src/cli_shared.ts). Build automation is in `scripts/build-all-targets.sh`. Compiled artifacts are written to `dist/` and should not be committed.
 
+Application composition lives in [`src/servent.ts`](src/servent.ts). Source folders follow ownership: `connections/`, `routing/`, `search/`, `shares/`, `transfers/`, `downloads/`, `discovery/`, and `config/`. Wire formats live in `wire/`; shared socket lifecycle helpers live in `transport/`. Unit tests mirror these folders, with cross-owner regressions under `tests/unit/servent/`. See [DEVELOPER.md](DEVELOPER.md#reading-the-protocol-implementation) for the reading order.
+
 Keep module ownership tight. Put protocol-specific helpers with the protocol code, GWebCache-specific helpers with the GWebCache code, and reserve `src/shared.ts` for genuinely generic helpers. Avoid adding unrelated responsibilities to the same file just because it is already large or already imported widely.
 
 ## Build, Test, and Development Commands
@@ -14,7 +16,9 @@ Use Bun directly from the repo root:
 - `bun run bin/gnutonium.ts run --config gnutella.json` starts the interactive client.
 - `bun run bin/gnutonium.ts run --config gnutella.json --exec 'query hello' --exec 'quit'` runs scripted checks.
 - `npm pack --dry-run` checks the npm publish payload without publishing.
-- `bun run verify` runs the required post-change verification sequence: type checker, ESLint, ts-unused-exports, unit tests, integration tests, Prettier, and the multi-target build.
+- `bun run imports:organize` consolidates imports at the top of every project TypeScript file, then runs TypeScript Organize Imports and Prettier. `bun run fix` includes this step.
+- `bun run imports:check` checks the same organization without writing files.
+- `bun run verify` runs the required post-change verification sequence: import organization, type checker, ESLint, ts-unused-exports, unit tests, integration tests, Prettier, and the multi-target build.
 - `./scripts/build-all-targets.sh` compiles standalone binaries into `dist/`.
 
 ## Coding Style & Naming Conventions

@@ -1,0 +1,521 @@
+{
+  "recordedAt": "2026-09-24",
+  "gnutoniumVersion": "2.0.0",
+  "bunVersion": "1.4.2",
+  "gtkRevision": "3ce50bf0dd25e88e0d470eda61a0283a23ed49c6",
+  "gtkBinarySha256": "828506d493c49d13759ae3a5606cc7a192e26d8460e365a25ce93a0cef5ff7d7",
+  "gtkBuild": "user-interface=GTK2\nbindir=/usr/local/bin\ndatadir=/usr/local/share/gtk-gnutella\nlibdir=/usr/local/lib/gtk-gnutella\nlocaledir=\nnls=disabled\ndbus=disabled\ngnutls=enabled\nsocker=disabled\nipv6=enabled\nuse_my_malloc=yes\nlargefile-support=enabled\n",
+  "network": "Isolated user/network namespaces, loopback only, synthetic files",
+  "profiles": [
+    {
+      "gtkRole": "leaf",
+      "tls": false,
+      "compression": false,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-VM1tZ7/evidence.json",
+      "evidenceSha256": "d597f7e6057ed655951c345a3c1826caccf22b54aea4dc584887404ced94b60b"
+    },
+    {
+      "gtkRole": "leaf",
+      "tls": false,
+      "compression": true,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-WbgwSj/evidence.json",
+      "evidenceSha256": "ebc096f36bc779b2893df8be3ddc57af84d3a84e956442b6a6e5c43e06542254"
+    },
+    {
+      "gtkRole": "leaf",
+      "tls": true,
+      "compression": false,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-Vw3YdX/evidence.json",
+      "evidenceSha256": "63534fcf71884e2f05ebb46f9c7a68fda2fbe627e81ee57b6166d9e92cbcf736"
+    },
+    {
+      "gtkRole": "leaf",
+      "tls": true,
+      "compression": true,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-PjzW3P/evidence.json",
+      "evidenceSha256": "240d5714803806ff37815f018b8195d6590b9cdd321898f59362fbed007a57ac"
+    },
+    {
+      "gtkRole": "ultrapeer",
+      "tls": false,
+      "compression": false,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-K2mOjA/evidence.json",
+      "evidenceSha256": "9f93abb9a58fbcb865f8a51fde835861ec289064ae0faf9af043dfeba75ad22c"
+    },
+    {
+      "gtkRole": "ultrapeer",
+      "tls": false,
+      "compression": true,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-L7euxM/evidence.json",
+      "evidenceSha256": "51a792bba96894eb7821767bccb46fc6a1963ce19485c70f0439a9e9a3a25770"
+    },
+    {
+      "gtkRole": "ultrapeer",
+      "tls": true,
+      "compression": false,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-V3mDjy/evidence.json",
+      "evidenceSha256": "f880591f39564d543be0be49234c43e309ad46166e45949dd38633a453c9dcfa"
+    },
+    {
+      "gtkRole": "ultrapeer",
+      "tls": true,
+      "compression": true,
+      "passed": true,
+      "scenarios": [
+        {
+          "name": "connection and browse",
+          "passed": true
+        },
+        {
+          "name": "download from GTK",
+          "passed": true
+        },
+        {
+          "name": "resume partial download from GTK",
+          "passed": true
+        },
+        {
+          "name": "push download from GTK",
+          "passed": true
+        },
+        {
+          "name": "search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "hash search GTK shares",
+          "passed": true
+        },
+        {
+          "name": "GTK-originated search",
+          "passed": true
+        },
+        {
+          "name": "GTK accepts search results",
+          "passed": true
+        },
+        {
+          "name": "push upload to GTK",
+          "passed": true
+        },
+        {
+          "name": "download to GTK",
+          "passed": true
+        }
+      ],
+      "evidenceFile": "/tmp/gnutonium-interop-eKAvt9/evidence.json",
+      "evidenceSha256": "26e49196716d97352f0110e29a4339dcff46aeb9a052496daadb9e894e1b22dd"
+    }
+  ],
+  "layoutVerification": {
+    "recordedAt": "2026-09-24",
+    "emittedImplementationStatementsPreserved": 752,
+    "runtimeExportsPreserved": true,
+    "unitTestsPassed": 219,
+    "integrationTestsPassed": 16,
+    "standaloneBuildsPassed": 11,
+    "profiles": [
+      {
+        "gtkRole": "leaf",
+        "tls": true,
+        "compression": true,
+        "passed": true,
+        "scenarios": [
+          {
+            "name": "connection and browse",
+            "passed": true
+          },
+          {
+            "name": "download from GTK",
+            "passed": true
+          },
+          {
+            "name": "resume partial download from GTK",
+            "passed": true
+          },
+          {
+            "name": "push download from GTK",
+            "passed": true
+          },
+          {
+            "name": "search GTK shares",
+            "passed": true
+          },
+          {
+            "name": "hash search GTK shares",
+            "passed": true
+          },
+          {
+            "name": "GTK-originated search",
+            "passed": true
+          },
+          {
+            "name": "GTK accepts search results",
+            "passed": true
+          },
+          {
+            "name": "push upload to GTK",
+            "passed": true
+          },
+          {
+            "name": "download to GTK",
+            "passed": true
+          }
+        ],
+        "evidenceFile": "/tmp/gnutonium-interop-G0AtB6/evidence.json",
+        "evidenceSha256": "79c73469518415f32fbaf5bd0bc5c5b13060414a958b44631fc25ece0589c63f"
+      },
+      {
+        "gtkRole": "ultrapeer",
+        "tls": true,
+        "compression": true,
+        "passed": true,
+        "scenarios": [
+          {
+            "name": "connection and browse",
+            "passed": true
+          },
+          {
+            "name": "download from GTK",
+            "passed": true
+          },
+          {
+            "name": "resume partial download from GTK",
+            "passed": true
+          },
+          {
+            "name": "push download from GTK",
+            "passed": true
+          },
+          {
+            "name": "search GTK shares",
+            "passed": true
+          },
+          {
+            "name": "hash search GTK shares",
+            "passed": true
+          },
+          {
+            "name": "GTK-originated search",
+            "passed": true
+          },
+          {
+            "name": "GTK accepts search results",
+            "passed": true
+          },
+          {
+            "name": "push upload to GTK",
+            "passed": true
+          },
+          {
+            "name": "download to GTK",
+            "passed": true
+          }
+        ],
+        "evidenceFile": "/tmp/gnutonium-interop-a5Szrb/evidence.json",
+        "evidenceSha256": "125c2db963375496997ee568a9f9b2c5c3ff13a233340d3cbe93faca4fc41aa2"
+      }
+    ]
+  }
+}

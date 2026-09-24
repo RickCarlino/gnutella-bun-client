@@ -6,6 +6,7 @@ import type {
   HttpDownloadResult,
 } from "./types";
 
+/** Describe a completed transfer for download history. */
 export function buildDownloadRecord(
   hit: SearchHit,
   destPath: string,
@@ -23,6 +24,7 @@ export function buildDownloadRecord(
   };
 }
 
+/** Check whether the expected HTTP body arrived. */
 export function httpDownloadEndDecision(
   progress: Pick<HttpDownloadProgress, "headerDone" | "remaining">,
   incompleteMessage: string,
@@ -32,6 +34,7 @@ export function httpDownloadEndDecision(
     : { kind: "incomplete", message: incompleteMessage };
 }
 
+/** Summarize downloaded bytes and connection reuse. */
 export function buildHttpDownloadResult(
   progress: Pick<HttpDownloadProgress, "finalStart" | "bodyBytes"> &
     Pick<HttpDownloadResult, "range" | "connectionClose">,

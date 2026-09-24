@@ -3,11 +3,11 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
-
-import type { GnutellaServent, SearchHit } from "../../src/protocol";
-import { sha1ToUrn } from "../../src/protocol/content_urn";
+import type { SearchHit } from "../../src/protocol";
+import { sha1ToUrn } from "../../src/wire/content_urn";
 import { withFakeNet } from "../helpers/fake_net";
-import { makeNode, withTempDir } from "../unit/protocol/node/helpers";
+import { makeNode, withTempDir } from "../helpers/protocol";
+import { TestServent as GnutellaServent } from "../helpers/servent";
 
 type Mode =
   | "keep-alive"
@@ -139,7 +139,7 @@ describe("partial download interoperability", () => {
           downloadRetryLimit: 1,
           downloadRetryBackoffSec: 0.01,
         });
-        node.lastResults = [hit];
+        node.search.results = [hit];
         await node.downloadResult(1);
         await node.downloadManager.start();
         for (
@@ -170,10 +170,11 @@ describe("partial download interoperability", () => {
             downloadIdleTimeoutMs: 30,
             downloadRetryBackoffSec: 60,
           });
-          node.lastResults = [hit];
+          node.search.results = [hit];
           let pushed = false;
-          node.sendPush = async () => {
+          node.transfers.sendPush = async () => {
             pushed = true;
+            throw new Error("unexpected push attempt");
           };
           const job = await node.downloadResult(1);
           await node.downloadManager.start();
@@ -234,7 +235,7 @@ describe("partial download interoperability", () => {
               downloadIdleTimeoutMs: 200,
             });
           }
-          node.lastResults = [hit];
+          node.search.results = [hit];
           const queued = await node.downloadResult(1);
           await node.downloadManager.start();
           expect(node.getDownloadJobs()[0]?.status).toBe("active");
@@ -274,14 +275,14 @@ describe("partial download interoperability", () => {
     await withPartialServer(
       "keep-alive",
       async ({ node, hit, requests, destPath }) => {
-        const socket = node.createConnection({
+        const socket = node.transfers.createConnection({
           host: hit.remoteHost,
           port: hit.remotePort,
         });
         await new Promise<void>((resolve) =>
           socket.once("connect", resolve),
         );
-        await node.downloadOverSocket(
+        await node.transfers.downloadOverSocket(
           socket,
           hit.fileIndex,
           hit.fileName,
@@ -299,7 +300,7 @@ describe("partial download interoperability", () => {
       async ({ node, hit, requests, destPath }) => {
         const controller = new AbortController();
         await expect(
-          node.directDownload(hit, destPath, {
+          node.transfers.directDownload(hit, destPath, {
             signal: controller.signal,
             onProgress: () => controller.abort(),
           }),
@@ -307,7 +308,7 @@ describe("partial download interoperability", () => {
         expect(await fs.readFile(destPath)).toEqual(
           CONTENT.subarray(0, 4),
         );
-        await node.directDownload(hit, destPath);
+        await node.transfers.directDownload(hit, destPath);
         expect(starts(requests)).toEqual([0, 4, 8]);
         expect(await fs.readFile(destPath)).toEqual(CONTENT);
       },

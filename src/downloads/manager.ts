@@ -1,6 +1,5 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-
 import { DATA_DOWNLOADS_STATE_FILENAME } from "../const";
 import {
   ensureDir,
@@ -11,13 +10,12 @@ import {
   unique,
 } from "../shared";
 import { downloadPathCandidate } from "../transfers";
-import { buildDownloadRecord } from "../transfers/results";
 import { DownloadTimeoutError } from "../transfers/errors";
+import { buildDownloadRecord } from "../transfers/results";
 import type { TransferOptions } from "../transfers/types";
-import type { SearchHit } from "../types";
-import type { GnutellaServent } from "../protocol/node";
+import type { DownloadRecord, SearchHit } from "../types";
+import type { DownloadDependencies } from "./dependencies";
 import { readDownloadStore, writeDownloadStore } from "./store";
-import { verifySha1Urn } from "./verification";
 import type {
   DownloadJob,
   DownloadSource,
@@ -25,6 +23,7 @@ import type {
   DownloadStoreDoc,
   DownloadTransferMode,
 } from "./types";
+import { verifySha1Urn } from "./verification";
 
 type ActiveDownload = {
   controller: AbortController;
@@ -137,6 +136,7 @@ async function moveFile(src: string, dest: string): Promise<void> {
   }
 }
 
+/** Owns persisted jobs, retries, and transfer scheduling. */
 export class DownloadManager {
   private doc: DownloadStoreDoc = { version: 1, nextId: 1, jobs: [] };
   private loaded = false;
@@ -147,11 +147,25 @@ export class DownloadManager {
   private wakeTimer?: NodeJS.Timeout;
   private running = false;
 
-  constructor(private readonly node: GnutellaServent) {}
+  private readonly history: DownloadRecord[] = [];
+  private readonly store: NonNullable<DownloadDependencies["store"]>;
+
+  /** Attach the transfer, clock, and storage dependencies. */
+  constructor(private readonly deps: DownloadDependencies) {
+    this.store = deps.store ?? {
+      read: readDownloadStore,
+      write: writeDownloadStore,
+    };
+  }
+
+  /** Return a detached snapshot of completed transfers. */
+  getHistory(): DownloadRecord[] {
+    return structuredClone(this.history);
+  }
 
   private storePath(): string {
     return path.join(
-      this.node.config().dataDir,
+      this.deps.config().dataDir,
       DATA_DOWNLOADS_STATE_FILENAME,
     );
   }
@@ -160,7 +174,7 @@ export class DownloadManager {
     if (this.loaded) return;
     if (!this.loadPromise) {
       this.loadPromise = (async () => {
-        this.doc = await readDownloadStore(this.storePath());
+        this.doc = await this.store.read(this.storePath());
         await this.normalizeLoadedJobs();
         this.loaded = true;
       })();
@@ -189,17 +203,19 @@ export class DownloadManager {
   }
 
   private async save(): Promise<void> {
-    const write = () => writeDownloadStore(this.storePath(), this.doc);
+    const write = () => this.store.write(this.storePath(), this.doc);
     this.savePromise = this.savePromise.then(write, write);
     await this.savePromise;
   }
 
+  /** Load saved jobs and start scheduling transfers. */
   async start(): Promise<void> {
     await this.ensureLoaded();
     this.running = true;
     this.schedule();
   }
 
+  /** Abort active transfers and persist queued jobs. */
   async stop(): Promise<void> {
     await this.ensureLoaded();
     this.running = false;
@@ -216,24 +232,23 @@ export class DownloadManager {
     await this.save();
   }
 
+  /** Save the current download queue. */
   async persist(): Promise<void> {
     await this.ensureLoaded();
     await this.save();
   }
 
+  /** Return detached snapshots of download jobs. */
   getJobs(): DownloadJob[] {
     return this.doc.jobs.map((job) => cloneJob(job));
   }
 
-  async queueFromResultNo(
-    resultNo: number,
+  /** Create a job or add a source to an existing job. */
+  async queue(
+    hit: SearchHit,
     destOverride?: string,
   ): Promise<DownloadJob> {
     await this.ensureLoaded();
-    const hit = this.node
-      .getResults()
-      .find((candidate) => candidate.resultNo === resultNo);
-    if (!hit) throw new Error(`no such result ${resultNo}`);
     const job =
       this.findMergeTarget(hit) ||
       (await this.createJob(hit, destOverride));
@@ -244,7 +259,7 @@ export class DownloadManager {
     }
     job.updatedAt = ts();
     await this.save();
-    this.node.emitEvent({
+    this.deps.emit({
       type: "DOWNLOAD_QUEUED",
       at: ts(),
       jobId: job.id,
@@ -256,6 +271,7 @@ export class DownloadManager {
     return cloneJob(job);
   }
 
+  /** Pause a job and abort its active transfer. */
   async pause(jobId: string): Promise<DownloadJob> {
     await this.ensureLoaded();
     const job = this.requireJob(jobId);
@@ -266,7 +282,7 @@ export class DownloadManager {
       job.activeSourceId = undefined;
       this.active.get(job.id)?.controller.abort();
       await this.save();
-      this.node.emitEvent({
+      this.deps.emit({
         type: "DOWNLOAD_PAUSED",
         at: ts(),
         jobId: job.id,
@@ -276,6 +292,7 @@ export class DownloadManager {
     return cloneJob(job);
   }
 
+  /** Reset retry state and requeue an unfinished job. */
   async resume(jobId: string): Promise<DownloadJob> {
     await this.ensureLoaded();
     const job = this.requireJob(jobId);
@@ -294,7 +311,7 @@ export class DownloadManager {
     job.activeSourceId = undefined;
     job.updatedAt = ts();
     await this.save();
-    this.node.emitEvent({
+    this.deps.emit({
       type: "DOWNLOAD_RESUMED",
       at: ts(),
       jobId: job.id,
@@ -304,6 +321,7 @@ export class DownloadManager {
     return cloneJob(job);
   }
 
+  /** Forget a job and delete its incomplete file. */
   async remove(jobId: string): Promise<void> {
     await this.ensureLoaded();
     const job = this.requireJob(jobId);
@@ -314,7 +332,7 @@ export class DownloadManager {
     );
     await fsp.rm(job.incompletePath, { force: true });
     await this.save();
-    this.node.emitEvent({
+    this.deps.emit({
       type: "DOWNLOAD_REMOVED",
       at: ts(),
       jobId: job.id,
@@ -341,7 +359,7 @@ export class DownloadManager {
       destOverride && (await fileExists(destPath))
         ? destPath
         : path.join(
-            this.node.config().incompleteDownloadsDir,
+            this.deps.config().incompleteDownloadsDir,
             `${id}-${safeFileName(hit.fileName)}.part`,
           );
     const job: DownloadJob = {
@@ -375,7 +393,7 @@ export class DownloadManager {
 
   private async nextDefaultDestPath(fileName: string): Promise<string> {
     const basePath = path.resolve(
-      path.join(this.node.config().downloadsDir, safeFileName(fileName)),
+      path.join(this.deps.config().downloadsDir, safeFileName(fileName)),
     );
     let suffixNo = 1;
     for (;;) {
@@ -422,18 +440,18 @@ export class DownloadManager {
     return job.sources.find((source) => {
       if (
         source.failuresWithoutProgress >=
-        this.node.config().downloadRetryLimit
+        this.deps.config().downloadRetryLimit
       )
         return false;
       if (source.cooldownUntil && source.cooldownUntil > nowMs)
         return false;
       const hostCount = hostCounts.get(source.remoteHost) || 0;
-      return hostCount < this.node.config().downloadMaxActivePerHost;
+      return hostCount < this.deps.config().downloadMaxActivePerHost;
     });
   }
 
   private soonestCooldown(): number | undefined {
-    const nowMs = this.node.now();
+    const nowMs = this.deps.now();
     let soonest: number | undefined;
     for (const job of this.doc.jobs) {
       if (job.status !== "queued") continue;
@@ -451,7 +469,7 @@ export class DownloadManager {
 
   private cancelWake(): void {
     if (!this.wakeTimer) return;
-    this.node.cancelTimeout(this.wakeTimer);
+    this.deps.cancel(this.wakeTimer);
     this.wakeTimer = undefined;
   }
 
@@ -459,15 +477,15 @@ export class DownloadManager {
     if (this.wakeTimer) return;
     const soonest = this.soonestCooldown();
     if (soonest == null) return;
-    const delay = Math.max(1, soonest - this.node.now());
-    this.wakeTimer = this.node.scheduleOnce(delay, () => {
+    const delay = Math.max(1, soonest - this.deps.now());
+    this.wakeTimer = this.deps.schedule(delay, () => {
       this.wakeTimer = undefined;
       this.schedule();
     });
   }
 
   private canSchedule(): boolean {
-    return this.loaded && this.running && !this.node.stopped;
+    return this.loaded && this.running;
   }
 
   private scheduleJob(
@@ -489,9 +507,9 @@ export class DownloadManager {
     if (!this.canSchedule()) return;
     this.cancelWake();
     const hostCounts = this.activeHostCounts();
-    const nowMs = this.node.now();
+    const nowMs = this.deps.now();
     for (const job of this.doc.jobs) {
-      if (this.active.size >= this.node.config().downloadQueueSize) break;
+      if (this.active.size >= this.deps.config().downloadQueueSize) break;
       this.scheduleJob(job, hostCounts, nowMs);
     }
     this.scheduleWake();
@@ -509,7 +527,7 @@ export class DownloadManager {
     source.lastAttemptAt = job.updatedAt;
     source.lastError = undefined;
     void this.save();
-    this.node.emitEvent({
+    this.deps.emit({
       type: "DOWNLOAD_STARTED",
       at: ts(),
       jobId: job.id,
@@ -518,7 +536,7 @@ export class DownloadManager {
       remotePort: source.remotePort,
     });
     void this.runJob(job.id, source.id, controller).catch((error) => {
-      this.node.emitMaintenanceError("DOWNLOAD_MANAGER", error);
+      this.deps.onError(error);
     });
   }
 
@@ -570,9 +588,7 @@ export class DownloadManager {
 
   private shouldIgnoreTransferFailure(job: DownloadJob): boolean {
     return (
-      this.node.stopped ||
-      this.removing.has(job.id) ||
-      job.status === "paused"
+      !this.running || this.removing.has(job.id) || job.status === "paused"
     );
   }
 
@@ -590,11 +606,11 @@ export class DownloadManager {
       },
     };
     try {
-      await this.node.directDownload(hit, job.incompletePath, options);
+      await this.deps.transfers.direct(hit, job.incompletePath, options);
       return "direct";
     } catch (error) {
       if (signal.aborted) throw error;
-      this.node.emitEvent({
+      this.deps.emit({
         type: "DOWNLOAD_DIRECT_FAILED",
         at: ts(),
         resultNo: source.resultNo,
@@ -611,7 +627,7 @@ export class DownloadManager {
         throw error;
       }
       try {
-        await this.node.sendPush(hit, job.incompletePath, options);
+        await this.deps.transfers.push(hit, job.incompletePath, options);
         return "push";
       } catch (pushError) {
         if (signal.aborted) throw pushError;
@@ -632,14 +648,14 @@ export class DownloadManager {
     job.updatedAt = ts();
     await this.save();
     if (await this.rejectSizeMismatch(job, source)) return;
-    if (this.node.config().verifyDownloads && job.sha1Urn) {
+    if (this.deps.config().verifyDownloads && job.sha1Urn) {
       const ok = await verifySha1Urn(job.incompletePath, job.sha1Urn);
       if (!ok) {
         job.status = "verification_failed";
         job.error = "SHA1 verification failed";
         job.updatedAt = ts();
         await this.save();
-        this.node.emitEvent({
+        this.deps.emit({
           type: "DOWNLOAD_VERIFICATION_FAILED",
           at: ts(),
           jobId: job.id,
@@ -663,10 +679,10 @@ export class DownloadManager {
     job.updatedAt = job.completedAt;
     await this.save();
     const hit = hitFromSource(source);
-    this.node.downloads.push(
+    this.history.push(
       buildDownloadRecord(hit, finalPath, mode, job.completedAt),
     );
-    this.node.emitEvent({
+    this.deps.emit({
       type: "DOWNLOAD_SUCCEEDED",
       at: job.completedAt,
       mode,
@@ -686,7 +702,7 @@ export class DownloadManager {
     const actualBytes = (await fileSize(job.incompletePath)) ?? 0;
     job.bytesCompleted = actualBytes;
     if (actualBytes === job.fileSize) return false;
-    source.failuresWithoutProgress = this.node.config().downloadRetryLimit;
+    source.failuresWithoutProgress = this.deps.config().downloadRetryLimit;
     if (path.resolve(job.incompletePath) !== path.resolve(job.destPath)) {
       await fsp.rm(job.incompletePath, { force: true });
       job.bytesCompleted = 0;
@@ -718,7 +734,7 @@ export class DownloadManager {
     const message = errMsg(error);
     source.lastError = message;
     source.cooldownUntil =
-      this.node.now() + this.node.config().downloadRetryBackoffSec * 1000;
+      this.deps.now() + this.deps.config().downloadRetryBackoffSec * 1000;
     job.activeSourceId = undefined;
     job.bytesCompleted = (await fileSize(job.incompletePath)) ?? 0;
     if (startBytes !== undefined) {
@@ -730,14 +746,14 @@ export class DownloadManager {
     const canRetry = job.sources.some(
       (candidate) =>
         candidate.failuresWithoutProgress <
-        this.node.config().downloadRetryLimit,
+        this.deps.config().downloadRetryLimit,
     );
     job.status = canRetry ? "queued" : "failed";
     job.error = canRetry ? undefined : message;
     job.updatedAt = ts();
     await this.save();
     if (!canRetry) {
-      this.node.emitEvent({
+      this.deps.emit({
         type: "DOWNLOAD_FAILED",
         at: ts(),
         jobId: job.id,

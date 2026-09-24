@@ -2,6 +2,7 @@ import type { GnutellaEvent } from "./types";
 
 export type MonitorMode = "off" | "all" | "downloads";
 
+/** Choose the CLI monitor mode from command options. */
 export function selectMonitorMode(
   args: string[],
   current: MonitorMode,
@@ -21,6 +22,7 @@ export function selectMonitorMode(
   throw new Error("usage: monitor [on|off|all|downloads]");
 }
 
+/** Check whether the monitor should display an event. */
 export function monitorAllowsEvent(
   mode: MonitorMode,
   event: GnutellaEvent,

@@ -13,4 +13,5 @@ run_step() {
 
 cd "$REPO_ROOT"
 
+run_step "Organize imports" bun run imports:organize
 run_step "Prettier write" bun run format:write

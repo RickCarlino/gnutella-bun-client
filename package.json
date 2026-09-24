@@ -1,6 +1,6 @@
 {
   "name": "gnutonium",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "description": "Gnutonium is a small Gnutella client for Bun, usable as a CLI or TypeScript library.",
   "license": "GPL-3.0-only",
   "bin": {
@@ -12,7 +12,7 @@
     ".": "./src/protocol.ts",
     "./types": "./src/types.ts",
     "./gwebcache": "./src/gwebcache_client.ts",
-    "./query-routing": "./src/query_routing/index.ts"
+    "./query-routing": "./src/routing/index.ts"
   },
   "files": [
     "bin",
@@ -26,7 +26,7 @@
     "logo.png"
   ],
   "engines": {
-    "bun": ">=1.3.0"
+    "bun": ">=1.4.2"
   },
   "keywords": [
     "gnutella",
@@ -43,7 +43,7 @@
     "type": "git",
     "url": "git+https://github.com/RickCarlino/gnutella-bun-client.git"
   },
-  "packageManager": "bun@1.3.11",
+  "packageManager": "bun@1.4.2",
   "dependencies": {},
   "devDependencies": {
     "@babel/core": "^7.27.1",
@@ -62,13 +62,16 @@
     "dupcheck": "jscpd",
     "format:check": "prettier --check AGENTS.md README.md bin package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
     "format:write": "prettier --write AGENTS.md README.md bin package.json tsconfig.json gnutella.json.example src tests scripts --ignore-unknown",
-    "lint": "eslint bin src tests --ext .ts",
+    "lint": "eslint bin src tests scripts --ext .ts",
     "test": "bun test",
     "test:integration": "bun test tests/integration",
     "test:unit": "bun test tests/unit",
     "typecheck": "tsc --noEmit",
-    "unused-exports": "ts-unused-exports tsconfig.json \"--excludePathsFromReport=src/protocol.ts;src/query_routing/index.ts\" --exitWithCount",
+    "unused-exports": "ts-unused-exports tsconfig.json \"--excludePathsFromReport=src/protocol.ts;src/routing/index.ts\" --exitWithCount",
     "fix": "./scripts/fix-all.sh",
-    "verify": "./scripts/verify-all.sh"
+    "verify": "./scripts/verify-all.sh",
+    "test:interop": "./scripts/test-interop.sh",
+    "imports:organize": "bun run scripts/organize-imports.ts",
+    "imports:check": "bun run scripts/organize-imports.ts --check"
   }
 }

@@ -1,0 +1,19 @@
+{
+  "revision": "3ce50bf0dd25e88e0d470eda61a0283a23ed49c6",
+  "checksum": "828506d493c49d13759ae3a5606cc7a192e26d8460e365a25ce93a0cef5ff7d7",
+  "version": "gtk-gnutella/1.3.1 (2026-03-09; GTK2; Linux x86_64)\nGLib 2.86.0\nGtk+ 2.24.33\nGnuTLS 3.8.9\n",
+  "build": "user-interface=GTK2\nbindir=/usr/local/bin\ndatadir=/usr/local/share/gtk-gnutella\nlibdir=/usr/local/lib/gtk-gnutella\nlocaledir=\nnls=disabled\ndbus=disabled\ngnutls=enabled\nsocker=disabled\nipv6=enabled\nuse_my_malloc=yes\nlargefile-support=enabled\n",
+  "recordedAt": "2026-09-24T00:34:33Z",
+  "gnutoniumRevision": "5bbc0c1",
+  "network": "isolated namespace; synthetic 10.44.0.1 and 10.44.0.2",
+  "content": "synthetic gnutonium interoperability content\\n repeated 4096 times",
+  "normalization": "none; the TLS fixture ends at the HTTP-style header terminator",
+  "evidence": "GTK-generated TLS upgrade response and compressed/chunked browse response; full bidirectional acceptance did not pass",
+  "additionalFixtures": {
+    "inbound-connect.bin": {
+      "source": "/tmp/gnutonium-interop-R3lAsx/evidence.json",
+      "recordedAt": "2026-09-24T01:22:08Z",
+      "purpose": "GTK Node header advertises its listening endpoint; exact bytes through header terminator"
+    }
+  }
+}

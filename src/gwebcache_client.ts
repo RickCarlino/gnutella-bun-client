@@ -3,11 +3,11 @@ export {
   fetchBootstrapData,
   getMorePeers,
   reportSelfToGWebCaches,
-} from "./gwebcache/bootstrap";
+} from "./discovery/gwebcache/bootstrap";
 export {
   buildGWebCacheUrl,
   parseGWebCacheResponse,
   requestGWebCache,
-} from "./gwebcache/response";
-export { KNOWN_CACHES } from "./gwebcache/types";
-export type { GWebCacheBootstrapState } from "./gwebcache/types";
+} from "./discovery/gwebcache/response";
+export { KNOWN_CACHES } from "./discovery/gwebcache/types";
+export type { GWebCacheBootstrapState } from "./discovery/gwebcache/types";

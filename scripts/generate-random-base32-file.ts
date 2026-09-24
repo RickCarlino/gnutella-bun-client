@@ -3,8 +3,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-
-import { base32Encode } from "../src/protocol/content_urn";
+import { base32Encode } from "../src/wire/content_urn";
 
 type CliOptions = {
   outDir: string;
