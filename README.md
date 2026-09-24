@@ -6,7 +6,7 @@ Gnutonium is a small Bun-based Gnutella client you can run from the terminal or 
 
 Gnutonium is compatible with major clients like GTK-Gnutella, Phex, Shareaza and others.
 
-It allows you to:
+Features:
 
 - share files from a downloads folder
 - search the Gnutella network
@@ -15,9 +15,8 @@ It allows you to:
 
 It can be used in three ways:
 
-- as an interactive CLI
-- as a scripted CLI runner
-- as a library inside another app
+- as an interactive CLI or scriptable CLI runner
+- as a library inside another app that requires access to the Gnutella network
 
 ## Prebuilt Binaries
 
@@ -43,6 +42,8 @@ After downloading a Gnutonium build, run the executable directly:
 
 Gnutonium requires Bun 1.4.2 or newer for inbound TLS upgrades, including when installed through npm.
 
+**NOTE:** Gnutonium does not work on Node yet - raise an issue if this is a feature you want.
+
 ```bash
 npm install -g gnutonium
 gnutonium init --config gnutella.json
@@ -61,7 +62,7 @@ bun run bin/gnutonium.ts run --config gnutella.json
 
 ## Library Use
 
-Install the library with `npm install gnutonium` and run it with Bun. The npm package and CLI command are both named `gnutonium`. The public TypeScript import is:
+Install the library with `npm install gnutonium` and run it with Bun (not Node). The npm package and CLI command are both named `gnutonium`. The public TypeScript import is:
 
 ```ts
 import { GnutellaServent, loadDoc } from "gnutonium";
@@ -74,7 +75,7 @@ await node.start();
 node.sendQuery("hello world");
 ```
 
-The default config filename remains `gnutella.json` so existing settings and saved state continue to work. Gnutonium identifies itself on the network with vendor code `NIUM`.
+Gnutonium identifies itself on the network with vendor code `NIUM`.
 
 ## Guides
 
