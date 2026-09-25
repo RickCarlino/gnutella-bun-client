@@ -325,16 +325,17 @@ async function run() {
     );
     await connectClients(node, anchor, shell);
     await Bun.sleep(1000);
+    let browseId = "";
     await until("GTK shared catalog", async () => {
-      node.clearResults();
-      await node.browsePeer(node.getPeers()[0]!.key);
+      if (browseId) node.clearResults(browseId);
+      browseId = (await node.browsePeer(node.getPeers()[0]!.key)).id;
       return node
-        .getResults()
+        .getResults(browseId)
         .some((hit) => hit.fileName === "gtk-interop-sample.txt");
     });
     scenarios.push({ name: "connection and browse", passed: true });
     const browsed = node
-      .getResults()
+      .getResults(browseId)
       .find((hit) => hit.fileName === "gtk-interop-sample.txt")!;
     await scenario("download from GTK", async () => {
       const job = await node.downloadResult(browsed.resultNo);
@@ -366,7 +367,6 @@ async function run() {
       }
     });
     await scenario("search GTK shares", async () => {
-      node.clearResults();
       await until(
         "GTK routing table",
         () =>
@@ -376,19 +376,22 @@ async function run() {
           ),
         60000,
       );
-      node.sendQuery("gtk interop sample");
+      const search = node.sendQuery("gtk interop sample")!;
       await until("GTK search result", () =>
         node
-          .getResults()
+          .getResults(search.id)
           .some((hit) => hit.fileName === "gtk-interop-sample.txt"),
       );
     });
     await scenario("hash search GTK shares", async () => {
       assert.ok(browsed.sha1Urn, "GTK browse did not supply a SHA1 URN");
-      node.clearResults();
-      node.sendQuery(`gtk interop sample ${browsed.sha1Urn}`);
+      const search = node.sendQuery(
+        `gtk interop sample ${browsed.sha1Urn}`,
+      )!;
       await until("GTK hash search result", () =>
-        node.getResults().some((hit) => hit.sha1Urn === browsed.sha1Urn),
+        node
+          .getResults(search.id)
+          .some((hit) => hit.sha1Urn === browsed.sha1Urn),
       );
     });
     await scenario("GTK-originated search", async () => {

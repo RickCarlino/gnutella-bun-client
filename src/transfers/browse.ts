@@ -383,8 +383,8 @@ function ingestBrowseHostBody(
   transfers: TransferService,
   peer: Peer,
   body: Buffer,
+  browseDescriptorId: Buffer,
 ): number {
-  const browseDescriptorId = transfers.randomId16();
   const descriptorIdHex = browseDescriptorId.toString("hex");
   let added = 0;
   for (let offset = 0; offset < body.length; ) {
@@ -428,6 +428,7 @@ function ingestBrowseHostBody(
 export async function browsePeer(
   transfers: TransferService,
   targetSpec: string,
+  descriptorId: Buffer,
 ): Promise<number> {
   const target = resolveBrowseTarget(transfers, targetSpec);
   const socket = transfers.createConnection({
@@ -454,6 +455,7 @@ export async function browsePeer(
       transfers,
       target.peer,
       decodeBrowseHostBody(headers, body),
+      descriptorId,
     );
   } catch (error) {
     await responsePromise.catch(() => undefined);

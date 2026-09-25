@@ -42,13 +42,13 @@ test("ingests GTK's recorded compressed, chunked browse response", async () => {
     });
     try {
       const count = await node.browsePeer(`127.0.0.1:${address.port}`);
-      expect(count).toBe(1);
-      expect(node.getResults()[0]).toMatchObject({
+      expect(count.resultCount).toBe(1);
+      expect(node.getResults(count.id)[0]).toMatchObject({
         fileName: "gtk-interop-sample.txt",
         fileSize: 184320,
         vendorCode: "GTKG",
       });
-      expect(node.getResults()[0]?.sha1Urn).toMatch(/^urn:sha1:/);
+      expect(node.getResults(count.id)[0]?.sha1Urn).toMatch(/^urn:sha1:/);
     } finally {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));

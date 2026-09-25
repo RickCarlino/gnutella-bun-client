@@ -19,6 +19,13 @@ function makeNode(overrides: Partial<CliNode> = {}): CliNode {
   return {
     getPeers: () => [],
     getResults: () => [],
+    getResult: (resultNo) => {
+      const result = overrides
+        .getResults?.("query-id")
+        .find((hit) => hit.resultNo === resultNo);
+      if (!result) throw new Error(`no such result ${resultNo}`);
+      return result;
+    },
     getShares: () => [],
     getStatus: () => ({
       peers: 0,
@@ -70,7 +77,7 @@ describe("cli_shared", () => {
     printPeers(node, (msg) => logs.push(msg));
     printShares(makeNode(), (msg) => logs.push(msg));
     printShares(node, (msg) => logs.push(msg));
-    printResults(makeNode(), (msg) => logs.push(msg));
+    printResults(makeNode(), (msg) => logs.push(msg), "query-id");
 
     expect(logs).toEqual([
       "peers=2 shares=1 results=999 knownPeers=9",
@@ -156,7 +163,7 @@ describe("cli_shared", () => {
       }),
     });
 
-    printResults(node, (msg) => logs.push(msg));
+    printResults(node, (msg) => logs.push(msg), "query-id");
 
     expect(logs).toEqual([
       [

@@ -135,3 +135,15 @@ quit
 - No peers yet: give bootstrap a little time, or run `connect <ip:port>` if you already know a live peer.
 - No results yet: wait a few seconds after connecting, then try another query.
 - Want the full command list and config reference: read [CLI.md](CLI.md).
+
+## Keep Multiple Searches Open
+
+Run another `query` whenever you want to start a new search. Use:
+
+- `results` to see all searches under separate headings.
+- `results q1` to see only search `q1`.
+- `queries` to list search handles, result counts, and search terms.
+- `clear q1` to remove one search and its results.
+- `clear` to remove all searches and their results.
+
+Downloads keep running when you clear searches.

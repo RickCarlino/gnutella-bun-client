@@ -100,31 +100,48 @@ await node.connectToPeer("203.0.113.10:6346");
 
 ### Search
 
-```ts
-node.sendQuery("ambient techno");
-```
-
-Then read the result list:
+Keep the returned ID to read results from a particular search:
 
 ```ts
-const results = node.getResults();
+const music = node.sendQuery("ambient techno");
+const books = node.sendQuery("distributed systems");
+console.log(node.getSearches());
 ```
+
+Results may take a few seconds to arrive. Read them when needed:
+
+```ts
+if (music) console.log(node.getResults(music.id));
+if (books) console.log(node.getResults(books.id));
+```
+
+If no peers are connected, `sendQuery()` returns `undefined`. Connect to a
+peer and try again.
+
+### Clear Searches
+
+```ts
+if (music) node.clearResults(music.id); // Remove this search and its results.
+node.clearResults(); // Remove all searches and their results.
+```
+
+Downloads keep running when you clear searches.
 
 ### Browse A Peer
 
-Browse a connected peer by key:
+Browse a connected peer by key, then read its file listing:
 
 ```ts
-await node.browsePeer("p1");
+const listing = await node.browsePeer("p1");
+console.log(node.getResults(listing.id));
 ```
 
-Or browse directly by address:
+You can also browse an address directly:
 
 ```ts
-await node.browsePeer("203.0.113.10:6346");
+const listing = await node.browsePeer("203.0.113.10:6346");
+console.log(node.getResults(listing.id));
 ```
-
-Browse results are added to the normal result list returned by `getResults()`.
 
 ### Download A Result
 
@@ -160,7 +177,9 @@ These getters are the ones most apps care about:
 - `getPeers()`: connected peers
 - `getKnownPeers()`: remembered peer addresses
 - `getShares()`: local shared files
-- `getResults()`: current result list
+- `getSearches()`: your searches and result counts
+- `getResults(searchId)`: results from one search
+- `getResult(resultNo)`: details for a result number
 - `getDownloadJobs()`: persisted managed download jobs
 - `getDownloads()`: completed download history for the current process
 
@@ -169,7 +188,8 @@ Example:
 ```ts
 const status = node.getStatus();
 const peers = node.getPeers();
-const results = node.getResults();
+const searches = node.getSearches();
+const results = searches[0] ? node.getResults(searches[0].id) : [];
 const downloads = node.getDownloadJobs();
 ```
 
@@ -198,7 +218,7 @@ For most embedding cases, this flow works well:
 4. `start()`
 5. `connectToPeer(...)` or rely on remembered peers
 6. `sendQuery(...)` or `browsePeer(...)`
-7. inspect `getResults()`
+7. inspect `getResults(search.id)`
 8. `downloadResult(...)` when needed, then inspect `getDownloadJobs()`
 9. `save()` and `stop()` on shutdown
 
@@ -237,7 +257,7 @@ src/
   routing/               Descriptor dispatch, forwarding, and return routes
     descriptors/         Duplicate, lifetime, response-route, and pong rules
     qrp/                 Query Routing Protocol tables, hashes, and patches
-  search/                Query interpretation and numbered local results
+  search/                Search sessions, query interpretation, isolated results
   shares/                Catalog, matching, hashing, and share-index storage
   transfers/             HTTP, browse, direct downloads, and push callbacks
   downloads/             Job queue, retries, verification, and job storage
@@ -258,10 +278,10 @@ Follow one flow at a time:
 
 1. **Local files to search results:** [shares/library.ts](src/shares/library.ts)
    scans files and maintains stable indexes and cached hashes. Catalog
-   publication updates local QRP. [search/results.ts](src/search/results.ts)
-   assigns result numbers and retains incoming hits.
-2. **A query across the network:** begin with `sendQuery()` in
-   [routing/origin.ts](src/routing/origin.ts), then follow packet dispatch and
+   publication updates local QRP. [search/service.ts](src/search/service.ts)
+   manages searches; [search/results.ts](src/search/results.ts) stores results.
+2. **A query across the network:** begin with [search/service.ts](src/search/service.ts)
+   and [routing/origin.ts](src/routing/origin.ts), then follow packet dispatch and
    query/hit handlers in [routing/messages.ts](src/routing/messages.ts).
    [routing/queries.ts](src/routing/queries.ts) chooses peers using the pure
    routing rules; [routing/qrp_exchange.ts](src/routing/qrp_exchange.ts)

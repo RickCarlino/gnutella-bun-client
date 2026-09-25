@@ -6,6 +6,7 @@ import {
   selectMonitorMode,
   type MonitorMode,
 } from "./cli_monitor";
+import { CliSearches } from "./cli_search";
 import {
   displayResultCount,
   errMsg,
@@ -15,7 +16,6 @@ import {
   printPeers,
   printResultInfo,
   printResultMagnet,
-  printResults,
   printShares,
   printStatus,
   runExecCommands,
@@ -38,6 +38,7 @@ type MonitorLogEntry = {
 type CliSession = {
   rl: readline.Interface | null;
   node: GnutellaServent;
+  searches: CliSearches;
   monitorMode: MonitorMode;
   monitorIgnoreTokens: Set<string>;
   promptFrame: number;
@@ -50,6 +51,7 @@ function createCliSession(node: GnutellaServent): CliSession {
   return {
     rl: null,
     node,
+    searches: new CliSearches(node),
     monitorMode: "off",
     monitorIgnoreTokens: new Set<string>(),
     promptFrame: PROMPT_THROBBER_FRAMES.length - 1,
@@ -261,7 +263,7 @@ function formatQueryMonitorEvent(
       );
     case "QUERY_RESULT":
       return monitorEntry(
-        `[query hit] #${event.hit.resultNo} via=${event.hit.viaPeerKey} remote=${event.hit.remoteHost}:${event.hit.remotePort} size=${event.hit.fileSize} name=${quoted(event.hit.fileName)}`,
+        `[query hit] query=${shortDescriptorId(event.hit.queryIdHex)} #${event.hit.resultNo} via=${event.hit.viaPeerKey} remote=${event.hit.remoteHost}:${event.hit.remotePort} size=${event.hit.fileSize} name=${quoted(event.hit.fileName)}`,
         "QUERY_RESULT",
         "EVENT:QUERY_RESULT",
         "QUERY_HIT",
@@ -401,7 +403,7 @@ function handleNodeEvent(session: CliSession, event: GnutellaEvent): void {
 }
 
 function printHelp(session: CliSession): void {
-  for (const line of CLI_HELP_LINES) log(session, line);
+  log(session, CLI_HELP_LINES.join("\n"));
 }
 
 function logConnectResult(
@@ -489,7 +491,8 @@ async function handleDownloadCommand(
 ): Promise<boolean> {
   if (args.length < 2)
     throw new Error("usage: download <resultNo> [destPath]");
-  const job = await session.node.downloadResult(Number(args[1]), args[2]);
+  const resultNo = Number(args[1]);
+  const job = await session.node.downloadResult(resultNo, args[2]);
   log(
     session,
     `download ${job.id} ${job.status} path=${quoted(job.destPath)}`,
@@ -529,22 +532,6 @@ async function handleRemoveDownloadCommand(
 
 function pingTtlFor(node: GnutellaServent, args: string[]): number {
   return args[1] ? Number(args[1]) : node.config().defaultPingTtl;
-}
-
-async function handleBrowseCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length !== 2)
-    throw new Error("usage: browse <peerKey|ip:port>");
-  const added = await session.node.browsePeer(args[1]);
-  log(
-    session,
-    added > 0
-      ? `browse loaded ${added} result${added === 1 ? "" : "s"} from ${args[1]}`
-      : `browse returned no results from ${args[1]}`,
-  );
-  return true;
 }
 
 async function handleInfoCommand(
@@ -631,24 +618,21 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     printShares(session.node, (msg) => log(session, msg));
     return true;
   },
-  results: async (session) => {
-    printResults(session.node, (msg) => log(session, msg));
-    return true;
-  },
-  clear: async (session) => {
-    session.node.clearResults();
-    log(session, "results cleared");
-    return true;
-  },
+  ...Object.fromEntries(
+    ["query", "browse", "queries", "results", "clear"].map((command) => [
+      command,
+      async (session: CliSession, args: string[]) => {
+        await session.searches.command(command, args, (msg) =>
+          log(session, msg),
+        );
+        return true;
+      },
+    ]),
+  ),
   ping: async (session, args) => {
     session.node.sendPing(pingTtlFor(session.node, args));
     return true;
   },
-  query: async (session, args) => {
-    session.node.sendQuery(args.slice(1).join(" "));
-    return true;
-  },
-  browse: handleBrowseCommand,
   info: handleInfoCommand,
   magnet: handleMagnetCommand,
   download: handleDownloadCommand,

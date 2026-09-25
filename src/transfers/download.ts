@@ -370,6 +370,7 @@ export async function sendPush(
 export async function browsePeer(
   transfers: TransferService,
   peerKey: string,
+  descriptorId: Buffer,
 ): Promise<number> {
-  return await browsePeerImpl(transfers, peerKey);
+  return await browsePeerImpl(transfers, peerKey, descriptorId);
 }

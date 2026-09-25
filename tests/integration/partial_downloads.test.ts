@@ -7,6 +7,7 @@ import type { SearchHit } from "../../src/protocol";
 import { sha1ToUrn } from "../../src/wire/content_urn";
 import { withFakeNet } from "../helpers/fake_net";
 import { makeNode, withTempDir } from "../helpers/protocol";
+import { seedSearch } from "../helpers/search";
 import { TestServent as GnutellaServent } from "../helpers/servent";
 
 type Mode =
@@ -139,7 +140,7 @@ describe("partial download interoperability", () => {
           downloadRetryLimit: 1,
           downloadRetryBackoffSec: 0.01,
         });
-        node.search.results = [hit];
+        seedSearch(node, [hit]);
         await node.downloadResult(1);
         await node.downloadManager.start();
         for (
@@ -170,7 +171,7 @@ describe("partial download interoperability", () => {
             downloadIdleTimeoutMs: 30,
             downloadRetryBackoffSec: 60,
           });
-          node.search.results = [hit];
+          seedSearch(node, [hit]);
           let pushed = false;
           node.transfers.sendPush = async () => {
             pushed = true;
@@ -235,12 +236,12 @@ describe("partial download interoperability", () => {
               downloadIdleTimeoutMs: 200,
             });
           }
-          node.search.results = [hit];
+          const search = seedSearch(node, [hit]);
           const queued = await node.downloadResult(1);
           await node.downloadManager.start();
           expect(node.getDownloadJobs()[0]?.status).toBe("active");
-          node.clearResults();
-          expect(node.getResults()).toEqual([]);
+          node.clearResults(search.id);
+          expect(node.getSearches()).toEqual([]);
           for (
             let i = 0;
             i < 200 && node.getDownloadJobs()[0]?.status !== "complete";

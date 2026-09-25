@@ -1,4 +1,5 @@
 import type { DownloadJob } from "./downloads";
+import type { SearchSession } from "./search/types";
 import { errMsg } from "./shared";
 import type { CliNode, ParsedCli } from "./types";
 import { buildMagnetUri } from "./wire/magnet";
@@ -133,14 +134,6 @@ function resultMagnetUri(result: ResultInfo): string {
   });
 }
 
-function findResult(node: CliNode, resultNo: number): ResultInfo {
-  const result = node
-    .getResults()
-    .find((candidate) => candidate.resultNo === resultNo);
-  if (!result) throw new Error(`no such result ${resultNo}`);
-  return result;
-}
-
 /** Print the node's current status summary. */
 export function printStatus(
   node: CliNode,
@@ -247,12 +240,48 @@ export function printShares(
     log(`#${f.index} ${f.size}B ${JSON.stringify(f.rel)}`);
 }
 
-/** Print numbered search results. */
-export function printResults(
-  node: CliNode,
+/** Print search handles, result counts, and search terms in one table. */
+export function printQueries(
+  searches: SearchSession[],
   log: (msg: string) => void,
 ): void {
-  const results = node.getResults();
+  if (!searches.length) {
+    log("no searches");
+    return;
+  }
+  const rows = searches.map((search) => ({
+    handle: `q${search.number}`,
+    results: String(search.resultCount),
+    term: sanitizeTableCell(search.search),
+  }));
+  const handleWidth = Math.max(5, ...rows.map((row) => row.handle.length));
+  const resultsWidth = Math.max(
+    7,
+    ...rows.map((row) => row.results.length),
+  );
+  const termWidth = Math.max(11, ...rows.map((row) => row.term.length));
+  const line = (handle: string, results: string, term: string) =>
+    `${handle.padEnd(handleWidth)}  ${results.padStart(resultsWidth)}  ${term}`;
+  log(
+    [
+      line("Query", "Results", "Search term"),
+      line(
+        "-".repeat(handleWidth),
+        "-".repeat(resultsWidth),
+        "-".repeat(termWidth),
+      ),
+      ...rows.map((row) => line(row.handle, row.results, row.term)),
+    ].join("\n"),
+  );
+}
+
+/** Print numbered search results. */
+export function printResults(
+  node: Pick<CliNode, "getResults">,
+  log: (msg: string) => void,
+  searchId: string,
+): void {
+  const results = node.getResults(searchId);
   if (!results.length) {
     log("no results");
     return;
@@ -368,11 +397,11 @@ export function printDownloads(
 
 /** Print details for a selected search result. */
 export function printResultInfo(
-  node: CliNode,
+  node: Pick<CliNode, "getResult">,
   resultNo: number,
   log: (msg: string) => void,
 ): void {
-  const result = findResult(node, resultNo);
+  const result = node.getResult(resultNo);
   log(formatResultInfoLines(result).join("\n"));
 }
 
@@ -419,11 +448,11 @@ export function printDownloadInfo(
 
 /** Print a magnet link for a selected result. */
 export function printResultMagnet(
-  node: CliNode,
+  node: Pick<CliNode, "getResult">,
   resultNo: number,
   log: (msg: string) => void,
 ): void {
-  log(resultMagnetUri(findResult(node, resultNo)));
+  log(resultMagnetUri(node.getResult(resultNo)));
 }
 
 /** Parse CLI options, commands, and defaults. */

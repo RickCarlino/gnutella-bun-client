@@ -4,7 +4,7 @@ import type { PeerDiscovery } from "../../src/discovery/runtime";
 import type { DownloadManager } from "../../src/downloads";
 import { GnutellaServent as PublicServent } from "../../src/protocol";
 import type { MessageRouter } from "../../src/routing/router";
-import type { SearchService } from "../../src/search/results";
+import type { SearchService } from "../../src/search/service";
 import type { ShareLibrary } from "../../src/shares/library";
 import type { TransferService } from "../../src/transfers/service";
 

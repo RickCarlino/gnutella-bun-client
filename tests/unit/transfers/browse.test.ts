@@ -242,8 +242,10 @@ describe("browse host", () => {
       peer.dialTarget = "9.8.7.6:6346";
       node.connections.peers.set(peer.key, peer);
 
-      await expect(node.browsePeer("9.8.7.6:6346")).resolves.toBe(1);
-      expect(node.search.results[0]).toMatchObject({
+      await expect(node.browsePeer("9.8.7.6:6346")).resolves.toMatchObject(
+        { resultCount: 1, kind: "browse", status: "complete" },
+      );
+      expect(node.getResults(node.getSearches()[0]!.id)[0]).toMatchObject({
         fileName: "alpha.txt",
         viaPeerKey: "matched-peer",
       });
@@ -270,7 +272,9 @@ describe("browse host", () => {
         },
       });
 
-      await expect(node.browsePeer("9.8.7.6:6346")).resolves.toBe(0);
+      await expect(node.browsePeer("9.8.7.6:6346")).resolves.toMatchObject(
+        { resultCount: 0, kind: "browse", status: "complete" },
+      );
     });
   });
 

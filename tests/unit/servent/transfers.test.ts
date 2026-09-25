@@ -17,6 +17,7 @@ import {
   MockSocket,
   withTempDir,
 } from "../../helpers/protocol";
+import { seedSearch } from "../../helpers/search";
 import { TestServent as GnutellaServent } from "../../helpers/servent";
 
 class ScriptedSocket extends MockSocket {
@@ -110,13 +111,13 @@ describe("protocol node", () => {
 
       const added = await node.browsePeer("p1");
 
-      expect(added).toBe(2);
+      expect(added.resultCount).toBe(2);
       expect(requests[0]).toContain("GET / HTTP/1.1\r\n");
       expect(requests[0]).toContain(
         "Accept: application/x-gnutella-packets\r\n",
       );
       expect(requests[0]).toContain("Accept-Encoding: deflate\r\n");
-      expect(node.search.results).toEqual([
+      expect(node.getResults(added.id)).toEqual([
         expect.objectContaining({
           resultNo: 1,
           remoteHost: "9.8.7.6",
@@ -204,9 +205,9 @@ describe("protocol node", () => {
 
       const added = await node.browsePeer("9.8.7.6:6346");
 
-      expect(added).toBe(1);
+      expect(added.resultCount).toBe(1);
       expect(requests[0]).toContain("Host: 9.8.7.6:6346\r\n");
-      expect(node.search.results).toEqual([
+      expect(node.getResults(added.id)).toEqual([
         expect.objectContaining({
           resultNo: 1,
           remoteHost: "9.8.7.6",
@@ -635,9 +636,10 @@ describe("protocol node", () => {
       };
       const fallbackPath = path.join(dir, "custom", "push.bin");
 
-      node.search.results = [hit as never];
+      const search = seedSearch(node, [hit]);
+      events.length = 0;
 
-      const job = await node.downloadResult(7);
+      const job = await node.downloadResult(1);
       expect(job).toMatchObject({
         id: "d1",
         status: "queued",
@@ -653,7 +655,7 @@ describe("protocol node", () => {
 
       events.length = 0;
 
-      const custom = await node.downloadResult(7, fallbackPath);
+      const custom = await node.downloadResult(1, fallbackPath);
       expect(custom).toMatchObject({
         id: "d2",
         status: "queued",
@@ -661,7 +663,7 @@ describe("protocol node", () => {
       });
       expect(node.getDownloadJobs()).toHaveLength(2);
       expect(events).toEqual(["DOWNLOAD_QUEUED"]);
-      expect(node.getResults()).toHaveLength(1);
+      expect(node.getResults(search.id)).toHaveLength(1);
     });
   });
 
@@ -691,9 +693,9 @@ describe("protocol node", () => {
 
       await fs.mkdir(path.dirname(occupiedPath), { recursive: true });
       await fs.writeFile(occupiedPath, "existing", "utf8");
-      node.search.results = [hit as never];
+      seedSearch(node, [hit]);
 
-      const job = await node.downloadResult(7);
+      const job = await node.downloadResult(1);
       seenDestPath = job.destPath;
 
       expect(seenDestPath).toBe(
@@ -901,12 +903,9 @@ describe("protocol node", () => {
         knownPeers: 0,
       });
 
-      node.search.results = [{ resultNo: 99 } as never];
-      node.search.nextResultNo = 100;
-      node.clearResults();
-
-      expect(node.getResults()).toEqual([]);
-      expect(node.search.nextResultNo).toBe(1);
+      const search = node.getSearches()[0]!;
+      node.clearResults(search.id);
+      expect(() => node.getResults(search.id)).toThrow("no such search");
       expect(node.getStatus()).toEqual({
         peers: 1,
         shares: 0,

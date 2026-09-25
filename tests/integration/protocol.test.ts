@@ -119,8 +119,8 @@ function eventsOfType<T extends GnutellaEvent["type"]>(
   );
 }
 
-function newResults(node: MeshNode, fromIndex: number) {
-  return node.node.getResults().slice(fromIndex);
+function newResults(node: MeshNode, searchId: string) {
+  return node.node.getResults(searchId);
 }
 
 function overrideRuntimeConfig(
@@ -290,6 +290,54 @@ async function withFakeMesh<T>(
 }
 
 describe("Integration suite (0.6)", () => {
+  test("keeps parallel queries and browse results separate across the mesh", async () => {
+    await withFakeMesh(async ({ nodes: { A, B, C } }) => {
+      await writeShare(B, "parallel-alpha.txt", "alpha");
+      await writeShare(C, "parallel-beta.txt", "beta");
+      await B.node.refreshShares();
+      await C.node.refreshShares();
+      const a = A.node.sendQuery("parallel-alpha", 2)!;
+      const b = A.node.sendQuery("parallel-beta", 2)!;
+      await waitFor(
+        () =>
+          A.node.getResults(a.id).length > 0 &&
+          A.node.getResults(b.id).length > 0,
+        "both independent queries to receive hits",
+      );
+      expect(A.node.getResults(a.id).map((hit) => hit.fileName)).toEqual([
+        "parallel-alpha.txt",
+      ]);
+      expect(A.node.getResults(b.id).map((hit) => hit.fileName)).toEqual([
+        "parallel-beta.txt",
+      ]);
+      const browse = await A.node.browsePeer(`127.0.0.1:${B.listenPort}`);
+      expect(browse.kind).toBe("browse");
+      expect(
+        A.node
+          .getResults(browse.id)
+          .some((hit) => hit.fileName === "parallel-alpha.txt"),
+      ).toBe(true);
+      A.node.clearResults(a.id);
+      expect(() => A.node.getResults(a.id)).toThrow("no such search");
+      expect(A.node.getResults(b.id)).toHaveLength(1);
+      expect(A.node.router.queryRoutes.has(a.id)).toBe(false);
+      expect(A.node.router.queryRoutes.has(b.id)).toBe(true);
+      expect(A.node.getSearches().map((entry) => entry.id)).toEqual([
+        b.id,
+        browse.id,
+      ]);
+      const again = A.node.sendQuery("parallel-alpha", 2)!;
+      await waitFor(
+        () => A.node.getResults(again.id).length > 0,
+        "a fresh search after clearing",
+      );
+      expect(A.node.getResults(b.id)).toHaveLength(1);
+      expect(A.node.getResults(again.id)[0]!.resultNo).toBeGreaterThan(
+        A.node.getResults(b.id)[0]!.resultNo,
+      );
+    });
+  });
+
   test("connects peers added while already running", async () => {
     await withFakeNet(async () => {
       await withTempDir(async (root) => {
@@ -333,8 +381,7 @@ describe("Integration suite (0.6)", () => {
             "runtime 0.6 peer connection to come online",
           );
 
-          const before = a.node.getResults().length;
-          a.node.sendQuery("live-connect", 1);
+          const before = a.node.sendQuery("live-connect", 1)!.id;
           await waitFor(
             () =>
               newResults(a, before).some(
@@ -402,8 +449,7 @@ describe("Integration suite (0.6)", () => {
           .some((share) => share.name === "late-route-c.txt"),
       ).toBe(true);
 
-      const routedBefore = A.node.getResults().length;
-      A.node.sendQuery("late-route-c", 2);
+      const routedBefore = A.node.sendQuery("late-route-c", 2)!.id;
       await waitFor(
         () =>
           newResults(A, routedBefore).some(
@@ -426,8 +472,7 @@ describe("Integration suite (0.6)", () => {
         }),
       );
 
-      const filteredBefore = A.node.getResults().length;
-      A.node.sendQuery("mesh-common", 2);
+      const filteredBefore = A.node.sendQuery("mesh-common", 2)!.id;
       await waitFor(() => {
         const hits = newResults(A, filteredBefore)
           .filter((hit) => hit.fileName.includes("mesh-common"))
@@ -501,8 +546,7 @@ describe("Integration suite (0.6)", () => {
       expect(ranged).toContain("Content-Range: bytes 7-12/13\r\n");
       expect(ranged.endsWith("from-b")).toBe(true);
 
-      const directBefore = A.node.getResults().length;
-      A.node.sendQuery("resume-b", 2);
+      const directBefore = A.node.sendQuery("resume-b", 2)!.id;
       await waitFor(
         () =>
           newResults(A, directBefore).some(
@@ -545,8 +589,7 @@ describe("Integration suite (0.6)", () => {
         }),
       );
 
-      const pushBefore = A.node.getResults().length;
-      A.node.sendQuery("push-only-c", 2);
+      const pushBefore = A.node.sendQuery("push-only-c", 2)!.id;
       await waitFor(
         () =>
           newResults(A, pushBefore).some(
@@ -700,8 +743,10 @@ describe("Integration suite (0.6)", () => {
 
           await sleep(1200);
 
-          const aResultsBefore = leafA.node.getResults().length;
-          leafA.node.sendQuery("ultra-hit-c", 2);
+          const aResultsBefore = leafA.node.sendQuery(
+            "ultra-hit-c",
+            2,
+          )!.id;
           await waitFor(
             () =>
               newResults(leafA, aResultsBefore).some(
@@ -714,7 +759,7 @@ describe("Integration suite (0.6)", () => {
                 aPeers: leafA.node.getPeers(),
                 ultraPeers: ultra.node.getPeers(),
                 cPeers: leafC.node.getPeers(),
-                aResults: leafA.node.getResults(),
+                aResults: leafA.node.getResults(aResultsBefore),
                 ultraRoutes: [...ultra.node.router.queryRoutes.entries()],
               }),
           );
@@ -738,9 +783,10 @@ describe("Integration suite (0.6)", () => {
             leafC,
             "QUERY_RECEIVED",
           ).length;
-          const ultraResultsBefore = ultra.node.getResults().length;
-
-          ultra.node.sendQuery("ultra-hit-c", 2);
+          const ultraResultsBefore = ultra.node.sendQuery(
+            "ultra-hit-c",
+            2,
+          )!.id;
 
           await waitFor(
             () =>

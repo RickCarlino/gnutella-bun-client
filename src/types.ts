@@ -37,7 +37,8 @@ type ShareSummary = {
 
 export type CliNode = {
   getPeers(): PeerInfo[];
-  getResults(): CliSearchResult[];
+  getResults(searchId: string): CliSearchResult[];
+  getResult(resultNo: number): CliSearchResult;
   getShares(): ShareSummary[];
   getStatus(): NodeStatus;
 };

@@ -15,7 +15,8 @@ import {
   reportSelfToGWebCaches,
 } from "./gwebcache_client";
 import { MessageRouter } from "./routing/router";
-import { SearchService } from "./search/results";
+import { SearchService } from "./search/service";
+import type { SearchSession } from "./search/types";
 import { ensureDir, errMsg, sleep, ts } from "./shared";
 import { ShareLibrary } from "./shares/library";
 import { TransferService } from "./transfers/service";
@@ -55,9 +56,13 @@ export class GnutellaServent {
   protected readonly connections: PeerConnections;
   protected readonly shareLibrary: ShareLibrary;
   protected readonly router: MessageRouter;
-  protected readonly search = new SearchService((event) =>
-    this.emitEvent(event),
-  );
+  protected readonly search = new SearchService({
+    emit: (event) => this.emitEvent(event),
+    now: () => this.now(),
+    sendQuery: (...args) => this.router.sendQuery(...args),
+    browse: (...args) => this.transfers.browsePeer(...args),
+    releaseQuery: (id) => this.router.queryRoutes.delete(id),
+  });
   protected readonly downloadManager: DownloadManager;
   protected readonly transfers: TransferService;
   private timers: NodeJS.Timeout[] = [];
@@ -310,7 +315,7 @@ export class GnutellaServent {
     return {
       peers: this.connections.peers.size,
       shares: this.shareLibrary.shares.length,
-      results: this.search.results.length,
+      results: this.search.resultCount,
       knownPeers: this.getKnownPeers().length,
     };
   }
@@ -366,23 +371,33 @@ export class GnutellaServent {
   }
 
   /** Originate a text or URN query and track its replies. */
-  sendQuery(search: string, ttl?: number): void {
-    return this.router.sendQuery(search, ttl);
+  sendQuery(search: string, ttl?: number): SearchSession | undefined {
+    return this.search.query(search, ttl);
   }
 
-  /** Fetch a peer's shared-file listing and count ingested hits. */
-  browsePeer(target: string): Promise<number> {
-    return this.transfers.browsePeer(target);
+  /** Fetch a peer's shared-file listing into a separate search session. */
+  browsePeer(target: string): Promise<SearchSession> {
+    return this.search.browse(target);
   }
 
-  /** Return detached copies of accumulated search results. */
-  getResults(): SearchHit[] {
-    return this.search.snapshot();
+  /** Return detached results for one explicit search session. */
+  getResults(searchId: string): SearchHit[] {
+    return this.search.snapshot(searchId);
   }
 
-  /** Discard search results and reset their numbering. */
-  clearResults(): void {
-    this.search.clear();
+  /** Resolve a stable result number across all open sessions. */
+  getResult(resultNo: number): SearchHit {
+    return this.search.resolve(resultNo);
+  }
+
+  /** Remove one or all searches and their results. */
+  clearResults(searchId?: string): void {
+    this.search.clear(searchId);
+  }
+
+  /** List independent query and browse sessions. */
+  getSearches(): SearchSession[] {
+    return this.search.list();
   }
 
   /** Queue a numbered result for managed downloading. */

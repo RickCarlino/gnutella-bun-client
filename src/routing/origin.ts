@@ -39,19 +39,19 @@ export function sendPing(router: MessageRouter, ttl: number): void {
 /** Originate a text or URN query and track its replies. */
 export function sendQuery(
   router: MessageRouter,
+  descriptorId: Buffer,
   search: string,
   ttl = router.config().defaultQueryTtl,
-): void {
+): boolean {
   if (!router.deps.transport.peers.size) {
     router.deps.emit({
       type: "QUERY_SKIPPED",
       at: ts(),
       reason: "NO_PEERS_CONNECTED",
     });
-    return;
+    return false;
   }
 
-  const descriptorId = router.randomId16();
   const hex = descriptorId.toString("hex");
   router.markSeen(TYPE.QUERY, hex);
   router.queryRoutes.set(hex, LOCAL_ROUTE);
@@ -75,6 +75,7 @@ export function sendQuery(
     ttl,
     search,
   });
+  return true;
 }
 type OutgoingQueryParts = {
   search: string;

@@ -6,6 +6,7 @@ export type {
   DownloadStatus,
 } from "./downloads";
 export { initialRemoteQrpState, QrpTable } from "./routing/qrp";
+export type { SearchSession } from "./search/types";
 export { GnutellaServent } from "./servent";
 export type {
   BlockIpResult,

@@ -295,10 +295,6 @@ describe("protocol node", () => {
         payload: Buffer.from("fresh", "utf8"),
         at: now,
       });
-      node.search.results = Array.from(
-        { length: 1_002 },
-        (_unused, index) => ({ resultNo: index + 1 }) as never,
-      );
 
       node.pruneMaps();
 
@@ -315,8 +311,6 @@ describe("protocol node", () => {
       );
       expect(node.router.pongCache.has("stale-pong")).toBe(false);
       expect(node.router.pongCache.has("fresh-pong")).toBe(true);
-      expect(node.search.results).toHaveLength(1_000);
-      expect(node.search.results[0]?.resultNo).toBe(3);
     });
   });
 

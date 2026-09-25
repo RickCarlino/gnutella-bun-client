@@ -40,9 +40,7 @@ describe("download transfer fallback", () => {
   test("a connection timeout skips /get but can still use push", async () => {
     await withTempDir(async (dir) => {
       const node = makeNode(path.join(dir, "config.json"));
-      node.search.results = [
-        hit({ sha1Urn: sha1UrnFor(Buffer.from("hello")) }),
-      ];
+      const source = hit({ sha1Urn: sha1UrnFor(Buffer.from("hello")) });
       const requests: string[] = [];
       let pushed = false;
       node.transfers.directDownloadViaRequest = async (
@@ -61,7 +59,7 @@ describe("download transfer fallback", () => {
         await fs.writeFile(destPath, "hello");
         return { destPath, bytes: 5, label: "test source" };
       };
-      await node.downloadResult(1);
+      await node.downloadManager.queue(source);
       try {
         await node.downloadManager.start();
         await waitFor(
@@ -82,9 +80,9 @@ describe("download transfer fallback", () => {
       const node = makeNode(configPath, {
         runtimeConfig: { downloadRetryLimit: 1 },
       });
-      node.search.results = [
-        hit({ sha1Urn: "urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }),
-      ];
+      const source = hit({
+        sha1Urn: "urn:sha1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      });
       node.transfers.directDownloadViaRequest = async (
         _host,
         _port,
@@ -97,7 +95,7 @@ describe("download transfer fallback", () => {
       node.transfers.sendPush = async () => {
         throw new Error("push timed out");
       };
-      const job = await node.downloadResult(1);
+      const job = await node.downloadManager.queue(source);
       await fs.mkdir(path.dirname(job.incompletePath), {
         recursive: true,
       });

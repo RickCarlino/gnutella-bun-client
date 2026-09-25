@@ -2,7 +2,7 @@ import type { PeerConnections } from "../connections/connections";
 import type { PeerConnection as Peer } from "../connections/types";
 import { LOCAL_ROUTE, TYPE } from "../const";
 import type { LocalAddress } from "../discovery/local_address";
-import type { SearchService } from "../search/results";
+import type { SearchService } from "../search/service";
 import type { ShareLibrary } from "../shares/library";
 import type {
   GnutellaEvent,

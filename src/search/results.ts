@@ -10,12 +10,14 @@ type ResultOrigin = {
 };
 
 /** Stores numbered search results and emits result events. */
-export class SearchService {
-  results: SearchHit[] = [];
-  nextResultNo = 1;
+export class SearchResults {
+  private results: SearchHit[] = [];
 
   /** Attach the result event listener. */
-  constructor(private readonly emit: GnutellaEventListener) {}
+  constructor(
+    private readonly emit: GnutellaEventListener,
+    private readonly allocateResultNo: () => number,
+  ) {}
 
   /** Number incoming hits, retain them, and emit events. */
   ingest(
@@ -24,7 +26,7 @@ export class SearchService {
   ): void {
     for (const result of packet.results) {
       const hit: SearchHit = {
-        resultNo: this.nextResultNo++,
+        resultNo: this.allocateResultNo(),
         ...origin,
         remoteHost: packet.ip,
         remotePort: packet.port,
@@ -34,8 +36,8 @@ export class SearchService {
         fileSize: result.fileSize,
         serventIdHex: packet.serventIdHex,
         sha1Urn: firstSha1Urn(result.urns),
-        urns: result.urns,
-        metadata: result.metadata,
+        urns: [...result.urns],
+        metadata: [...result.metadata],
         vendorCode: packet.vendorCode,
         needsPush: packet.flagPush,
         busy: packet.flagBusy,
@@ -49,24 +51,22 @@ export class SearchService {
     }
   }
 
+  /** Count retained results without copying them. */
+  get count(): number {
+    return this.results.length;
+  }
+
   /** Return detached copies of search results. */
   snapshot(): SearchHit[] {
     return structuredClone(this.results);
   }
 
-  /** Find a numbered result or throw if absent. */
-  resolve(resultNo: number): SearchHit {
+  /** Find a numbered result in this session. */
+  resolve(resultNo: number): SearchHit | undefined {
     const hit = this.results.find(
       (candidate) => candidate.resultNo === resultNo,
     );
-    if (!hit) throw new Error(`no such result ${resultNo}`);
-    return structuredClone(hit);
-  }
-
-  /** Remove all results and restart result numbering. */
-  clear(): void {
-    this.results = [];
-    this.nextResultNo = 1;
+    return hit && structuredClone(hit);
   }
 
   /** Keep only the newest thousand search results. */
