@@ -67,6 +67,8 @@ await node.start();
 
 `start()` loads shares, starts listening, and begins normal background work such as peer reconnects.
 
+Automatic discovery forgets failed endpoints and skips them for the rest of the session.
+
 Call `stop()` for a clean shutdown:
 
 ```ts

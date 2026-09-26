@@ -74,6 +74,8 @@ export class PeerDiscovery {
   gwebCacheReportAttempted = false;
   gwebCacheReported = false;
   private stopped = false;
+  private connecting = false;
+  private readonly failedPeers = new Set<string>();
 
   /** Copy remembered peers and attach discovery dependencies. */
   constructor(
@@ -128,6 +130,7 @@ export class PeerDiscovery {
   ): void {
     if (!host || !port || this.deps.isSelfPeer(host, port)) return;
     if (this.deps.isBlockedHost(host)) return;
+    if (this.failedPeers.has(normalizePeer(host, port))) return;
     this.knownPeers = rememberPeerInState(
       this.knownPeers,
       normalizePeer(host, port),
@@ -146,6 +149,7 @@ export class PeerDiscovery {
     port: number,
     timestamp?: number,
   ): void {
+    this.failedPeers.delete(normalizePeer(host, port));
     this.rememberKnownPeer(
       host,
       port,
@@ -304,6 +308,33 @@ export class PeerDiscovery {
 
   /** Fill available connection slots from discovery sources. */
   async connectKnownPeers(): Promise<void> {
+    if (this.stopped || this.connecting) return;
+    this.connecting = true;
+    try {
+      await this.connectCandidates();
+    } finally {
+      this.connecting = false;
+    }
+  }
+
+  private async connectDiscoveredPeer(
+    host: string,
+    port: number,
+    timeoutMs: number,
+  ): Promise<void> {
+    const target = normalizePeer(host, port);
+    if (this.failedPeers.has(target))
+      throw new Error(`peer ${target} already failed this session`);
+    try {
+      await this.deps.connectPeer(host, port, timeoutMs);
+    } catch (error) {
+      this.failedPeers.add(target);
+      delete this.knownPeers[target];
+      throw error;
+    }
+  }
+
+  private async connectCandidates(): Promise<void> {
     this.pruneExpiredKnownPeers();
     const bootstrapFreshPeers = this.shouldBootstrapFreshPeers();
     if (bootstrapFreshPeers) {
@@ -328,7 +359,7 @@ export class PeerDiscovery {
           : this.deps.peerCount(),
       availableSlots: () => this.deps.availableDialSlots(),
       connectPeer: (host, port, timeoutMs) =>
-        this.deps.connectPeer(host, port, timeoutMs),
+        this.connectDiscoveredPeer(host, port, timeoutMs),
       addPeer: (peer) => {
         const addr = parsePeer(peer);
         if (!addr) return;

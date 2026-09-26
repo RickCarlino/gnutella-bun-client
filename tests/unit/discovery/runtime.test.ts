@@ -128,7 +128,7 @@ describe("protocol node", () => {
 
       while (releases.length) {
         releases.shift()?.();
-        await Promise.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
 
       await bootstrap;
@@ -223,7 +223,7 @@ describe("protocol node", () => {
 
       while (releases.length) {
         releases.shift()?.();
-        await Promise.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
 
       await bootstrap;
@@ -289,11 +289,7 @@ describe("protocol node", () => {
           "66.132.55.12:6346:2500",
           "72.14.201.10:6346:2500",
         ]);
-        expect(node.getKnownPeers()).toEqual([
-          "72.14.201.10:6346",
-          "66.132.55.12:6346",
-          "1.1.1.1:1111",
-        ]);
+        expect(node.getKnownPeers()).toEqual(["1.1.1.1:1111"]);
       });
     });
   });
