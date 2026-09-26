@@ -13,6 +13,8 @@ import type { ExistingGetRequest } from "./session_types";
 const BROWSE_HOST_ACCEPT = "application/x-gnutella-packets";
 const BROWSE_HOST_DESCRIPTOR_ID = Buffer.alloc(16, 0);
 const BROWSE_HOST_BATCH_SIZE = 16;
+// A browse response contains multiple packets, but must still have a finite budget.
+const MAX_BROWSE_HOST_BODY_BYTES = 16 * 1024 * 1024;
 const BROWSE_HOST_TIMEOUT_MESSAGE = "browse host timeout";
 
 type BrowseTarget = {
@@ -239,7 +241,9 @@ function decodeBrowseHostBody(
       `unsupported Content-Encoding ${JSON.stringify(contentEncoding)}`,
     );
   }
-  return zlib.inflateSync(decoded);
+  return zlib.inflateSync(decoded, {
+    maxOutputLength: MAX_BROWSE_HOST_BODY_BYTES,
+  });
 }
 
 async function readBrowseHostHttpResponse(

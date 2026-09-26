@@ -1,4 +1,5 @@
 import zlib from "node:zlib";
+import { MAX_PAYLOAD_BYTES } from "../const";
 
 const GGEP_MAGIC = 0xc3;
 const GGEP_HDR_LAST = 0x80;
@@ -102,12 +103,22 @@ function decodeLength(raw: Buffer, start: number): GgepLengthCursor {
   throw new Error("GGEP length too long");
 }
 
-function maybeDeflateDecode(data: Buffer, flags: number): Buffer {
+function maybeDeflateDecode(
+  data: Buffer,
+  flags: number,
+  remainingBytes: number,
+): Buffer {
   if (!(flags & GGEP_HDR_DEFLATE)) return data;
-  return zlib.inflateRawSync(data);
+  return zlib.inflateRawSync(data, {
+    maxOutputLength: Math.max(1, remainingBytes),
+  });
 }
 
-function parseGgepItem(raw: Buffer, start: number): ParsedGgepItem {
+function parseGgepItem(
+  raw: Buffer,
+  start: number,
+  remainingBytes: number,
+): ParsedGgepItem {
   let offset = start;
   const flags = raw[offset++];
   if (flags == null) throw new Error("truncated GGEP flags");
@@ -127,7 +138,9 @@ function parseGgepItem(raw: Buffer, start: number): ParsedGgepItem {
   ) as Buffer;
   offset += decodedLength.length;
   if (flags & GGEP_HDR_COBS) data = cobsDecode(data) as Buffer;
-  data = maybeDeflateDecode(data, flags) as Buffer;
+  data = maybeDeflateDecode(data, flags, remainingBytes) as Buffer;
+  if (data.length > remainingBytes)
+    throw new Error("decoded GGEP block too large");
   return {
     item: { id, data },
     nextOffset: offset,
@@ -165,8 +178,11 @@ export function parseGgep(raw: Buffer): GgepItem[] {
   if (!raw.length || raw[0] !== GGEP_MAGIC) return [];
   const items: GgepItem[] = [];
   let offset = 1;
+  // Share the output budget across all fields, including uncompressed ones.
+  let remainingBytes = MAX_PAYLOAD_BYTES;
   while (offset < raw.length) {
-    const parsed = parseGgepItem(raw, offset);
+    const parsed = parseGgepItem(raw, offset, remainingBytes);
+    remainingBytes -= parsed.item.data.length;
     items.push(parsed.item);
     offset = parsed.nextOffset;
     if (parsed.last) break;

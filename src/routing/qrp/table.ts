@@ -314,9 +314,13 @@ export class QrpTable {
     if (!QrpTable.canApplyPatch(state)) return undefined;
     const rawParts = QrpTable.orderedPatchParts(state);
     if (!rawParts) return undefined;
+    const expectedBytes = QrpTable.expectedPackedPatchBytes(state);
+    if (expectedBytes == null || expectedBytes <= 0) return undefined;
     let packed = Buffer.concat(rawParts);
     if (state.compressor === QRP_COMPRESSOR_DEFLATE)
-      packed = zlib.inflateSync(packed);
+      packed = zlib.inflateSync(packed, {
+        maxOutputLength: expectedBytes,
+      });
     const coverageError = QrpTable.packedPatchCoverageError(state, packed);
     if (coverageError) return coverageError;
     const table = QrpTable.unpackRemoteTable(state, packed);

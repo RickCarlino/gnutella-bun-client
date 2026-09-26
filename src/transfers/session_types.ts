@@ -6,6 +6,7 @@ export type HttpSession = {
   socket: net.Socket;
   buf: Buffer;
   busy: boolean;
+  drainRequested: boolean;
   closed: boolean;
 };
 

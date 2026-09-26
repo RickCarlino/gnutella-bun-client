@@ -918,3 +918,41 @@ describe("protocol node", () => {
     });
   });
 });
+
+test("rejects excessive browse-host inflation", async () => {
+  await withTempDir(async (dir) => {
+    const socket = new ScriptedSocket();
+    const body = zlib.deflateSync(Buffer.alloc(16 * 1024 * 1024 + 1));
+    socket.onWrite = () => {
+      queueMicrotask(() =>
+        socket.emit(
+          "data",
+          Buffer.concat([
+            Buffer.from(
+              `HTTP/1.1 200 OK\r\nContent-Type: application/x-gnutella-packets\r\nContent-Encoding: deflate\r\nContent-Length: ${body.length}\r\n\r\n`,
+            ),
+            body,
+          ]),
+        ),
+      );
+    };
+    const node = makeNode(path.join(dir, "config.json"), {
+      collaborators: {
+        netFactory: {
+          createConnection: () => {
+            queueMicrotask(() => socket.emit("connect"));
+            return socket as unknown as net.Socket;
+          },
+        },
+      },
+    });
+    try {
+      await expect(node.browsePeer("127.0.0.1:6346")).rejects.toThrow(
+        "Buffer larger than",
+      );
+    } finally {
+      await node.stop();
+    }
+    expect(socket.destroyed).toBe(true);
+  });
+});

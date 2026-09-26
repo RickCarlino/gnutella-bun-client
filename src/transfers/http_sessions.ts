@@ -19,7 +19,8 @@ export function startHttpSession(
   transfers.trackSocket(socket);
   const session: HttpSession = {
     socket,
-    buf: Buffer.from(initialBuf),
+    buf: Buffer.concat([Buffer.from(firstHead, "latin1"), initialBuf]),
+    drainRequested: false,
     busy: false,
     closed: false,
   };
@@ -46,7 +47,7 @@ export function startHttpSession(
   socket.on("end", closeSession);
   socket.on("error", onError);
 
-  void transfers.drainHttpSession(session, closeSession, firstHead);
+  void transfers.drainHttpSession(session, closeSession);
 }
 
 /** Find the end of the next buffered HTTP header. */
@@ -104,29 +105,15 @@ export async function processHttpSessionRequests(
   transfers: TransferService,
   session: HttpSession,
   closeSession: () => void,
-  nextHead?: string,
 ): Promise<void> {
-  let pendingHead = nextHead;
-  let queued: HttpSessionRequest | undefined;
   while (!session.closed) {
-    if (!queued && pendingHead) {
-      const contentLength = httpRequestContentLength(pendingHead);
-      if (session.buf.length < contentLength) return;
-      queued = {
-        head: pendingHead,
-        body: Buffer.from(session.buf.subarray(0, contentLength)),
-      };
-      session.buf = session.buf.subarray(contentLength);
-      pendingHead = undefined;
-    }
-    queued ||= transfers.shiftHttpSessionRequest(session);
+    const queued = transfers.shiftHttpSessionRequest(session);
     if (!queued) return;
     const keepAlive = await transfers.handleIncomingGet(
       session.socket,
       queued.head,
       queued.body,
     );
-    queued = undefined;
     if (keepAlive) continue;
     closeSession();
     if (socketCanEnd(session.socket)) session.socket.end();
@@ -139,25 +126,23 @@ export async function drainHttpSession(
   transfers: TransferService,
   session: HttpSession,
   closeSession: () => void,
-  nextHead?: string,
 ): Promise<void> {
-  if (session.closed || session.busy) return;
+  if (session.closed) return;
+  // Remember arrivals while a handler (or its promise continuation) is busy.
+  session.drainRequested = true;
+  if (session.busy) return;
   session.busy = true;
   try {
-    await transfers.processHttpSessionRequests(
-      session,
-      closeSession,
-      nextHead,
-    );
-  } catch (error) {
+    do {
+      session.drainRequested = false;
+      await transfers.processHttpSessionRequests(session, closeSession);
+    } while (!session.closed && session.drainRequested);
+  } catch {
     closeSession();
-    session.socket.destroy(error instanceof Error ? error : undefined);
+    // Cleanup removes the error listener; do not emit an unhandled error.
+    session.socket.destroy();
   } finally {
     session.busy = false;
-  }
-  if (session.closed) return;
-  if (transfers.pendingHttpSessionHeadEnd(session) !== -1) {
-    void transfers.drainHttpSession(session, closeSession);
   }
 }
 

@@ -157,3 +157,19 @@ describe("standalone query routing", () => {
     ).toBe(true);
   });
 });
+
+for (const entryBits of [1, 4, 8]) {
+  test(`bounds compressed ${entryBits}-bit QRP output to the declared table`, () => {
+    const state = remoteFromTable(new QrpTable(64, 7, entryBits));
+    const original = state.table!.slice();
+    const expectedBytes = (64 * entryBits) / 8;
+    state.seqSize = 1;
+    state.compressor = 1;
+    state.parts.set(1, zlib.deflateSync(Buffer.alloc(expectedBytes + 1)));
+    expect(() => QrpTable.applyPatch(state)).toThrow();
+    expect(state.table).toEqual(original);
+    state.parts.set(1, zlib.deflateSync(Buffer.alloc(expectedBytes)));
+    expect(QrpTable.applyPatch(state)).toBeUndefined();
+    expect(state.parts.size).toBe(0);
+  });
+}
