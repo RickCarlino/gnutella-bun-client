@@ -112,32 +112,3 @@ export const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 export const PROMPT_THROBBER_FRAMES = ["*", "o", ".", " "] as const;
 export const PROMPT_THROBBER_INTERVAL_MS = 120;
 export const CLI_SHUTDOWN_TIMEOUT_MS = 3000;
-
-export const CLI_HELP_LINES = [
-  "help",
-  "monitor [on|off|all|downloads]",
-  "status",
-  "peers",
-  "blocked",
-  "block <ipv4>",
-  "unblock <ipv4>",
-  "connect <ip:port>",
-  "shares",
-  "queries",
-  "results [query]",
-  "clear [query]",
-  "ping [ttl]",
-  "query <search terms...>",
-  "browse <peerKey|ip:port>",
-  "info <resultNo|jobId>",
-  "magnet <resultNo>",
-  "download <resultNo> [destPath]",
-  "downloads",
-  "pause <jobId>",
-  "resume <jobId>",
-  "remove <jobId>",
-  "rescan",
-  "save",
-  "quit",
-  "sleep",
-] as const;

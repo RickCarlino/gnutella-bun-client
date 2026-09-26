@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { CliSearches } from "../../../src/cli_search";
 import { encodeQueryHit, parseQueryHit } from "../../../src/wire/codec";
+import { executeLine, executionContext } from "../../helpers/cli";
 import {
   makeNode,
   makePeer,
@@ -32,12 +32,12 @@ test("results groups all queries under headings and an ID filters without changi
   await withTempDir(async (dir) => {
     const node = makeNode(`${dir}/config.json`);
     node.connections.peers.set("p1", makePeer("p1"));
-    const view = new CliSearches(node);
     const logs: string[] = [];
     const run = async (command: string, ...args: string[]) => {
       logs.length = 0;
-      await view.command(command, [command, ...args], (line) =>
-        logs.push(line),
+      await executeLine(
+        executionContext(node, (line) => logs.push(line)),
+        [command, ...args].join(" "),
       );
       return logs.join("\n");
     };
@@ -95,9 +95,11 @@ test("query summaries retain empty searches and reject invalid filters", async (
     const node = makeNode(`${dir}/config.json`);
     const a = seedSearch(node, []);
     seedSearch(node, []);
-    const view = new CliSearches(node);
     const logs: string[] = [];
-    await view.command("queries", ["queries"], (line) => logs.push(line));
+    await executeLine(
+      executionContext(node, (line) => logs.push(line)),
+      "queries",
+    );
     expect(logs).toHaveLength(1);
     expect(
       logs[0]!.split("\n").map((line) => line.split(/ {2,}/)),
@@ -108,15 +110,18 @@ test("query summaries retain empty searches and reject invalid filters", async (
       ["q2", "0", "fixture"],
     ]);
     logs.length = 0;
-    await view.command("results", ["results"], (text) => logs.push(text));
+    await executeLine(
+      executionContext(node, (text) => logs.push(text)),
+      "results",
+    );
     expect(logs).toEqual([
-      'q1: "fixture"\nno results\n\nq2: "fixture"\nno results',
+      'q1: "fixture"\nno results\n\nq2: "fixture"\nno results\nresults: 2 succeeded, 0 no-op, 0 failed',
     ]);
     await expect(
-      view.command("results", ["results", "q1", "q2"], () => {}),
-    ).rejects.toThrow("usage: results [query]");
+      executeLine(executionContext(node), "results q1 q2"),
+    ).rejects.toThrow("usage: results [selector]");
     await expect(
-      view.command("results", ["results", "q999"], () => {}),
+      executeLine(executionContext(node), "results q999"),
     ).rejects.toThrow("no such search");
     expect(node.getSearches()[0]!.id).toBe(a.id);
     expect(node.getSearches()).toHaveLength(2);
@@ -127,14 +132,14 @@ test("offline and invalid queries leave existing sessions alone", async () => {
   await withTempDir(async (dir) => {
     const node = makeNode(`${dir}/config.json`);
     const a = seedSearch(node, []);
-    const view = new CliSearches(node);
     const logs: string[] = [];
-    await view.command("query", ["query", "offline"], (line) =>
-      logs.push(line),
+    await executeLine(
+      executionContext(node, (line) => logs.push(line)),
+      "query offline",
     );
     expect(logs).toEqual(["no peers connected"]);
     await expect(
-      view.command("query", ["query"], () => {}),
+      executeLine(executionContext(node), "query"),
     ).rejects.toThrow("usage:");
     expect(node.getSearches().map((search) => search.id)).toEqual([a.id]);
   });
@@ -147,10 +152,12 @@ test("clear without an ID removes all searches and ignores their late replies", 
     const b = seedSearch(node, []);
     deliver(node, a.id, "alpha.txt");
     deliver(node, b.id, "beta.txt");
-    const view = new CliSearches(node);
     const logs: string[] = [];
-    await view.command("clear", ["clear"], (line) => logs.push(line));
-    expect(logs).toEqual([]);
+    await executeLine(
+      executionContext(node, (line) => logs.push(line)),
+      "clear",
+    );
+    expect(logs).toEqual(["clear: 2 succeeded, 0 no-op, 0 failed"]);
     expect(node.getSearches()).toEqual([]);
     expect(() => node.getResult(1)).toThrow("no such result");
     deliver(node, a.id, "late-alpha.txt");
@@ -160,7 +167,7 @@ test("clear without an ID removes all searches and ignores their late replies", 
     deliver(node, next.id, "new.txt");
     expect(node.getResult(3).fileName).toBe("new.txt");
     await expect(
-      view.command("clear", ["clear", "q999"], () => {}),
+      executeLine(executionContext(node), "clear q999"),
     ).rejects.toThrow("no such search");
     expect(node.getStatus().results).toBe(1);
   });

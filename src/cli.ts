@@ -1,34 +1,18 @@
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
+import { completionContext, readlineCompletion } from "./cli/complete";
+import { CommandRunner, runExecCommands } from "./cli/runner";
+import { monitorAllowsEvent, type MonitorMode } from "./cli_monitor";
+import { displayResultCount, errMsg, parseCli } from "./cli_shared";
 import {
-  monitorAllowsEvent,
-  selectMonitorMode,
-  type MonitorMode,
-} from "./cli_monitor";
-import { CliSearches } from "./cli_search";
-import {
-  displayResultCount,
-  errMsg,
-  parseCli,
-  printDownloadInfo,
-  printDownloads,
-  printPeers,
-  printResultInfo,
-  printResultMagnet,
-  printShares,
-  printStatus,
-  runExecCommands,
-} from "./cli_shared";
-import {
-  CLI_HELP_LINES,
   CLI_SHUTDOWN_TIMEOUT_MS,
   PROMPT_THROBBER_FRAMES,
   PROMPT_THROBBER_INTERVAL_MS,
 } from "./const";
 import { GnutellaServent, loadDoc, writeDoc } from "./protocol";
-import { sleep, splitArgs } from "./shared";
-import type { ConnectPeerResult, GnutellaEvent } from "./types";
+import { sleep } from "./shared";
+import type { GnutellaEvent } from "./types";
 
 type MonitorLogEntry = {
   line: string;
@@ -38,7 +22,7 @@ type MonitorLogEntry = {
 type CliSession = {
   rl: readline.Interface | null;
   node: GnutellaServent;
-  searches: CliSearches;
+  runner: CommandRunner | null;
   monitorMode: MonitorMode;
   monitorIgnoreTokens: Set<string>;
   promptFrame: number;
@@ -51,7 +35,7 @@ function createCliSession(node: GnutellaServent): CliSession {
   return {
     rl: null,
     node,
-    searches: new CliSearches(node),
+    runner: null,
     monitorMode: "off",
     monitorIgnoreTokens: new Set<string>(),
     promptFrame: PROMPT_THROBBER_FRAMES.length - 1,
@@ -124,6 +108,10 @@ function redrawPrompt(session: CliSession): void {
 }
 
 function log(session: CliSession, msg: string): void {
+  if (session.rl && process.stdin.isTTY) {
+    readline.cursorTo(process.stdout, 0);
+    readline.clearLine(process.stdout, 0);
+  }
   process.stdout.write(`${msg}\n`);
   redrawPrompt(session);
 }
@@ -402,294 +390,30 @@ function handleNodeEvent(session: CliSession, event: GnutellaEvent): void {
   redrawPrompt(session);
 }
 
-function printHelp(session: CliSession): void {
-  log(session, CLI_HELP_LINES.join("\n"));
-}
-
-function logConnectResult(
-  session: CliSession,
-  result: ConnectPeerResult,
-): void {
-  switch (result.status) {
-    case "connected":
-      log(session, `peer ${result.peer} connected`);
-      return;
-    case "already-connected":
-      log(session, `peer ${result.peer} already connected`);
-      return;
-    case "dialing":
-      log(session, `peer ${result.peer} already dialing`);
-      return;
-    case "saved":
-      log(
-        session,
-        `peer ${result.peer} saved for retry; connect failed: ${result.message}`,
-      );
-      return;
-    case "blocked":
-      log(session, `peer ${result.peer} is blocked`);
-      return;
-  }
-}
-
-function pluralize(value: number, noun: string): string {
-  return `${value} ${noun}${value === 1 ? "" : "s"}`;
-}
-
-function logBlockedIps(session: CliSession): void {
-  const blockedIps = session.node.getBlockedIps();
-  if (!blockedIps.length) {
-    log(session, "no blocked IPs");
-    return;
-  }
-  log(session, blockedIps.join("\n"));
-}
-
-function logBlockResult(
-  session: CliSession,
-  result: ReturnType<GnutellaServent["blockIp"]>,
-): void {
-  if (result.status === "already-blocked") {
-    log(session, `ip ${result.ip} already blocked`);
-    return;
-  }
-  const details: string[] = [];
-  if (result.droppedPeers > 0)
-    details.push(pluralize(result.droppedPeers, "peer"));
-  if (result.removedKnownPeers > 0)
-    details.push(pluralize(result.removedKnownPeers, "known peer"));
-  if (!details.length) {
-    log(session, `ip ${result.ip} blocked`);
-    return;
-  }
-  log(session, `ip ${result.ip} blocked; removed ${details.join(", ")}`);
-}
-
-function logUnblockResult(
-  session: CliSession,
-  result: ReturnType<GnutellaServent["unblockIp"]>,
-): void {
-  if (result.status === "not-blocked") {
-    log(session, `ip ${result.ip} is not blocked`);
-    return;
-  }
-  log(session, `ip ${result.ip} unblocked`);
-}
-
-async function handleConnectCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: connect <ip:port>");
-  logConnectResult(session, await session.node.connectToPeer(args[1]));
-  return true;
-}
-
-async function handleDownloadCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length < 2)
-    throw new Error("usage: download <resultNo> [destPath]");
-  const resultNo = Number(args[1]);
-  const job = await session.node.downloadResult(resultNo, args[2]);
-  log(
-    session,
-    `download ${job.id} ${job.status} path=${quoted(job.destPath)}`,
-  );
-  return true;
-}
-
-async function handlePauseDownloadCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: pause <jobId>");
-  const job = await session.node.pauseDownload(args[1]);
-  log(session, `download ${job.id} ${job.status}`);
-  return true;
-}
-
-async function handleResumeDownloadCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: resume <jobId>");
-  const job = await session.node.resumeDownload(args[1]);
-  log(session, `download ${job.id} ${job.status}`);
-  return true;
-}
-
-async function handleRemoveDownloadCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: remove <jobId>");
-  await session.node.removeDownload(args[1]);
-  log(session, `download ${args[1]} removed`);
-  return true;
-}
-
-function pingTtlFor(node: GnutellaServent, args: string[]): number {
-  return args[1] ? Number(args[1]) : node.config().defaultPingTtl;
-}
-
-async function handleInfoCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: info <resultNo|jobId>");
-  if (/^d[1-9]\d*$/i.test(args[1])) {
-    printDownloadInfo(session.node, args[1].toLowerCase(), (msg) =>
-      log(session, msg),
-    );
-    return true;
-  }
-  const resultNo = Number(args[1]);
-  if (!Number.isInteger(resultNo) || resultNo < 1)
-    throw new Error("usage: info <resultNo|jobId>");
-  printResultInfo(session.node, resultNo, (msg) => log(session, msg));
-  return true;
-}
-
-async function handleMagnetCommand(
-  session: CliSession,
-  args: string[],
-): Promise<boolean> {
-  if (args.length !== 2) throw new Error("usage: magnet <resultNo>");
-  const resultNo = Number(args[1]);
-  if (!Number.isInteger(resultNo) || resultNo < 1)
-    throw new Error("usage: magnet <resultNo>");
-  printResultMagnet(session.node, resultNo, (msg) => log(session, msg));
-  return true;
-}
-
-type CommandHandler = (
-  session: CliSession,
-  args: string[],
-) => Promise<boolean>;
-
-const COMMAND_ALIASES: Record<string, string> = {
-  exit: "quit",
-  search: "query",
-};
-
-const COMMAND_HANDLERS: Record<string, CommandHandler> = {
-  help: async (session) => {
-    printHelp(session);
-    return true;
-  },
-  monitor: async (session, args) => {
-    session.monitorMode = selectMonitorMode(
-      args.slice(1),
-      session.monitorMode,
-    );
-    log(
-      session,
-      `monitor ${session.monitorMode === "all" ? "on" : session.monitorMode}`,
-    );
-    return true;
-  },
-  status: async (session) => {
-    printStatus(session.node, (msg) => log(session, msg));
-    return true;
-  },
-  peers: async (session) => {
-    printPeers(session.node, (msg) => log(session, msg));
-    return true;
-  },
-  blocked: async (session, args) => {
-    if (args.length !== 1) throw new Error("usage: blocked");
-    logBlockedIps(session);
-    return true;
-  },
-  block: async (session, args) => {
-    if (args.length !== 2) throw new Error("usage: block <ipv4>");
-    logBlockResult(session, session.node.blockIp(args[1]));
-    return true;
-  },
-  unblock: async (session, args) => {
-    if (args.length !== 2) throw new Error("usage: unblock <ipv4>");
-    logUnblockResult(session, session.node.unblockIp(args[1]));
-    return true;
-  },
-  connect: handleConnectCommand,
-  shares: async (session) => {
-    printShares(session.node, (msg) => log(session, msg));
-    return true;
-  },
-  ...Object.fromEntries(
-    ["query", "browse", "queries", "results", "clear"].map((command) => [
-      command,
-      async (session: CliSession, args: string[]) => {
-        await session.searches.command(command, args, (msg) =>
-          log(session, msg),
-        );
-        return true;
-      },
-    ]),
-  ),
-  ping: async (session, args) => {
-    session.node.sendPing(pingTtlFor(session.node, args));
-    return true;
-  },
-  info: handleInfoCommand,
-  magnet: handleMagnetCommand,
-  download: handleDownloadCommand,
-  downloads: async (session) => {
-    printDownloads(session.node, (msg) => log(session, msg));
-    return true;
-  },
-  pause: handlePauseDownloadCommand,
-  resume: handleResumeDownloadCommand,
-  remove: handleRemoveDownloadCommand,
-  rescan: async (session) => {
-    await session.node.refreshShares();
-    printStatus(session.node, (msg) => log(session, msg));
-    return true;
-  },
-  save: async (session) => {
-    await session.node.save();
-    log(session, "saved");
-    return true;
-  },
-  sleep: async (_node, args) => {
-    await sleep(Number(args[1] || 0) * 1000);
-    return true;
-  },
-  quit: async (session) => {
-    if (session.shutdown) {
-      await session.shutdown();
-      return false;
-    }
-    session.rl?.close();
-    await session.node.stop();
-    return false;
-  },
-};
-
-async function runCommand(
-  session: CliSession,
-  line: string,
-): Promise<boolean> {
-  const args = splitArgs(line.trim());
-  if (!args.length) return true;
-  const rawCommand = args[0].toLowerCase();
-  const command = COMMAND_ALIASES[rawCommand] || rawCommand;
-  const handler = COMMAND_HANDLERS[command];
-  if (!handler) throw new Error(`unknown command: ${rawCommand}`);
-  return await handler(session, args);
-}
-
 function startRepl(
   session: CliSession,
   execCmds: string[],
 ): readline.Interface | null {
+  const runner = new CommandRunner({
+    node: session.node,
+    log: (msg) => log(session, msg),
+    sleep,
+    shutdown: async () => {
+      await session.shutdown?.();
+    },
+    monitor: {
+      get: () => session.monitorMode,
+      set: (mode) => {
+        session.monitorMode = mode;
+      },
+    },
+  });
+  session.runner = runner;
   runExecCommands(
     execCmds,
     (msg) => log(session, msg),
     sleep,
-    (cmd) => runCommand(session, cmd),
+    async (cmd) => (await runner.submit(cmd)).keepRunning,
     errMsg,
   );
   if (!process.stdin.isTTY) return null;
@@ -697,12 +421,22 @@ function startRepl(
     input: process.stdin,
     output: process.stdout,
     prompt: promptText(session),
+    completer: (prefix: string) =>
+      readlineCompletion(
+        prefix,
+        session.rl?.line ?? prefix,
+        completionContext(session.node),
+      ),
   });
   session.rl = rl;
+  rl.on("SIGINT", () => {
+    void session.shutdown?.();
+  });
   rl.on("line", (line) => {
-    void runCommand(session, line)
-      .then((keep) => {
-        if (keep) redrawPrompt(session);
+    void runner
+      .submit(line)
+      .then((outcome) => {
+        if (outcome.keepRunning) redrawPrompt(session);
       })
       .catch((e) => {
         log(session, errMsg(e));
@@ -738,6 +472,7 @@ export async function main(argv = process.argv.slice(2)) {
   const shutdown = async (): Promise<void> => {
     if (shutdownPromise) return await shutdownPromise;
     shutdownPromise = (async () => {
+      session.runner?.stop();
       session.rl?.close();
       let stopFinished = false;
       let stopFailed = false;

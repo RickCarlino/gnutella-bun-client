@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { scan } from "../../../src/cli/tokens";
 import { detectLocalAdvertisedIpv4 } from "../../../src/config/document";
 import type { Peer } from "../../../src/connections/types";
 import {
@@ -25,7 +26,6 @@ import {
   ipToBytesLE,
   normalizeIpv4,
   safeFileName,
-  splitArgs,
 } from "../../../src/shared";
 import { parseByteRange } from "../../../src/wire/codec";
 import { TestServent as GnutellaServent } from "../../helpers/servent";
@@ -544,9 +544,9 @@ describe("protocol config and public helpers", () => {
     );
 
     expect(
-      splitArgs(
+      scan(
         `query "two words" 'three words' escaped\\ space plain\\\"quote`,
-      ),
+      ).map((t) => t.value),
     ).toEqual([
       "query",
       "two words",
@@ -554,12 +554,9 @@ describe("protocol config and public helpers", () => {
       "escaped space",
       'plain"quote',
     ]);
-    expect(splitArgs(`query "" "two  words" plain\\ space`)).toEqual([
-      "query",
-      "",
-      "two  words",
-      "plain space",
-    ]);
+    expect(
+      scan(`query "" "two  words" plain\\ space`).map((t) => t.value),
+    ).toEqual(["query", "", "two  words", "plain space"]);
   });
 
   test("parses query extensions, suffix byte ranges, and mapped ipv4 hosts", () => {

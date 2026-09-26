@@ -147,3 +147,18 @@ Run another `query` whenever you want to start a new search. Use:
 - `clear` to remove all searches and their results.
 
 Downloads keep running when you clear searches.
+
+## Select Multiple Results and Use Tab
+
+In the interactive prompt, press Tab for commands, current handles, and valid statuses. Download several results or manage jobs together:
+
+```text
+download 1,3-5
+pause active,queued
+downloads paused
+resume paused
+clear searches q1-q3
+clear complete
+```
+
+Bare `clear` clears searches only. `clear complete` removes completed download jobs while preserving their files. `clear d1` and `remove d1` both delete the job's incomplete file; completed files remain. Use `clear downloads all` or `clear searches all` instead of ambiguous `clear all`. Lists and ranges also work in `--exec`; see [CLI.md](CLI.md#selecting-multiple-targets) for validation and batch behavior.

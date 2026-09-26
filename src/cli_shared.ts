@@ -16,7 +16,7 @@ const RESULT_COUNT_DISPLAY_MAX = 999;
 const PEER_TABLE_WIDTH_MAX = 80;
 
 type ResultInfo = ReturnType<CliNode["getResults"]>[number];
-type DownloadCliNode = CliNode & {
+type DownloadCliNode = {
   getDownloadJobs(): DownloadJob[];
 };
 type FormattedSize = { value: string; unit: string };
@@ -470,29 +470,6 @@ export function parseCli(
     else if (!a.startsWith("-") && command === "run") command = a;
   }
   return { config, exec, command };
-}
-
-/** Execute scripted CLI commands in order. */
-export function runExecCommands(
-  execCmds: string[],
-  log: (msg: string) => void,
-  sleep: (ms: number) => Promise<void>,
-  runCommand: (line: string) => Promise<boolean>,
-  formatError: (e: unknown) => string,
-): void {
-  if (!execCmds.length) return;
-  void (async () => {
-    await sleep(500);
-    for (const cmd of execCmds) {
-      log(`exec> ${cmd}`);
-      try {
-        const keep = await runCommand(cmd);
-        if (!keep) return;
-      } catch (e) {
-        log(`command failed: ${formatError(e)}`);
-      }
-    }
-  })();
 }
 
 export { errMsg };

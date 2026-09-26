@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { runExecCommands } from "../../../src/cli/runner";
 import {
   displayResultCount,
   errMsg,
@@ -11,7 +12,6 @@ import {
   printResults,
   printShares,
   printStatus,
-  runExecCommands,
 } from "../../../src/cli_shared";
 import type { CliNode } from "../../../src/types";
 

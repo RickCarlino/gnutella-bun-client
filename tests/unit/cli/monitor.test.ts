@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import {
-  monitorAllowsEvent,
-  selectMonitorMode,
-} from "../../../src/cli_monitor";
+import { monitorAllowsEvent } from "../../../src/cli_monitor";
 import type { GnutellaEvent } from "../../../src/types";
+import { executeLine, executionContext } from "../../helpers/cli";
+import { makeNode, withTempDir } from "../../helpers/protocol";
 
 const handshake: GnutellaEvent = {
   type: "HANDSHAKE_DEBUG",
@@ -25,23 +24,30 @@ const download: GnutellaEvent = {
 };
 
 describe("monitor modes", () => {
-  test("switches immediately and keeps explicit modes idempotent", () => {
-    expect(selectMonitorMode(["downloads"], "off")).toBe("downloads");
-    expect(selectMonitorMode(["downloads"], "downloads")).toBe(
-      "downloads",
-    );
-    expect(selectMonitorMode(["on"], "downloads")).toBe("all");
-    expect(selectMonitorMode(["all"], "downloads")).toBe("all");
-    expect(selectMonitorMode(["off"], "downloads")).toBe("off");
-    expect(selectMonitorMode([], "off")).toBe("all");
-    expect(selectMonitorMode([], "downloads")).toBe("off");
-    expect(selectMonitorMode([], "all")).toBe("off");
-    expect(() => selectMonitorMode(["unknown"], "downloads")).toThrow(
-      "usage: monitor",
-    );
-    expect(() => selectMonitorMode(["downloads", "extra"], "off")).toThrow(
-      "usage: monitor",
-    );
+  test("switches immediately and keeps explicit modes idempotent", async () => {
+    await withTempDir(async (dir) => {
+      const context = executionContext(makeNode(`${dir}/config.json`));
+      for (const [line, mode] of [
+        ["monitor downloads", "downloads"],
+        ["monitor downloads", "downloads"],
+        ["monitor on", "all"],
+        ["monitor all", "all"],
+        ["monitor off", "off"],
+        ["monitor", "all"],
+        ["monitor", "off"],
+        ["monitor downloads", "downloads"],
+        ["monitor", "off"],
+      ] as const) {
+        await executeLine(context, line);
+        expect(context.monitor.get()).toBe(mode);
+      }
+      await expect(
+        executeLine(context, "monitor unknown"),
+      ).rejects.toThrow("usage: monitor");
+      await expect(
+        executeLine(context, "monitor downloads extra"),
+      ).rejects.toThrow("usage: monitor");
+    });
   });
 
   test("download mode excludes handshake warnings while retaining transfer failures", () => {
